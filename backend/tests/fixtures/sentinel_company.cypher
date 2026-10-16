@@ -1,4 +1,4 @@
-// sentinel_company.cypher — invented fixture for the Sentinel (Phase 11): an issue reported, resolved by a PR (two reviews by one reviewer, one by another) and reopened by the customer; two more issues on the same component (one open, one resolved) and one elsewhere; two teams on the product; a PR-action decision; a CAUSED chain four hops long
+// sentinel_company.cypher — invented fixture for the Sentinel (Phase 11): an issue reported, resolved by a PR (two reviews by one reviewer, one by another) and reopened by the customer; two more issues on the same component (one open, one resolved) and one elsewhere; two teams on the product; a PR-action decision that an outsider's claim conflicts with; a CAUSED chain four hops long
 CREATE
   (widget:Product:Entity {id: 'Widget', name: 'Widget', current_name: 'Widget', aliases: []}),
   (bo:Person:Entity {id: 'eid_b2', name: 'Bo Chen', role: 'Engineering Lead'}),
@@ -39,4 +39,10 @@ CREATE
   (dA)-[:AFFECTS]->(p1),
   (c1:Decision {id: 'dec:c1', statement: 'one hop', value: 'x'}), (c2:Decision {id: 'dec:c2', statement: 'two hops', value: 'x'}),
   (c3:Decision {id: 'dec:c3', statement: 'three hops', value: 'x'}), (c4:Decision {id: 'dec:c4', statement: 'four hops', value: 'x'}),
-  (dO)-[:CAUSED]->(c1), (c1)-[:CAUSED]->(c2), (c2)-[:CAUSED]->(c3), (c3)-[:CAUSED]->(c4)
+  (dO)-[:CAUSED]->(c1), (c1)-[:CAUSED]->(c2), (c2)-[:CAUSED]->(c3), (c3)-[:CAUSED]->(c4),
+  (ed:Person:Entity {id: 'eid_e5', name: 'Ed Moss', role: 'Marketing Manager'}),
+  (r4:Artifact:Message {id: 'msg:r4', kind: 'message', text: 'Let us just close PR 1.', ts_ms: 6000, ts_iso: '2026-05-01T00:00:06Z', product_id: 'Widget'}),
+  (ed)-[:AUTHORED]->(r4), (r4)-[:IN_PRODUCT]->(widget),
+  (k1:Claim {id: 'clm:k1', topic: 'pr:w1/action', value: 'to_close', quote: 'just close PR 1', ts_ms: 6000, ts_iso: '2026-05-01T00:00:06Z', outcome: 'conflict', product_id: 'Widget'}),
+  (k1)-[:FROM]->(r4), (k1)-[:ASSERTED_BY]->(ed), (k1)-[:ABOUT]->(p1),
+  (k1)-[:CONFLICTS_WITH {reason: 'not the author, a reviewer, a lead or an engineer on the product'}]->(dA)

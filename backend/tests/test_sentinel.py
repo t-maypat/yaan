@@ -9,11 +9,12 @@ from pathlib import Path
 import pytest
 
 from app import db
-from app.sentinel import blast_radius
+from app.sentinel import blast_radius, engine
 
 pytestmark = pytest.mark.db
 FIXTURE = Path(__file__).parent / "fixtures" / "sentinel_company.cypher"
 REOPENED = "dec:iss:Widget:a1/status:5000"
+NOW = 1_800_000_000_000
 
 
 @pytest.fixture
@@ -95,3 +96,98 @@ def test_an_unknown_decision_has_an_empty_radius(company):
 def test_impact_of_starts_from_the_decision_index(empty_graph):
     plan = " / ".join(db.explain("impact_of", {"decision_id": "x", "limit": 1}, graph=empty_graph))
     assert "Node By Index Scan" in plan and "Label Scan" not in plan, plan
+
+
+def alerts_by_id(graph):
+    return {a["id"]: a for a in engine.list_alerts(graph=graph)}
+
+
+def test_judge_alerts_on_regressions_reversals_and_conflicts_not_on_progress():
+    change = {"change": "supersession", "kind": "issue_status"}
+    assert engine.judge({**change, "from_value": "resolved", "to_value": "reopened"}) == (
+        "regression",
+        "high",
+    )
+    assert engine.judge({**change, "from_value": "reported", "to_value": "resolved"}) is None
+    assert engine.judge({"change": "conflict", "kind": "pr_action"}) == ("conflict", "high")
+    assert engine.day(1804546200000) == "8 Mar 2027"
+
+
+def test_run_raises_one_alert_per_change_worth_one(company):
+    out = engine.run(company, now_ms=NOW)
+    assert out["by_kind"] == {"regression": 1, "conflict": 1}
+    assert (out["progress"], out["new"], out["withdrawn"]) == (1, 2, 0)
+    alerts = alerts_by_id(company)
+    reg = alerts[f"alert:{REOPENED}"]
+    assert reg["status"] == "open" and reg["severity"] == "high"
+    assert reg["summary"] == (
+        "Regression: 'Slow export' was marked resolved on 1 Jan 1970 and reopened on 1 Jan 1970."
+    )
+    assert (reg["artifact_id"], reg["quote"]) == ("msg:r3", "CUST-0001 has reopened Slow export.")
+    notified = {p["id"]: sorted(p["reasons"]) for p in reg["notifies"]}
+    assert notified["eid_c3"] == ["assigned", "authored_fix", "decided_old_state"]
+    con = alerts["alert:clm:k1"]
+    assert con["decision_id"] == "dec:pr:w1/action:2500" and con["actor_id"] == "eid_e5"
+    assert con["summary"].startswith("Conflict: Ed Moss (Marketing Manager) says 'Speed up export'")
+
+
+def test_a_rerun_keeps_status_and_creates_nothing(company):
+    engine.run(company, now_ms=NOW)
+    db.run_text(
+        "MATCH (a:Alert {id: $id}) SET a.status = 'dismissed'",
+        {"id": "alert:clm:k1"},
+        label="dismiss",
+        graph=company,
+        readonly=False,
+    )
+    out = engine.run(company, now_ms=NOW + 1)
+    assert out["new"] == 0 and out["withdrawn"] == 0
+    alerts = alerts_by_id(company)
+    assert alerts["alert:clm:k1"]["status"] == "dismissed"
+    assert alerts[f"alert:{REOPENED}"]["created_iso"].startswith("2027-01-15")
+
+
+def test_a_rebuild_withdraws_a_vanished_change_and_relinks_a_returning_one(company):
+    engine.run(company, now_ms=NOW)
+    flags = "MATCH (:Alert {id: $id})-[:FLAGS]->(d:Decision) RETURN d.id AS id LIMIT 5"
+    params = {"id": f"alert:{REOPENED}"}
+    removed = db.run_text(
+        "MATCH (d:Decision {id: $id}) WITH d, properties(d) AS props DETACH DELETE d "
+        "RETURN props LIMIT 1",
+        {"id": REOPENED},
+        label="rm",
+        graph=company,
+        readonly=False,
+    ).rows[0]["props"]
+    assert engine.run(company, now_ms=NOW)["withdrawn"] == 1
+    assert alerts_by_id(company)[f"alert:{REOPENED}"]["status"] == "withdrawn"
+    # the fold recreates the decision under the same id: the alert reopens and re-links
+    db.run_text(
+        "MATCH (o:Decision {id: 'dec:iss:Widget:a1/status:3000'}), "
+        "(i:Issue {id: 'iss:Widget:a1'}), (m:Artifact {id: 'msg:r3'}) "
+        "CREATE (d:Decision)-[:SUPERSEDES]->(o) SET d = $props "
+        "CREATE (d)-[:AFFECTS]->(i) CREATE (d)-[:EVIDENCED_BY {quote: 'reopened'}]->(m)",
+        {"props": removed},
+        label="restore",
+        graph=company,
+        readonly=False,
+    )
+    assert engine.run(company, now_ms=NOW)["new"] == 0
+    assert alerts_by_id(company)[f"alert:{REOPENED}"]["status"] == "open"
+    assert db.run_text(flags, params, label="flags", graph=company).rows == [{"id": REOPENED}]
+
+
+def test_list_alerts_filters_by_status_and_sorts_newest_change_first(company):
+    engine.run(company, now_ms=NOW)
+    assert [a["id"] for a in engine.list_alerts(graph=company)] == [
+        "alert:clm:k1",
+        f"alert:{REOPENED}",
+    ]
+    assert engine.list_alerts("dismissed", graph=company) == []
+    assert len(engine.list_alerts(product_id="Widget", graph=company)) == 2
+
+
+@pytest.mark.parametrize("name", ["list_alerts", "sentinel_changes"])
+def test_sentinel_reads_run_on_an_empty_graph(empty_graph, name):
+    params = {"status": None, "product_id": None, "limit": 1}
+    assert db.run(name, params, graph=empty_graph).rows == []

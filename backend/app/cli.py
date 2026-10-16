@@ -79,7 +79,14 @@ def cmd_normalize(args: argparse.Namespace) -> int:
     return 0
 
 
-INGEST_STAGES = ("structural", "lexical", "link", "fold", "derive")  # fold: events -> claims
+INGEST_STAGES = (
+    "structural",
+    "lexical",
+    "link",
+    "fold",
+    "derive",
+    "sentinel",
+)  # fold: events -> claims
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
@@ -137,6 +144,12 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         from app.ingest import derive
 
         report["derive_works_on"] = derive.works_on(graph)
+    if "sentinel" in args.stages:  # after fold and derive: the radius reads WORKS_ON
+        from app.sentinel import engine
+
+        out = engine.run(graph)
+        report |= out.pop("report")
+        print(f"sentinel: {out}", file=sys.stderr)
     print(f"{'query':<24}{'rows':>8}{'nodes+':>9}{'edges+':>9}{'props set':>11}")
     for query, r in report.items():
         print(
