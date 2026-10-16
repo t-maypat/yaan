@@ -332,6 +332,28 @@ def cmd_health(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_demo(args: argparse.Namespace) -> int:
+    from app.sentinel import live
+
+    if args.action == "reset":
+        print(json.dumps(live.reset_demo(args.graph)))
+        return 0
+    if not args.file:
+        print("lore demo inject: name an exports/inject/*.json file", file=sys.stderr)
+        return 1
+    msg = json.loads(open(args.file, encoding="utf-8").read())
+    out = live.ingest(msg, args.graph)
+    for a in out["alerts"]:
+        print(f"[{a['severity']}] {a['kind']}: {a['summary']}")
+        print(f"  notifies: {', '.join(p['name'] for p in a['notifies']) or 'nobody'}")
+    if not out["alerts"]:
+        print(f"no alert; fold: {out['fold']}")
+    stages = ", ".join(f"{k} {v:.0f}" for k, v in out["stages_ms"].items())
+    print(f"freshness lag {out['freshness_lag_ms'] / 1000:.1f} s ({stages} ms)")
+    print(f"LLM cost ${out['llm_cost_usd']:.4f}; events kept {len(out['events'])}")
+    return 0
+
+
 # command -> (help text, handler)
 COMMANDS = {
     "schema": ("create and verify the indexes for a graph (queries/00_schema.cypher)", cmd_schema),
@@ -348,6 +370,7 @@ COMMANDS = {
     "llm-check": ("one tiny LLM call: is the API key set and does it have credit?", cmd_llm_check),
     "eval": ("answer a split's HERB questions and score them (Phase 5)", cmd_eval),
     "eval-report": ("rebuild eval/results/table.md from the results files", cmd_eval_report),
+    "demo": ("reset the demo graph, or inject a synthetic message live (11.6)", cmd_demo),
 }
 
 # command -> [(flag, argparse options)]
@@ -365,6 +388,11 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--products", {"nargs": "+", "help": "product names (default: the dev products)"}),
         ("--sample", {"type": int, "help": "only N units spread over the products -> _sample"}),
         ("--workers", {"type": int, "default": 6, "help": "parallel LLM calls"}),
+    ],
+    "demo": [
+        ("action", {"choices": ("reset", "inject")}),
+        ("file", {"nargs": "?", "help": "inject: an exports/inject/*.json message"}),
+        ("--graph", {"help": "graph name (default: LORE_DEMO_GRAPH, e.g. lore_demo)"}),
     ],
     "health": [("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"})],
     "search": [

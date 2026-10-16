@@ -15,6 +15,7 @@ WRITER = READER | {
     "+graph.query",
     "+graph.profile",
     "+graph.delete",
+    "+graph.copy",
     "+graph.constraint",
     "+graph.memory",
 }

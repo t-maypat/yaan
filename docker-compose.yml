@@ -20,7 +20,8 @@ services:
       # - Persistence (D013): a snapshot within 60 s of any change, plus a final save on a clean stop.
       # - ACL users (D018, A12), recreated from these arguments at every start:
       #   default = admin, password required (redis-cli, the Browser, snapshots, config);
-      #   writer  = graph commands only: no FLUSHALL, no CONFIG, no key commands;
+      #   writer  = graph commands only: no FLUSHALL, no CONFIG, no key commands; GRAPH.COPY for the
+      #             demo reset (lore_herb -> lore_demo, D057);
       #   reader  = read and plan only. GRAPH.QUERY, GRAPH.PROFILE (it executes) and GRAPH.DELETE
       #             are refused, so a write can't even be sent: the second lock behind RO_QUERY.
       #   Both app users get INFO and CLIENT SETINFO because the falkordb client sends them on
@@ -29,7 +30,7 @@ services:
         --save 60 1
         --user default on >${FALKORDB_ADMIN_PASSWORD:?set FALKORDB_ADMIN_PASSWORD in .env (see .env.example)} allkeys allcommands
         --user ${FALKORDB_WRITER_USER:-lore_writer} on >${FALKORDB_WRITER_PASSWORD:?set FALKORDB_WRITER_PASSWORD in .env} allkeys -@all
-        +graph.query +graph.ro_query +graph.explain +graph.profile +graph.list +graph.delete
+        +graph.query +graph.ro_query +graph.explain +graph.profile +graph.list +graph.delete +graph.copy
         +graph.constraint +graph.memory +ping +info +client|setinfo
         --user ${FALKORDB_READER_USER:-lore_reader} on >${FALKORDB_READER_PASSWORD:?set FALKORDB_READER_PASSWORD in .env} allkeys -@all
         +graph.ro_query +graph.explain +graph.list +ping +info +client|setinfo

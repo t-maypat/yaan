@@ -1,0 +1,10 @@
+{
+  "_label": "SYNTHETIC demo injection, not HERB data (CONTEXT rule 5, PLAN 11.7). Written for Lore's live demo; the id prefix msg:synthetic- marks it everywhere.",
+  "id": "msg:synthetic-20270309-2",
+  "product": "ExplainabilityForce",
+  "channel_id": "ch-force-9a6043",
+  "channel_name": "bug-bobdavis-ExplainabilityForce",
+  "author_eid": "eid_eed289d3",
+  "ts_iso": "2027-03-09T10:20:00Z",
+  "text": "I looked at 'Insufficient Rate Limiting on API Requests' again. The throttling works as intended, so I'm dismissing it as not a bug."
+}

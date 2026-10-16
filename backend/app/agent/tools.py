@@ -331,6 +331,9 @@ def list_issues(
         r["assignees"] = [a for a in r["assignees"] if a["id"]]
         r["fixed_by"] = [p for p in r["fixed_by"] if p["id"]]
         r["history"] = [h for h in r["history"] if h["status"]]
+        for h in r["history"]:  # only refused claims carry the key, so other output is unchanged
+            if reason := h.pop("refused"):
+                h["not_applied"] = f"the authority policy refused this change: {reason}"
         if status == "unresolved" and r["status"] not in UNRESOLVED:
             continue
         companies = " ".join((c["company"] or "") for c in r["customers"]).casefold()

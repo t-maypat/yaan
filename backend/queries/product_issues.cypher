@@ -1,4 +1,4 @@
-// product_issues.cypher — the product's canonical customer issues with current status, status history (claims with quotes), assignee, reporting customers and fixing PRs (slice B, D049)
+// product_issues.cypher — the product's canonical customer issues with current status, status history (claims with quotes, and the policy's reason when a claim was refused), assignee, reporting customers and fixing PRs (slice B, D049, D057)
 MATCH (:Product {id: $product_id})<-[:IN_PRODUCT]-(i:Issue)
 WHERE $status IS NULL OR i.current_status = $status
 OPTIONAL MATCH (i)-[:REPORTED_BY]->(c:Customer)
@@ -13,11 +13,12 @@ WITH i, customers, assignees,
 OPTIONAL MATCH (cl:Claim)-[:ABOUT]->(i)
 OPTIONAL MATCH (cl)-[:FROM]->(m:Artifact)
 OPTIONAL MATCH (cl)-[:ASSERTED_BY]->(sp:Person)
-WITH i, customers, assignees, fixed_by, cl, m, sp
+OPTIONAL MATCH (cl)-[cw:CONFLICTS_WITH]->(:Decision)
+WITH i, customers, assignees, fixed_by, cl, m, sp, cw
 ORDER BY cl.ts_ms
 WITH i, customers, assignees, fixed_by,
-     collect({status: cl.value, ts_iso: cl.ts_iso, by: sp.id, by_role: sp.role, artifact_id: m.id,
-              quote: cl.quote, outcome: cl.outcome}) AS history
+     collect({status: cl.value, ts_iso: cl.ts_iso, by: sp.id, by_name: sp.name, by_role: sp.role, artifact_id: m.id,
+              quote: cl.quote, outcome: cl.outcome, refused: cw.reason}) AS history
 ORDER BY i.reported_ms
 RETURN i.id AS id, i.title AS title, i.component AS component, i.current_status AS status,
        i.reopen_count AS reopen_count, customers, assignees, fixed_by, history
