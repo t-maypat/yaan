@@ -1,0 +1,12 @@
+%% Phases 7-8 (D048-D050): from a Slack conversation to an issue's status chain the agent can cite.
+flowchart LR
+  U["Conversation unit<br/>one HERB conversation<br/>in a bug / develop channel<br/>364 on dev"]:::file
+  L["S5 extraction<br/>Haiku 5.5, structured output<br/>8 closed event types<br/>each pinned to message [n]"]:::ext
+  V["S6 quote check<br/>quote must be word for word<br/>in that message<br/>244 / 244 kept"]:::guard
+  R["S7 resolve<br/>issue title to iss:product:hash<br/>PR#N / url to pr: id<br/>90 issues, all events matched"]:::code
+  P["Policy, in code<br/>authorized / unverified /<br/>unauthorized: 0 conflicts"]:::guard
+  F["S8 fold<br/>per topic, in time order<br/>SUPPORTS / SUPERSEDES /<br/>CONFLICTS_WITH"]:::code
+  G[("FalkorDB<br/>Issue, Claim, Decision<br/>FROM quote, REPORTED_BY,<br/>ASSIGNED_TO, FIXES")]:::store
+  T["Agent tools<br/>list_issues, list_prs<br/>status + who + quote"]:::code
+  U --> L --> V --> R --> F --> G --> T
+  P -. "verdict per claim" .-> F

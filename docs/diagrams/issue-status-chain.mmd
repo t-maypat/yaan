@@ -1,0 +1,15 @@
+%% One real issue's extracted chain (ExplainabilityForce, D050): each claim cites its message; decisions close their windows instead of being deleted.
+flowchart RL
+  D3["Decision: reopened<br/>1 Dec 23:22 → now<br/>active"]:::guard
+  D2["Decision: dismissed<br/>29 Nov 14:51 → 1 Dec 23:22<br/>superseded"]:::guard
+  D1["Decision: reported<br/>25 Nov 19:59 → 29 Nov 14:51<br/>superseded"]:::guard
+  I["Issue: Suboptimal Query Optimization<br/>current_status = reopened<br/>REPORTED_BY CUST-0039 (DataSolutions)"]:::store
+  C3["Claim, Engineering Lead<br/>'the ... bug has been reopened<br/>by the customer.'"]:::file
+  C2["Claim, Software Engineer (assignee)<br/>'The system is functioning<br/>as intended.'"]:::file
+  C1["Claim, Engineering Lead<br/>'Next, we have 'Suboptimal<br/>Query Optimization'.'"]:::file
+  D3 -- "SUPERSEDES" --> D2
+  D2 -- "SUPERSEDES" --> D1
+  D1 -- "AFFECTS" --> I
+  C1 -- "SUPPORTS" --> D1
+  C2 -- "SUPPORTS" --> D2
+  C3 -- "SUPPORTS" --> D3
