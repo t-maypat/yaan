@@ -6,6 +6,7 @@ When a phase implements a command, it moves from PENDING to a `cmd_*` function i
 """
 
 import argparse
+import json
 import sys
 
 # command -> (docs/PLAN.md phase that builds it, help text)
@@ -121,6 +122,27 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         )
     print(f"\ngraph {graph!r}, products {', '.join(products)}, stages {', '.join(args.stages)}\n")
     print(health.render(health.report(graph)))
+    return 0
+
+
+def cmd_extract(args: argparse.Namespace) -> int:
+    from app.eval.split import read_split
+    from app.ingest import extract
+    from app.ingest.normalize import normalized_dir, read_jsonl
+
+    products = args.products or read_split()["dev"]
+    todo = {
+        p: extract.units(p, read_jsonl(normalized_dir(p) / "artifacts.jsonl")) for p in products
+    }
+    if args.sample:
+        # every k-th unit across the products, so the sample spans channels and months
+        flat = [u for p in products for u in todo[p]]
+        step = max(1, len(flat) // args.sample)
+        todo = {"_sample": flat[::step][: args.sample]}
+    for name, units in todo.items():
+        kept, dropped, stats = extract.run(units, workers=args.workers)
+        folder = extract.write(name, kept, dropped, stats)
+        print(f"{name}: {json.dumps(stats)} -> {folder}")
     return 0
 
 
@@ -282,6 +304,7 @@ COMMANDS = {
     "normalize": ("HERB products -> data/normalized/<product>/artifacts.jsonl (S1)", cmd_normalize),
     "split": ("draw the held-out test products once (seeded) into eval/split.json", cmd_split),
     "ingest": ("load normalized products into a graph (stages: structural)", cmd_ingest),
+    "extract": ("LLM event extraction + quote check over bug/develop chats (S5-S6)", cmd_extract),
     "health": ("print the graph-health report (S10)", cmd_health),
     "search": ("hybrid search over the graph's chunks (agent tool 1)", cmd_search),
     "bench-search": ("search hit@k / precision@k and latency on dev questions", cmd_bench_search),
@@ -301,6 +324,11 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--products", {"nargs": "+", "help": "product names (default: the dev products)"}),
         ("--stages", {"nargs": "+", "choices": INGEST_STAGES, "default": list(INGEST_STAGES)}),
         ("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"}),
+    ],
+    "extract": [
+        ("--products", {"nargs": "+", "help": "product names (default: the dev products)"}),
+        ("--sample", {"type": int, "help": "only N units spread over the products -> _sample"}),
+        ("--workers", {"type": int, "default": 6, "help": "parallel LLM calls"}),
     ],
     "health": [("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"})],
     "search": [
