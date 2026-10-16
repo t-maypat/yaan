@@ -1,4 +1,5 @@
-"""Phase 12.1 (step 1, R1-8): the /ask event stream and the rate limit. No LLM, no DB."""
+"""Phase 12.1: the /ask event stream and the rate limit (step 1, R1-8); the Inbox and live-demo
+endpoints (step 2, D058). No LLM, no DB: the Sentinel functions are faked."""
 
 import json
 
@@ -6,6 +7,8 @@ from fastapi.testclient import TestClient
 
 from app import main
 from app.agent import loop
+from app.config import Settings
+from app.sentinel import approve, blast_radius, engine, live
 
 
 def events(text: str) -> list[tuple[str, dict]]:
@@ -75,7 +78,7 @@ def test_query_returns_the_file_a_tool_ran_and_nothing_else():
 
 def test_products_lists_the_graphs_products(monkeypatch):
     rows = [{"id": "W", "name": "W", "aliases": ["wdAI"], "artifacts": 3}]
-    monkeypatch.setattr(main.db, "run", lambda name, params: type("R", (), {"rows": rows}))
+    monkeypatch.setattr(main.db, "run", lambda name, params, **k: type("R", (), {"rows": rows}))
     assert TestClient(main.app).get("/products").json()["products"] == rows
 
 
@@ -83,3 +86,86 @@ def test_ask_rejects_empty_or_huge_questions():
     client = TestClient(main.app)
     assert client.post("/ask", json={"question": ""}).status_code == 422
     assert client.post("/ask", json={"question": "x" * 501}).status_code == 422
+
+
+ALERT = {"id": "alert:dec:x", "decision_id": "dec:x", "kind": "regression", "summary": "s"}
+
+
+def test_alerts_and_detail_read_the_api_graph(monkeypatch):
+    seen = []
+
+    def fake_list(status=None, product_id=None, *, graph=None):
+        seen.append(graph)
+        return [ALERT]
+
+    monkeypatch.setattr(engine, "list_alerts", fake_list)
+    monkeypatch.setattr(engine, "alert_actions", lambda i, graph=None: [{"id": "a1"}])
+    monkeypatch.setattr(blast_radius, "impact_of", lambda d, graph=None: {"decision_id": d})
+    client = TestClient(main.app)
+    assert client.get("/alerts").json()["alerts"] == [ALERT]
+    got = client.get("/alerts/detail", params={"id": "alert:dec:x"}).json()
+    assert got["radius"] == {"decision_id": "dec:x"} and got["actions"] == [{"id": "a1"}]
+    assert client.get("/alerts/detail", params={"id": "nope"}).status_code == 404
+    assert set(seen) == {"lore_demo"}
+
+
+def test_approve_and_dismiss_go_to_the_demo_graph_and_errors_are_409(monkeypatch):
+    calls = []
+
+    def fake_respond(alert_id, verdict, person_id, *, graph=None, **kw):
+        calls.append((alert_id, verdict, person_id, graph))
+        if alert_id == "closed":
+            raise approve.AlertError("alert 'closed' is approved, not open")
+        return {"status": verdict}
+
+    monkeypatch.setattr(approve, "respond", fake_respond)
+    monkeypatch.setattr(main, "demo_limiter", main.RateLimiter(10))
+    client = TestClient(main.app)
+    body = {"alert_id": "alert:dec:x", "person_id": "eid_a1"}
+    assert client.post("/alerts/approve", json=body).json() == {"status": "approved"}
+    assert client.post("/alerts/dismiss", json=body).json() == {"status": "dismissed"}
+    r = client.post("/alerts/approve", json={**body, "alert_id": "closed"})
+    assert r.status_code == 409 and "not open" in r.json()["detail"]
+    assert {c[3] for c in calls} == {"lore_demo"}
+
+
+def test_demo_writes_refuse_the_main_graph(monkeypatch):
+    monkeypatch.setattr(main, "get_settings", lambda: Settings(lore_api_graph="lore_herb"))
+    monkeypatch.setattr(main, "demo_limiter", main.RateLimiter(10))
+    r = TestClient(main.app).post("/demo/reset")
+    assert r.status_code == 409 and "demo graph only" in r.json()["detail"]
+
+
+def test_only_the_labeled_injection_files_can_be_injected(monkeypatch):
+    monkeypatch.setattr(live, "ingest", lambda msg, graph=None: {"artifact_id": msg["id"]})
+    monkeypatch.setattr(live, "injected_ids", lambda graph: {"msg:synthetic-20270309-1"})
+    monkeypatch.setattr(main, "demo_limiter", main.RateLimiter(10))
+    client = TestClient(main.app)
+    listed = client.get("/demo/injections").json()["injections"]
+    assert [(i["name"], i["injected"]) for i in listed] == [
+        ("01-regression", True),
+        ("02-unauthorized-dismissal", False),
+    ]
+    ok = client.post("/demo/inject/02-unauthorized-dismissal").json()
+    assert ok == {"artifact_id": "msg:synthetic-20270309-2"}
+    assert client.post("/demo/inject/nope").status_code == 404
+    assert client.post("/demo/inject/..%2F..%2F.env").status_code == 404
+
+
+def test_demo_writes_are_rate_limited(monkeypatch):
+    monkeypatch.setattr(live, "reset_demo", lambda graph=None: {"graph": graph})
+    monkeypatch.setattr(main, "demo_limiter", main.RateLimiter(1))
+    client = TestClient(main.app)
+    assert [client.post("/demo/reset").status_code for _ in range(2)] == [200, 429]
+
+
+def test_ingest_artifact_needs_the_secret(monkeypatch):
+    monkeypatch.setattr(live, "ingest", lambda msg, graph=None: {"ok": True})
+    monkeypatch.setattr(main, "demo_limiter", main.RateLimiter(10))
+    client = TestClient(main.app)
+    monkeypatch.setattr(main, "get_settings", lambda: Settings(lore_ingest_secret=""))
+    assert client.post("/ingest/artifact", json={}).status_code == 503
+    monkeypatch.setattr(main, "get_settings", lambda: Settings(lore_ingest_secret="s3"))
+    assert client.post("/ingest/artifact", json={}).status_code == 401
+    r = client.post("/ingest/artifact", json={}, headers={"X-Lore-Secret": "s3"})
+    assert r.json() == {"ok": True}

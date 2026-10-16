@@ -29,6 +29,7 @@ export const NODE_WORDS: Record<string, string> = {
   claim: "Claim",
   issue: "Issue",
   decision: "Decision",
+  team: "Team",
   ...KIND_WORDS,
 };
 

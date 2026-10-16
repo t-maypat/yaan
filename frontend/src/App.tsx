@@ -1,7 +1,8 @@
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { type AnswerEvent, ask, type Citation, getProducts, type Product, type Subgraph } from "./api";
 import { Answer } from "./components/Answer";
 import { EvidenceGraph } from "./components/EvidenceGraph";
+import { Inbox } from "./components/Inbox";
 import { Sources } from "./components/Sources";
 import { type Step, Walk } from "./components/Walk";
 import { SUGGESTIONS, type Suggestion } from "./suggestions";
@@ -17,7 +18,18 @@ type Run = {
   running: boolean;
 };
 
+type View = "ask" | "inbox";
+const viewFromHash = (): View => (window.location.hash === "#inbox" ? "inbox" : "ask");
+
 export default function App() {
+  const [view, setView] = useState<View>(viewFromHash);
+  const [openAlerts, setOpenAlerts] = useState<number | null>(null);
+  const countAlerts = useCallback((n: number) => setOpenAlerts(n), []);
+  useEffect(() => {
+    const on = () => setView(viewFromHash());
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
   const [products, setProducts] = useState<Product[]>([]);
   const [productError, setProductError] = useState<string | null>(null);
   const [product, setProduct] = useState<string | null>(null);
@@ -139,12 +151,29 @@ export default function App() {
             onClick={() => {
               abort.current?.abort();
               setRun(null);
+              window.location.hash = "ask";
             }}
             className="font-serif text-[1.6rem] font-semibold tracking-tight leading-none"
             aria-label="Lore, back to the start"
           >
             Lore
           </button>
+          <nav aria-label="Views" className="flex gap-5 text-[0.95rem] mr-auto ml-4">
+            <a
+              href="#ask"
+              aria-current={view === "ask" ? "page" : undefined}
+              className={view === "ask" ? "font-semibold border-b-2 border-ink" : "text-link hover:underline underline-offset-2"}
+            >
+              Ask
+            </a>
+            <a
+              href="#inbox"
+              aria-current={view === "inbox" ? "page" : undefined}
+              className={view === "inbox" ? "font-semibold border-b-2 border-ink" : "text-link hover:underline underline-offset-2"}
+            >
+              Inbox{openAlerts ? ` (${openAlerts} open)` : ""}
+            </a>
+          </nav>
           <p className="text-sm text-muted">
             {productError
               ? `The graph didn't answer: ${productError}`
@@ -156,7 +185,9 @@ export default function App() {
       </header>
 
       <main className="max-w-[90rem] mx-auto px-4 sm:px-8 pb-20">
-        {compact ? (
+        {view === "inbox" ? (
+          <Inbox onCount={countAlerts} />
+        ) : compact ? (
           <div className="pt-5 pb-4 max-w-[64rem]">
             {form}
             <details className="mt-3 group">
@@ -169,7 +200,7 @@ export default function App() {
         ) : (
           <Opening form={form} onPick={pick} products={products} />
         )}
-        {run && <RunView run={run} active={active} setActive={setActive} />}
+        {view === "ask" && run && <RunView run={run} active={active} setActive={setActive} />}
       </main>
     </div>
   );

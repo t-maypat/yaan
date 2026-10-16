@@ -3,6 +3,13 @@
 Phase 12 step 1 (R1-8): `/ask` streams the agent's fixed event sequence as Server-Sent
 Events: `tool_call`, `tool_result` (one pair per tool), `answer`, `citations`, `subgraph`,
 then `done`, or `error` if the agent fails (fail loudly: no canned fallback answer).
+
+Step 2 (with Phase 11): the Inbox (`/alerts`, `/alerts/detail`, `/alerts/approve`,
+`/alerts/dismiss`) and the live demo (`/demo/injections`, `/demo/inject/{name}`, `/demo/reset`;
+`/ingest/artifact` behind a secret header). Everything reads and writes `LORE_API_GRAPH`
+(`lore_demo`, a copy of `lore_herb`), so Ask sees what the demo injects; writes refuse the
+main graph (live.demo_graph). Public demo writes are limited to the labeled files in
+exports/inject/, rate-limited per IP and serialized by one lock (D058).
 """
 
 import json
@@ -18,6 +25,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app import __version__, db
+from app.config import REPO_ROOT, get_settings
 
 app = FastAPI(title="Lore", version=__version__)
 ASK_PER_MINUTE = 6  # per IP; the LLM gateway's daily spend cap is the second guard
@@ -44,6 +52,32 @@ class RateLimiter:
 
 
 ask_limiter = RateLimiter(ASK_PER_MINUTE)
+DEMO_PER_MINUTE = 6  # per IP: injections, resets, approvals and dismissals
+demo_limiter = RateLimiter(DEMO_PER_MINUTE)
+demo_lock = threading.Lock()  # one demo write at a time: a fold rebuild must not interleave
+INJECT_DIR = REPO_ROOT / "exports" / "inject"
+
+
+def graph() -> str:
+    return get_settings().lore_api_graph
+
+
+def client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def demo_write(request: Request, work):
+    """Run one demo write: rate-limited, serialized, and refused on the main graph."""
+    from app.sentinel import approve, live
+
+    if not demo_limiter.allow(client_ip(request)):
+        raise HTTPException(429, f"at most {DEMO_PER_MINUTE} demo actions per minute")
+    try:
+        target = live.demo_graph(graph())
+        with demo_lock:
+            return work(target)
+    except (live.LiveError, approve.AlertError) as e:
+        raise HTTPException(409, str(e)) from e
 
 
 class AskRequest(BaseModel):
@@ -60,14 +94,18 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
     """Answer a question, streaming the tool trace, the answer, citations and evidence."""
     from app.agent import loop
 
-    ip = request.client.host if request.client else "unknown"
-    if not ask_limiter.allow(ip):
+    if not ask_limiter.allow(client_ip(request)):
         raise HTTPException(429, f"at most {ASK_PER_MINUTE} questions per minute")
     events: queue.Queue = queue.Queue()
 
     def work() -> None:
         try:
-            loop.answer(body.question, body.product_id, on_event=lambda n, d: events.put((n, d)))
+            loop.answer(
+                body.question,
+                body.product_id,
+                graph=graph(),
+                on_event=lambda n, d: events.put((n, d)),
+            )
         except Exception as e:  # shown to the viewer as an error event, never a fake answer
             events.put(("error", {"error": type(e).__name__, "message": str(e)[:500]}))
         finally:
@@ -89,7 +127,7 @@ def artifact(artifact_id: str) -> dict:
     """One artifact's text and the people around it (agent tool 3), for citation hovers."""
     from app.agent import tools
 
-    out = tools.get_artifact(artifact_id)
+    out = tools.get_artifact(artifact_id, graph())
     if "error" in out:
         raise HTTPException(404, out["error"])
     return out
@@ -98,8 +136,124 @@ def artifact(artifact_id: str) -> dict:
 @app.get("/products")
 def products() -> dict:
     """The products in the graph with their codenames, for the UI's product picker."""
-    rows = db.run("list_products", {"limit": 100}).rows
+    rows = db.run("list_products", {"limit": 100}, graph=graph()).rows
     return {"products": rows, "cypher": ["list_products.cypher"]}
+
+
+class AlertResponse(BaseModel):
+    alert_id: str = Field(min_length=1, max_length=300)
+    person_id: str = Field(min_length=1, max_length=100)
+    note: str | None = Field(default=None, max_length=500)
+    action_ids: list[str] | None = Field(default=None, max_length=50)
+    edits: dict[str, str] | None = None
+
+
+@app.get("/alerts")
+def alerts(status: str | None = None, product_id: str | None = None) -> dict:
+    """The Inbox: Sentinel alerts, newest change first (11.1)."""
+    from app.sentinel import engine
+
+    rows = engine.list_alerts(status, product_id, graph=graph())
+    return {"graph": graph(), "alerts": rows, "cypher": ["list_alerts.cypher"]}
+
+
+@app.get("/alerts/detail")
+def alert_detail(id: str) -> dict:
+    """One alert with its blast radius (11.2) and drafted actions (11.3)."""
+    from app.sentinel import blast_radius, engine
+
+    found = [a for a in engine.list_alerts(graph=graph()) if a["id"] == id]
+    if not found:
+        raise HTTPException(404, f"no alert {id!r}")
+    return {
+        "alert": found[0],
+        "radius": blast_radius.impact_of(found[0]["decision_id"], graph=graph()),
+        "actions": engine.alert_actions(id, graph=graph()),
+        "cypher": ["list_alerts.cypher", "impact_of.cypher", "alert_actions.cypher"],
+    }
+
+
+@app.post("/alerts/approve")
+def alert_approve(body: AlertResponse, request: Request) -> dict:
+    """Approve an alert's drafts (all, or `action_ids`) as `person_id` (11.4)."""
+    from app.sentinel import approve
+
+    return demo_write(
+        request,
+        lambda g: approve.respond(
+            body.alert_id,
+            "approved",
+            body.person_id,
+            note=body.note,
+            action_ids=body.action_ids,
+            edits=body.edits,
+            graph=g,
+        ),
+    )
+
+
+@app.post("/alerts/dismiss")
+def alert_dismiss(body: AlertResponse, request: Request) -> dict:
+    """Dismiss an alert as `person_id`; recorded as a decision too (11.4)."""
+    from app.sentinel import approve
+
+    return demo_write(
+        request,
+        lambda g: approve.respond(
+            body.alert_id, "dismissed", body.person_id, note=body.note, graph=g
+        ),
+    )
+
+
+def injection(name: str) -> dict:
+    path = INJECT_DIR / f"{name}.json"
+    if not name.replace("-", "").isalnum() or not path.is_file():
+        raise HTTPException(404, f"no injection {name!r} in exports/inject/")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@app.get("/demo/injections")
+def demo_injections() -> dict:
+    """The labeled synthetic messages the demo can inject (exports/inject/, 11.7)."""
+    from app.sentinel import live
+
+    done = live.injected_ids(graph())
+    out = []
+    for path in sorted(INJECT_DIR.glob("*.json")):
+        msg = json.loads(path.read_text(encoding="utf-8"))
+        out.append({"name": path.stem, **msg, "injected": msg["id"] in done})
+    return {"graph": graph(), "injections": out}
+
+
+@app.post("/demo/inject/{name}")
+def demo_inject(name: str, request: Request) -> dict:
+    """Inject one labeled synthetic message live: S1-S8 + Sentinel, with the freshness lag."""
+    from app.sentinel import live
+
+    msg = injection(name)
+    return demo_write(request, lambda g: live.ingest(msg, g))
+
+
+@app.post("/demo/reset")
+def demo_reset(request: Request) -> dict:
+    """lore_demo := a fresh copy of lore_herb; the injected messages are gone."""
+    from app.sentinel import live
+
+    return demo_write(request, live.reset_demo)
+
+
+@app.post("/ingest/artifact")
+def ingest_artifact(msg: dict[str, Any], request: Request) -> dict:
+    """Ingest any message live (11.6). Needs LORE_INGEST_SECRET in the X-Lore-Secret header,
+    since arbitrary text costs an LLM call; ids must still start `msg:synthetic-`."""
+    from app.sentinel import live
+
+    secret = get_settings().lore_ingest_secret
+    if not secret:
+        raise HTTPException(503, "live ingestion is off: set LORE_INGEST_SECRET")
+    if request.headers.get("x-lore-secret") != secret:
+        raise HTTPException(401, "wrong or missing X-Lore-Secret")
+    return demo_write(request, lambda g: live.ingest(msg, g))
 
 
 @app.get("/query/{name}")

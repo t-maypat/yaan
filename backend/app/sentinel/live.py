@@ -98,7 +98,7 @@ def ingest(msg: dict[str, Any], graph: str | None = None) -> dict[str, Any]:
     meta = _metadata()
     if a.author_eid not in meta.employees:
         raise LiveError(f"unknown author {a.author_eid!r}")
-    if any(r["id"] == a.id for r in _read(graph, "artifacts.jsonl")):
+    if a.id in injected_ids(graph):
         raise LiveError(f"{a.id!r} is already in {graph!r}: run `lore demo reset` to replay it")
     if not db.run("get_channel", {"id": a.channel_id}, graph=graph).rows:
         raise LiveError(f"channel {a.channel_id!r} is not in {graph!r}: run `lore demo reset`")
@@ -177,6 +177,11 @@ def _base_events_and_artifacts() -> tuple[list[dict[str, Any]], dict[str, list[A
     events = [e for p in have for e in extract.read_events(p)]
     arts = {p: read_jsonl(normalized_dir(p) / "artifacts.jsonl") for p in have}
     return events, arts
+
+
+def injected_ids(graph: str) -> set[str]:
+    """Ids of the live messages already in `graph` since its last reset."""
+    return {r["id"] for r in _read(graph, "artifacts.jsonl")}
 
 
 def _read(graph: str, name: str) -> list[dict[str, Any]]:

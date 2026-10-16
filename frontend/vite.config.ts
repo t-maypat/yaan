@@ -5,7 +5,7 @@ import { defineConfig } from "vite";
 // The API runs on :8000 (`uv run --project backend uvicorn app.main:app --reload`).
 // In dev, Vite forwards the API paths to it, so the browser sees one origin and needs no CORS.
 const API = process.env.LORE_API ?? "http://127.0.0.1:8000";
-const apiPaths = ["/ask", "/artifact", "/products", "/query", "/health"];
+const apiPaths = ["/ask", "/artifact", "/products", "/query", "/health", "/alerts", "/demo", "/ingest"];
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],

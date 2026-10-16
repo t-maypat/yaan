@@ -98,6 +98,95 @@ function getJson<T>(path: string): Promise<T> {
   return cache.get(path) as Promise<T>;
 }
 
+// The Inbox (Sentinel alerts) and the live demo. Not cached: they change as the demo runs.
+export type Notified = { id: string; name: string; role: string | null; reasons: string[] };
+export type Alert = {
+  id: string;
+  kind: "regression" | "reopened" | "reversal" | "conflict";
+  severity: "high" | "medium";
+  status: "open" | "approved" | "dismissed" | "withdrawn";
+  summary: string;
+  decision_id: string;
+  subject_id: string;
+  subject_title: string;
+  product_id: string;
+  from_value: string;
+  to_value: string;
+  ts_iso: string;
+  artifact_id: string;
+  quote: string;
+  actor_name: string | null;
+  actor_role: string | null;
+  reason: string | null;
+  radius_size: number;
+  notifies: Notified[];
+};
+export type RadiusRow = {
+  kind: string;
+  id: string;
+  name: string | null;
+  role: string | null;
+  why: string;
+  via: string | null;
+  detail: string | null;
+  quote: string | null;
+};
+export type Radius = {
+  people: Notified[];
+  open_issues_same_component: RadiusRow[];
+  rows: RadiusRow[];
+  size: number;
+};
+export type Action = {
+  id: string;
+  kind: "ticket_comment" | "doc_fix" | "notify_owner";
+  status: "proposed" | "approved" | "skipped" | "dismissed";
+  target_kind: "issue" | "artifact" | "person";
+  target_id: string;
+  target_name: string;
+  draft: string;
+};
+export type AlertDetail = { alert: Alert; radius: Radius; actions: Action[] };
+export type Injection = {
+  name: string;
+  id: string;
+  _label: string;
+  author_eid: string;
+  channel_name: string;
+  ts_iso: string;
+  text: string;
+  injected: boolean;
+};
+export type IngestResult = {
+  artifact_id: string;
+  alerts: Alert[];
+  freshness_lag_ms: number;
+  stages_ms: Record<string, number>;
+  llm_cost_usd: number;
+  events: unknown[];
+};
+export type ResponseResult = { status: string; decision: { id: string; statement: string } };
+
+async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const r = await fetch(path, {
+    method,
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return r.ok ? r.json() : failLoudly(r);
+}
+
+export const getAlerts = () => send<{ alerts: Alert[]; graph: string }>("GET", "/alerts");
+export const getAlertDetail = (id: string) =>
+  send<AlertDetail>("GET", `/alerts/detail?id=${encodeURIComponent(id)}`);
+export const respond = (
+  verdict: "approve" | "dismiss",
+  body: { alert_id: string; person_id: string; note?: string; action_ids?: string[]; edits?: Record<string, string> },
+) => send<ResponseResult>("POST", `/alerts/${verdict}`, body);
+export const getInjections = () => send<{ injections: Injection[] }>("GET", "/demo/injections");
+export const inject = (name: string) => send<IngestResult>("POST", `/demo/inject/${encodeURIComponent(name)}`);
+export const resetDemo = () => send<{ ms: number }>("POST", "/demo/reset");
+
 export const getArtifact = (id: string) => getJson<Artifact>(`/artifact/${encodeURIComponent(id)}`);
 export const getQuery = (name: string) =>
   getJson<{ name: string; text: string }>(`/query/${encodeURIComponent(name)}`);

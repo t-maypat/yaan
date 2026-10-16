@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     falkordb_port: int = 6379
     lore_graph: str = "lore_herb"
     lore_demo_graph: str = "lore_demo"
+    # The graph the API serves (Ask, Inbox, live demo). Eval and batch ingest use lore_graph.
+    lore_api_graph: str = "lore_demo"
+    lore_ingest_secret: str | None = None  # POST /ingest/artifact needs it in X-Lore-Secret
     query_timeout_ms: int = 2000  # default timeout for reads (agent tools); writes can't take one
     # Redis ACL users (Phase 1.4, D018), created by docker-compose.yml from the same .env.
     falkordb_writer_user: str = "lore_writer"

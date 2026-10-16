@@ -3,7 +3,14 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { Citation, Subgraph } from "../api";
 import { ARTIFACT_KINDS, NODE_WORDS } from "../words";
 
-type Props = { graph: Subgraph; citations: Citation[]; active: number | null };
+type Props = {
+  graph: Subgraph;
+  citations: Citation[];
+  active: number | null;
+  hint?: string; // the line under the graph when nothing is pointed at
+  label?: string; // the graph's accessible name
+  root?: string; // draw rings around this node (the Inbox's blast radius) instead of a force layout
+};
 
 // Node shapes carry the type (so it reads without color); color separates people and
 // organizations from artifacts and from what Lore extracted (claims, issues, decisions).
@@ -15,6 +22,7 @@ const SHAPE: Record<string, cytoscape.Css.NodeShape> = {
   claim: "diamond",
   issue: "triangle",
   decision: "star",
+  team: "octagon",
 };
 const GROUP = (label: string) =>
   ARTIFACT_KINDS.has(label)
@@ -26,7 +34,7 @@ const GROUP = (label: string) =>
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const short = (s: string | null, n = 26) => (!s ? "" : s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
-export function EvidenceGraph({ graph, citations, active }: Props) {
+export function EvidenceGraph({ graph, citations, active, hint, label, root }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const cy = useRef<Core | null>(null);
   const [hovered, setHovered] = useState<{ label: string; name: string } | null>(null);
@@ -50,13 +58,13 @@ export function EvidenceGraph({ graph, citations, active }: Props) {
             id: n.id,
             kind: n.label,
             name: n.name ?? n.id,
-            text: n.cited
+            text: marks.has(n.id)
               ? `[${(marks.get(n.id) ?? []).join("] [")}]`
-              : GROUP(n.label) === "extracted"
+              : GROUP(n.label) === "extracted" && !root
                 ? ""
                 : short(n.name ?? n.id),
           },
-          classes: [GROUP(n.label), n.cited ? "cited" : ""].join(" "),
+          classes: [GROUP(n.label), n.cited ? "cited" : "", n.id === root ? "root" : ""].join(" "),
         })),
         ...graph.edges.map((e) => ({ data: { source: e.source, target: e.target, rel: e.rel } })),
       ],
@@ -89,6 +97,7 @@ export function EvidenceGraph({ graph, citations, active }: Props) {
           selector: "node.cited",
           style: { width: 28, height: 28, "background-color": mark, "border-color": ink, "border-width": 2, color: ink, "font-weight": 600 },
         },
+        { selector: "node.root", style: { width: 26, height: 26, "border-width": 2.5, color: ink, "font-weight": 600 } },
         { selector: "node.lit", style: { "underlay-color": mark, "underlay-opacity": 0.55, "underlay-padding": 8 } },
         {
           selector: "edge",
@@ -103,7 +112,9 @@ export function EvidenceGraph({ graph, citations, active }: Props) {
         },
         { selector: "edge.hover", style: { label: "data(rel)", "font-size": 9, color: muted, "line-color": muted } },
       ],
-      layout: { name: "cose", animate: !reduce, animationDuration: 400, padding: 24, nodeRepulsion: () => 16000, idealEdgeLength: () => 80 },
+      layout: root
+        ? { name: "breadthfirst", roots: [root], circle: true, spacingFactor: 1.15, padding: 24, animate: false }
+        : { name: "cose", animate: !reduce, animationDuration: 400, padding: 24, nodeRepulsion: () => 16000, idealEdgeLength: () => 80 },
       wheelSensitivity: 0.2,
       minZoom: 0.3,
       maxZoom: 2.5,
@@ -139,7 +150,7 @@ export function EvidenceGraph({ graph, citations, active }: Props) {
       resize.disconnect();
       instance.destroy();
     };
-  }, [graph, marks, scheme]);
+  }, [graph, marks, scheme, root]);
 
   useEffect(() => {
     const c = cy.current;
@@ -160,7 +171,9 @@ export function EvidenceGraph({ graph, citations, active }: Props) {
         ref={box}
         className="h-[30rem] w-full bg-surface border border-rule"
         role="img"
-        aria-label={`Evidence graph: ${graph.nodes.length} nodes and ${graph.edges.length} links around the cited sources`}
+        aria-label={
+          label ?? `Evidence graph: ${graph.nodes.length} nodes and ${graph.edges.length} links around the cited sources`
+        }
       />
       <p className="text-[0.82rem] min-h-[1.4em] mt-1.5" aria-live="polite">
         {hovered ? (
@@ -169,7 +182,9 @@ export function EvidenceGraph({ graph, citations, active }: Props) {
             {hovered.name}
           </>
         ) : (
-          <span className="text-muted">Point at a node to read it. Yellow nodes are the cited sources, numbered as in the answer.</span>
+          <span className="text-muted">
+            {hint ?? "Point at a node to read it. Yellow nodes are the cited sources, numbered as in the answer."}
+          </span>
         )}
       </p>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[0.78rem] text-muted mt-1">
@@ -202,6 +217,7 @@ function Swatch({ kind }: { kind: string }) {
     diamond: <polygon points="7,1.5 12.5,7 7,12.5 1.5,7" />,
     triangle: <polygon points="7,1.5 12.5,12 1.5,12" />,
     star: <polygon points="7,1 8.6,5.2 13,5.4 9.5,8.1 10.7,12.5 7,10 3.3,12.5 4.5,8.1 1,5.4 5.4,5.2" />,
+    octagon: <polygon points="4.7,1.5 9.3,1.5 12.5,4.7 12.5,9.3 9.3,12.5 4.7,12.5 1.5,9.3 1.5,4.7" />,
   };
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden strokeWidth="1.4" {...props}>

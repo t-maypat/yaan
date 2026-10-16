@@ -52,5 +52,6 @@ def impact_of(decision_id: str, *, graph: str | None = None, limit: int = 25) ->
         "teams": by_why.get("works_on_product", []),
         "caused": by_why.get("caused", []),
         "size": len({(r["kind"], r["id"]) for r in rows}),
+        "rows": rows,  # one per item with `via`: the Inbox draws the radius from them
         "cypher": ["impact_of.cypher"],
     }
