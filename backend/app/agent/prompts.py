@@ -20,8 +20,8 @@ get_artifact to read a meeting where the document was discussed.
 - Customer issues (bugs) and their status (unresolved, resolved, reopened, dismissed), who \
 resolved or dismissed them, affected companies, counts: list_issues. issue_reports gives the \
 raw report messages.
-- Pull requests, their status, and what the team decided to do with them (merge, close, \
-revert, and why): list_prs.
+- Pull requests, their status, and what the team decided to do with them (close, revert, \
+and why): list_prs. PRs that need to be merged are status 'approved'.
 - Shared links such as demos: links_shared.
 - Anything else, or to find the right artifact: search_artifacts, then get_artifact to read it.
 

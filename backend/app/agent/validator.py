@@ -7,6 +7,10 @@ Three rules, checked in code (no LLM):
    points at a valid citation.
 The loop gives the model one repair round with the problems listed; `clean` then drops
 whatever still fails, and an answer with nothing left becomes an abstention.
+
+`autocite` runs first: a line with no marker that names the exact url of an artifact a tool
+returned gets a citation to that artifact, quoting the url (D051). The quote is still
+checked word for word like any other; the model just forgot to put the marker on that line.
 """
 
 import re
@@ -18,6 +22,7 @@ from app import llm
 MARKER = re.compile(r"\[(\d+)\]")
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 BULLET = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
+URL = re.compile(r"https?://[^\s)\]>\"'`]+")
 
 
 @dataclass
@@ -80,6 +85,38 @@ def check(answer: dict[str, Any], seen: set[str], texts: dict[str, list[str]]) -
                 report.uncited.append(unit)
                 report.problems.append(f"no valid citation for: {unit[:160]!r}")
     return report
+
+
+def autocite(answer: dict[str, Any], urls: dict[str, str]) -> tuple[dict[str, Any], list[int]]:
+    """Cite marker-less sentences that name a returned artifact's own url (`urls`: url -> id)."""
+    if answer["abstain"]:
+        return answer, []
+    citations = list(answer["citations"])
+    by_url = {c["quote"]: c["n"] for c in citations if c["quote"] in urls}
+    next_n = max((c["n"] for c in citations), default=0) + 1
+    added: list[int] = []
+    lines = []
+    for line in answer["answer_markdown"].splitlines():
+        if not URL.search(line):
+            lines.append(line)
+            continue
+        lead = line[: len(line) - len(line.lstrip())]
+        parts = []
+        for unit in units(line):
+            if not MARKER.search(unit):
+                for url in dict.fromkeys(u.rstrip(".,;:") for u in URL.findall(unit)):
+                    if url not in urls:
+                        continue
+                    if url not in by_url:
+                        by_url[url] = next_n
+                        citations.append({"n": next_n, "artifact_id": urls[url], "quote": url})
+                        added.append(next_n)
+                        next_n += 1
+                    # right after the url, so the marker stays inside this sentence
+                    unit = unit.replace(url, f"{url} [{by_url[url]}]", 1)
+            parts.append(unit)
+        lines.append(lead + " ".join(parts))
+    return {**answer, "answer_markdown": "\n".join(lines), "citations": citations}, added
 
 
 def indent(line: str) -> int:

@@ -450,13 +450,15 @@ TOOL_SPECS = [
         "list_prs",
         "The product's own pull requests with number, title, url, current status and the "
         "status history (open, approved, changes_requested, merged, closed), author and "
-        "reviewers. 'Approved but not merged' PRs show status 'approved'. A PR undone by a "
-        "later 'Revert PR# N' pull request lists it in reverted_by, with the stated reason: "
-        "the PRs that 'were reverted' are these originals, not the revert PRs. team_action is "
-        "what the team decided in Slack: to_merge, to_close (the team agreed not to merge "
-        "it: an approved PR that needs to be closed), on_hold, or reverted, with "
-        "action_reason (product_direction = a change in product direction, introduced_bugs "
-        "= it introduced bugs). 'said' lists those Slack messages with quotes to cite.",
+        "reviewers. PRs that 'need to be merged' are approved but not merged: filter with "
+        "status 'approved' (not action 'to_merge'). A PR undone by a later 'Revert PR# N' "
+        "pull request lists it in reverted_by, with the stated reason: the PRs that 'were "
+        "reverted' are these originals, not the revert PRs. team_action is what the team "
+        "said in Slack: to_close (the team agreed not to merge it: an approved PR that needs "
+        "to be closed), on_hold, reverted, with action_reason (product_direction = a change "
+        "in product direction, introduced_bugs = it introduced bugs), or to_merge (someone "
+        "said they'd merge it; such PRs were usually merged since). 'said' lists those Slack "
+        "messages with quotes to cite.",
         {
             "status": _nullable(
                 {

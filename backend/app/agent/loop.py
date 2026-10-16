@@ -5,11 +5,16 @@ in one message), repeat until it writes the final JSON answer, at most 8 tool ca
 deterministic validator checks every citation; one repair round, then whatever still fails is
 dropped, and an answer with nothing left becomes an abstention. The history is append-only,
 so Haiku 5.5's thinking blocks stay valid and the prompt cache keeps hitting.
+
+`on_event(name, data)` (Phase 12, R1-8) streams a fixed sequence for the UI: `tool_call` and
+`tool_result` per tool, then `answer`, `citations` and `subgraph` (the evidence around the
+cited artifacts). The answer itself is the same with or without a listener.
 """
 
 import json
 import re
 import time
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import ValidationError
@@ -24,6 +29,13 @@ MAX_TURNS = 12
 MAX_RESULT_CHARS = 60_000  # one tool result; product lists stay well under it
 ARTIFACT_ID = re.compile(r"^(msg|mtg|chat|doc|pr|url):")
 TEXT_KEYS = ("text", "snippet", "title", "description", "url")
+
+
+Listener = Callable[[str, dict[str, Any]], None]
+
+
+def _quiet(name: str, data: dict[str, Any]) -> None:
+    pass
 
 
 class ToolError(Exception):
@@ -53,22 +65,30 @@ def call_tool(name: str, args: dict[str, Any], scope: str | None, graph: str | N
     raise ToolError(f"unknown tool {name!r}")
 
 
-def collect(value: Any, seen: set[str], texts: dict[str, list[str]]) -> None:
-    """Record every artifact a tool returned, with its texts (what citations may quote)."""
+def collect(
+    value: Any,
+    seen: set[str],
+    texts: dict[str, list[str]],
+    urls: dict[str, str] | None = None,
+) -> None:
+    """Record every artifact a tool returned, with its texts (what citations may quote) and,
+    in `urls`, each artifact's own url (for validator.autocite)."""
     if isinstance(value, dict):
         aid = value.get("artifact_id") or value.get("id")
         if isinstance(aid, str) and ARTIFACT_ID.match(aid):
             seen.add(aid)
+            if urls is not None and isinstance(value.get("url"), str):
+                urls.setdefault(value["url"], aid)
             texts.setdefault(aid, []).extend(
                 v for k in TEXT_KEYS if isinstance(v := value.get(k), str)
             )
             for f in value.get("fields") or []:
                 texts[aid].append(f.get("text") or "")
         for v in value.values():
-            collect(v, seen, texts)
+            collect(v, seen, texts, urls)
     elif isinstance(value, list):
         for v in value:
-            collect(v, seen, texts)
+            collect(v, seen, texts, urls)
     elif isinstance(value, str) and ARTIFACT_ID.match(value):
         seen.add(value)  # e.g. ids of the messages a link was shared in
 
@@ -84,10 +104,17 @@ def fence(value: Any) -> Any:
     return value
 
 
-def run_tools(turn: llm.Turn, state: dict[str, Any], scope: str | None, graph: str | None) -> list:
+def run_tools(
+    turn: llm.Turn,
+    state: dict[str, Any],
+    scope: str | None,
+    graph: str | None,
+    on_event: Listener = _quiet,
+) -> list:
     results = []
     for use in turn.tool_uses:
         entry: dict[str, Any] = {"tool": use["name"], "input": use["input"]}
+        on_event("tool_call", {"tool": use["name"], "input": use["input"]})
         started = time.perf_counter()
         if state["calls"] >= MAX_TOOL_CALLS:
             content, error = "Tool budget used up: answer now with the evidence you have.", True
@@ -95,7 +122,7 @@ def run_tools(turn: llm.Turn, state: dict[str, Any], scope: str | None, graph: s
             state["calls"] += 1
             try:
                 out = call_tool(use["name"], use["input"], scope, graph)
-                collect(out, state["seen"], state["texts"])
+                collect(out, state["seen"], state["texts"], state["urls"])
                 entry["cypher"] = out.get("cypher", [])
                 content, error = json.dumps(fence(out), ensure_ascii=False, default=str), False
                 if len(content) > MAX_RESULT_CHARS:
@@ -105,6 +132,7 @@ def run_tools(turn: llm.Turn, state: dict[str, Any], scope: str | None, graph: s
                 entry["error"] = str(e)
         entry["ms"] = round((time.perf_counter() - started) * 1000, 1)
         state["trace"].append(entry)
+        on_event("tool_result", {**entry, "chars": len(content)})
         results.append(
             {"type": "tool_result", "tool_use_id": use["id"], "content": content, "is_error": error}
         )
@@ -128,9 +156,14 @@ def graph_texts(ids: list[str], graph: str | None) -> dict[str, list[str]]:
     }
 
 
-def answer(question: str, product_id: str | None = None, graph: str | None = None) -> dict:
+def answer(
+    question: str,
+    product_id: str | None = None,
+    graph: str | None = None,
+    on_event: Listener = _quiet,
+) -> dict:
     """Answer one question with the tools, validated citations, or an abstention."""
-    state: dict[str, Any] = {"calls": 0, "seen": set(), "texts": {}, "trace": []}
+    state: dict[str, Any] = {"calls": 0, "seen": set(), "texts": {}, "urls": {}, "trace": []}
     messages: list[dict[str, Any]] = [
         {"role": "user", "content": user_message(question, product_id)}
     ]
@@ -155,7 +188,8 @@ def answer(question: str, product_id: str | None = None, graph: str | None = Non
         if not turn.tool_uses:
             final = parse(turn)
             break
-        messages.append({"role": "user", "content": run_tools(turn, state, product_id, graph)})
+        results = run_tools(turn, state, product_id, graph, on_event)
+        messages.append({"role": "user", "content": results})
     if final is None:
         raise llm.LLMError(f"no final answer after {MAX_TURNS} turns")
 
@@ -166,6 +200,7 @@ def answer(question: str, product_id: str | None = None, graph: str | None = Non
             texts[aid] = texts.get(aid, []) + more
         return validator.check(candidate, state["seen"], texts)
 
+    final, autocited = validator.autocite(final, state["urls"])
     report = check(final)
     first_problems = list(report.problems)
     repaired = False
@@ -173,7 +208,8 @@ def answer(question: str, product_id: str | None = None, graph: str | None = Non
         messages.append({"role": "user", "content": repair_message(report.problems)})
         turn = ask()
         if not turn.tool_uses:  # a repair that calls tools is ignored; the first answer stands
-            final, repaired = parse(turn), True
+            final, autocited = validator.autocite(parse(turn), state["urls"])
+            repaired = True
             report = check(final)
     cleaned, dropped = validator.clean(final, report)
     if cleaned["abstain"]:
@@ -184,7 +220,7 @@ def answer(question: str, product_id: str | None = None, graph: str | None = Non
             "citations": [],
             "abstain": True,
         }
-    return {
+    out = {
         "question": question,
         **cleaned,
         "citations": [
@@ -200,6 +236,7 @@ def answer(question: str, product_id: str | None = None, graph: str | None = Non
         "validator": {
             "first_problems": first_problems,
             "repaired": repaired,
+            "autocited": autocited,
             "final_problems": report.problems,
             "dropped": dropped,
             "model_abstained": final["abstain"],
@@ -214,4 +251,40 @@ def answer(question: str, product_id: str | None = None, graph: str | None = Non
             "cost_usd": round(sum(t.cost_usd for t in turns), 6),
             "cached": all(t.cached for t in turns),
         },
+    }
+    on_event("answer", {k: out[k] for k in ("answer_markdown", "abstain", "validator", "llm")})
+    on_event("citations", {"citations": out["citations"]})
+    if on_event is not _quiet:
+        ids = sorted({c["artifact_id"] for c in out["citations"]})
+        on_event("subgraph", evidence_subgraph(ids, graph))
+    return out
+
+
+def evidence_subgraph(ids: list[str], graph: str | None = None) -> dict[str, Any]:
+    """Nodes and edges around the cited artifacts, for the evidence pane (Cytoscape)."""
+    if not ids:
+        return {"nodes": [], "edges": [], "cypher": []}
+    rows = db.run("evidence_subgraph", {"ids": ids, "limit": 200}, graph=graph).rows
+    nodes: dict[str, dict[str, Any]] = {}
+    edges: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for r in rows:
+        for side in ("src", "dst"):
+            nid = r[f"{side}_id"]
+            if nid and nid not in nodes:
+                nodes[nid] = {
+                    "id": nid,
+                    "label": r[f"{side}_label"],
+                    "name": r[f"{side}_name"],
+                    "cited": nid in ids,
+                }
+        if r["src_id"] and r["dst_id"]:
+            edges[(r["src_id"], r["rel"], r["dst_id"])] = {
+                "source": r["src_id"],
+                "target": r["dst_id"],
+                "rel": r["rel"],
+            }
+    return {
+        "nodes": list(nodes.values()),
+        "edges": list(edges.values()),
+        "cypher": ["evidence_subgraph.cypher"],
     }

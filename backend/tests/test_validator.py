@@ -98,3 +98,37 @@ def test_a_list_item_is_backed_by_its_cited_sub_items():
         "Reverted PRs:\n- https://github.com/salesforce/ainAIX/pull/26\n"
         "  - Reverted for the new product direction [1]."
     )
+
+
+def test_autocite_cites_lines_that_name_a_returned_artifacts_url():
+    from app.agent.validator import autocite, check
+
+    url = "https://github.com/salesforce/W/pull/12"
+    answer = {
+        "answer_markdown": f"Reverted PRs:\n- PR #12: {url}.\n- PR #99: https://example.com/x\n"
+        "  Its revert says it broke the API [1].",
+        "citations": [{"n": 1, "artifact_id": "msg:a", "quote": "broke the API"}],
+        "abstain": False,
+    }
+    out, added = autocite(answer, {url: "pr:w12"})
+    assert added == [2]
+    assert out["answer_markdown"].splitlines()[1] == f"- PR #12: {url} [2]."
+    assert out["citations"][-1] == {"n": 2, "artifact_id": "pr:w12", "quote": url}
+    assert "example.com/x" in out["answer_markdown"].splitlines()[2]  # unknown url: untouched
+    report = check(out, {"msg:a", "pr:w12"}, {"msg:a": ["It broke the API."], "pr:w12": [url]})
+    assert not any("PR #12" in p for p in report.problems)
+    assert autocite({**answer, "abstain": True}, {url: "pr:w12"})[1] == []
+
+
+def test_autocite_works_per_sentence_when_another_sentence_on_the_line_is_cited():
+    from app.agent.validator import autocite
+
+    url = "https://github.com/salesforce/W/pull/12"
+    answer = {
+        "answer_markdown": f"  - PR #12: {url}. Its revert says it broke the API [1].",
+        "citations": [{"n": 1, "artifact_id": "msg:a", "quote": "broke the API"}],
+        "abstain": False,
+    }
+    out, added = autocite(answer, {url: "pr:w12"})
+    assert added == [2]
+    assert out["answer_markdown"] == f"  - PR #12: {url} [2]. Its revert says it broke the API [1]."
