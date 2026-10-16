@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app import db
-from app.sentinel import blast_radius
+from app.sentinel import blast_radius, drafts
 
 # (decision kind, old value, new value) -> (alert kind, severity). Everything else is progress.
 RULES: dict[tuple[str, str, str], tuple[str, str]] = {
@@ -39,7 +39,17 @@ LOAD_ORDER = (
     "link_alert_flags_claim",
     "link_alert_evidence",
     "link_notifies",
+    "upsert_actions",
+    "link_action_for",
+    "link_action_targets_issue",
+    "link_action_targets_artifact",
+    "link_action_targets_person",
 )
+TARGET_QUERY = {
+    "issue": "link_action_targets_issue",
+    "artifact": "link_action_targets_artifact",
+    "person": "link_action_targets_person",
+}
 
 
 def judge(change: dict[str, Any]) -> tuple[str, str] | None:
@@ -98,23 +108,28 @@ def run(graph: str | None = None, *, now_ms: int | None = None) -> dict[str, Any
         seen.add(alert_id)
         kind, severity = rule
         radius = blast_radius.impact_of(c["decision_id"], graph=graph)
-        rows["upsert_alerts"].append(
-            {
-                **c,
-                "id": alert_id,
-                "kind": kind,
-                "severity": severity,
-                "summary": summary(kind, c),
-                "ts_iso": datetime.fromtimestamp(c["ts_ms"] / 1000, UTC)
-                .isoformat()
-                .replace("+00:00", "Z"),
-                "radius_size": radius["size"],
-                "radius_people": len(radius["people"]),
-                "radius_companies": [co["name"] for co in radius["companies"]],
-                "observed_ms": now_ms,
-                "observed_iso": now_iso,
-            }
-        )
+        alert = {
+            **c,
+            "id": alert_id,
+            "kind": kind,
+            "severity": severity,
+            "summary": summary(kind, c),
+            "ts_iso": datetime.fromtimestamp(c["ts_ms"] / 1000, UTC)
+            .isoformat()
+            .replace("+00:00", "Z"),
+            "radius_size": radius["size"],
+            "radius_people": len(radius["people"]),
+            "radius_companies": [co["name"] for co in radius["companies"]],
+            "observed_ms": now_ms,
+            "observed_iso": now_iso,
+        }
+        rows["upsert_alerts"].append(alert)
+        for action in drafts.drafts_for(alert, radius):
+            rows["upsert_actions"].append({**action, "observed_ms": now_ms})
+            rows["link_action_for"].append({"id": action["id"], "alert_id": alert_id})
+            rows[TARGET_QUERY[action["target_kind"]]].append(
+                {"id": action["id"], "target_id": action["target_id"]}
+            )
         rows["link_alert_flags"].append({"alert_id": alert_id, "decision_id": c["decision_id"]})
         if c["change"] == "conflict":
             rows["link_alert_flags_claim"].append(
@@ -142,6 +157,7 @@ def run(graph: str | None = None, *, now_ms: int | None = None) -> dict[str, Any
         "new": report.get("upsert_alerts", {}).get("nodes_created", 0),
         "withdrawn": withdrawn.rows[0]["withdrawn"],
         "by_kind": dict(Counter(r["kind"] for r in rows["upsert_alerts"])),
+        "actions": len(rows["upsert_actions"]),
         "report": report,
     }
 
@@ -156,3 +172,8 @@ def list_alerts(
         r["notifies"] = [p for p in r["notifies"] if p["id"]]
         out.append(r)
     return out
+
+
+def alert_actions(alert_id: str, *, graph: str | None = None) -> list[dict[str, Any]]:
+    """The drafted actions for one alert (11.3)."""
+    return db.run("alert_actions", {"alert_id": alert_id, "limit": 50}, graph=graph).rows

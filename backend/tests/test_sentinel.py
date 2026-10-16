@@ -191,3 +191,60 @@ def test_list_alerts_filters_by_status_and_sorts_newest_change_first(company):
 def test_sentinel_reads_run_on_an_empty_graph(empty_graph, name):
     params = {"status": None, "product_id": None, "limit": 1}
     assert db.run(name, params, graph=empty_graph).rows == []
+
+
+def actions(graph, alert_id):
+    return {(a["kind"], a["target_id"]): a for a in engine.alert_actions(alert_id, graph=graph)}
+
+
+def test_a_regression_drafts_a_comment_a_correction_and_one_note_per_person(company):
+    out = engine.run(company, now_ms=NOW)
+    got = actions(company, f"alert:{REOPENED}")
+    assert sorted(got) == [
+        ("doc_fix", "msg:r2"),
+        ("notify_owner", "eid_b2"),
+        ("notify_owner", "eid_c3"),
+        ("notify_owner", "eid_d4"),
+        ("ticket_comment", "iss:Widget:a1"),
+    ]
+    assert out["actions"] == len(got) + len(actions(company, "alert:clm:k1"))
+    quote = "CUST-0001 has reopened Slow export."
+    assert all(f'"{quote}" (msg:r3)' in a["draft"] for a in got.values())
+    comment = got[("ticket_comment", "iss:Widget:a1")]["draft"]
+    assert '"Slow export is fixed" (msg:r2)' in comment
+    assert "Reviewed by Bo Chen and Di Park." in comment
+    assert "Reported by Dee Fox (Blue Wave)." in comment
+    assert "Export drops rows (reported); Export timeout (resolved)" in comment
+    assert "Login flicker" not in comment
+    note = got[("notify_owner", "eid_c3")]["draft"]
+    assert (
+        "because you wrote the fix, you are the assignee and you stated the earlier status" in note
+    )
+
+
+def test_a_conflict_asks_for_confirmation_and_corrects_nothing(company):
+    engine.run(company, now_ms=NOW)
+    got = actions(company, "alert:clm:k1")
+    assert ("doc_fix", "msg:r2") not in got and all(k != "doc_fix" for k, _ in got)
+    comment = got[("ticket_comment", "pr:w1")]["draft"]
+    assert comment.startswith('Unconfirmed: Ed Moss (Marketing Manager) said "just close PR 1"')
+    assert "stays 'to merge'" in comment
+    assert "Please confirm or reject" in got[("notify_owner", "eid_c3")]["draft"]
+
+
+def test_a_rerun_rewrites_only_drafts_still_proposed(company):
+    engine.run(company, now_ms=NOW)
+    target = f"action:alert:{REOPENED}:doc_fix:msg:r2"
+    db.run_text(
+        "MATCH (a:Action {id: $id}) SET a.status = 'approved', a.draft = 'sent as edited'",
+        {"id": target},
+        label="approve",
+        graph=company,
+        readonly=False,
+    )
+    engine.run(company, now_ms=NOW)
+    assert actions(company, f"alert:{REOPENED}")[("doc_fix", "msg:r2")]["draft"] == "sent as edited"
+
+
+def test_alert_actions_runs_on_an_empty_graph(empty_graph):
+    assert db.run("alert_actions", {"alert_id": "x", "limit": 1}, graph=empty_graph).rows == []
