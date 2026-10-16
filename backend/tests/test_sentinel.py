@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from app import db
-from app.sentinel import blast_radius, engine
+from app.sentinel import approve, blast_radius, engine
 
 pytestmark = pytest.mark.db
 FIXTURE = Path(__file__).parent / "fixtures" / "sentinel_company.cypher"
@@ -248,3 +248,136 @@ def test_a_rerun_rewrites_only_drafts_still_proposed(company):
 
 def test_alert_actions_runs_on_an_empty_graph(empty_graph):
     assert db.run("alert_actions", {"alert_id": "x", "limit": 1}, graph=empty_graph).rows == []
+
+
+TRACE = """
+MATCH (r:Decision {id: $id})
+OPTIONAL MATCH (r)-[:DECIDED_BY]->(p:Person)
+OPTIONAL MATCH (c:Decision)-[:CAUSED]->(r)
+OPTIONAL MATCH (r)-[e:EVIDENCED_BY]->(m:Artifact)
+OPTIONAL MATCH (r)-[:AFFECTS]->(s)
+RETURN r.origin AS origin, r.value AS value, r.statement AS statement, p.id AS by,
+       c.id AS cause, m.id AS evidence, e.quote AS quote, s.id AS subject
+LIMIT 1
+"""
+
+
+def trace(graph, decision_id):
+    return db.run_text(TRACE, {"id": decision_id}, label="trace", graph=graph).rows[0]
+
+
+def test_approving_writes_a_decision_trace_and_sends_the_chosen_drafts(company):
+    engine.run(company, now_ms=NOW)
+    alert_id = f"alert:{REOPENED}"
+    note_b2 = f"action:{alert_id}:notify_owner:eid_b2"
+    out = approve.respond(
+        alert_id,
+        "approved",
+        "eid_b2",
+        action_ids=[f"action:{alert_id}:ticket_comment:iss:Widget:a1", note_b2],
+        edits={note_b2: "Bo, please re-review PR 1."},
+        graph=company,
+        now_ms=NOW + 5,
+    )
+    d = out["decision"]
+    assert d["id"] == f"dec:{alert_id}/response:{NOW + 5}"
+    got = trace(company, d["id"])
+    assert got == {
+        "origin": "approved_action",
+        "value": "approved",
+        "statement": "Bo Chen approved the Sentinel's follow-up on the regression of "
+        "'Slow export': 2 of 5 drafted actions sent.",
+        "by": "eid_b2",
+        "cause": REOPENED,
+        "evidence": "msg:r3",
+        "quote": "CUST-0001 has reopened Slow export.",
+        "subject": "iss:Widget:a1",
+    }
+    statuses = {
+        a["id"]: (a["status"], a["draft"]) for a in engine.alert_actions(alert_id, graph=company)
+    }
+    assert statuses[note_b2] == ("approved", "Bo, please re-review PR 1.")
+    assert sorted(s for s, _ in statuses.values()) == ["approved"] * 2 + ["skipped"] * 3
+    assert alerts_by_id(company)[alert_id]["status"] == "approved"
+    # the radius of the change now reaches the response (CAUSED)
+    assert d["id"] in ids(blast_radius.impact_of(REOPENED, graph=company)["caused"])
+
+
+def test_a_second_response_and_bad_input_are_refused(company):
+    engine.run(company, now_ms=NOW)
+    approve.respond("alert:clm:k1", "dismissed", "eid_c3", note="Ed was joking.", graph=company)
+    with pytest.raises(approve.AlertError, match="is dismissed, not open"):
+        approve.respond("alert:clm:k1", "approved", "eid_c3", graph=company)
+    with pytest.raises(approve.AlertError, match="no alert"):
+        approve.respond("alert:none", "approved", "eid_c3", graph=company)
+    with pytest.raises(approve.AlertError, match="no person"):
+        approve.respond(f"alert:{REOPENED}", "approved", "eid_zz", graph=company)
+    with pytest.raises(approve.AlertError, match="not drafted"):
+        approve.respond(f"alert:{REOPENED}", "approved", "eid_c3", action_ids=["x"], graph=company)
+    with pytest.raises(approve.AlertError, match="verdict"):
+        approve.respond(f"alert:{REOPENED}", "maybe", "eid_c3", graph=company)
+    assert alerts_by_id(company)[f"alert:{REOPENED}"]["status"] == "open"
+
+
+def test_a_dismissal_is_recorded_too_and_dismisses_every_draft(company):
+    engine.run(company, now_ms=NOW)
+    out = approve.respond(
+        "alert:clm:k1", "dismissed", "eid_c3", note="Ed was joking.", graph=company, now_ms=NOW
+    )
+    got = trace(company, out["decision"]["id"])
+    assert (got["origin"], got["cause"], got["subject"]) == (
+        "dismissed_action",
+        "dec:pr:w1/action:2500",
+        "pr:w1",
+    )
+    assert got["statement"].endswith("conflict alert on 'Speed up export': Ed was joking.")
+    assert {a["status"] for a in engine.alert_actions("alert:clm:k1", graph=company)} == {
+        "dismissed"
+    }
+
+
+def test_an_earlier_response_to_the_same_kind_is_a_precedent(company):
+    engine.run(company, now_ms=NOW)
+    first = approve.respond(f"alert:{REOPENED}", "approved", "eid_b2", graph=company, now_ms=NOW)
+    db.run_text(
+        "CREATE (:Alert {id: 'alert:two', kind: 'regression', status: 'open', product_id: 'Widget',"
+        " decision_id: 'dec:iss:Widget:a1/status:3000', subject_id: 'iss:Widget:a1',"
+        " subject_title: 'Slow export'})",
+        label="second",
+        graph=company,
+        readonly=False,
+    )
+    second = approve.respond("alert:two", "dismissed", "eid_b2", graph=company, now_ms=NOW + 9)
+    assert [p["id"] for p in second["precedents"]] == [first["decision"]["id"]]
+    rows = db.run_text(
+        "MATCH (a:Decision)-[:PRECEDENT_FOR]->(b:Decision) RETURN a.id AS a, b.id AS b LIMIT 5",
+        label="prec",
+        graph=company,
+    ).rows
+    assert rows == [{"a": first["decision"]["id"], "b": second["decision"]["id"]}]
+
+
+def test_a_rebuild_relinks_caused_to_the_response(company):
+    engine.run(company, now_ms=NOW)
+    out = approve.respond(f"alert:{REOPENED}", "approved", "eid_b2", graph=company, now_ms=NOW)
+    db.run_text(
+        "MATCH (:Decision {id: $id})-[c:CAUSED]->(:Decision {origin: 'approved_action'}) DELETE c",
+        {"id": REOPENED},
+        label="cut",
+        graph=company,
+        readonly=False,
+    )
+    assert trace(company, out["decision"]["id"])["cause"] is None
+    engine.run(company, now_ms=NOW)
+    assert trace(company, out["decision"]["id"])["cause"] == REOPENED
+
+
+@pytest.mark.parametrize(
+    "name, params",
+    [
+        ("get_alert", {"alert_id": "x", "person_id": "y"}),
+        ("alert_precedents", {"kind": "k", "product_id": "W", "alert_id": "x", "limit": 1}),
+    ],
+)
+def test_response_reads_run_on_an_empty_graph(empty_graph, name, params):
+    assert db.run(name, params, graph=empty_graph).rows == []

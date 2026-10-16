@@ -148,6 +148,11 @@ def run(graph: str | None = None, *, now_ms: int | None = None) -> dict[str, Any
         if rows[name]:
             result = db.run(name, {"rows": rows[name]}, graph=graph, readonly=False)
             report[name] = {"rows": len(rows[name]), **result.stats}
+    # a rebuild recreates the flagged decisions: re-link CAUSED to the responses (11.4)
+    report["link_alert_caused"] = {
+        "rows": 0,
+        **db.run("link_alert_caused", {}, graph=graph, readonly=False).stats,
+    }
     withdrawn = db.run("withdraw_alerts", {"ids": sorted(seen)}, graph=graph, readonly=False)
     report["withdraw_alerts"] = {"rows": withdrawn.rows[0]["withdrawn"], **withdrawn.stats}
     return {
