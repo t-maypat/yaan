@@ -1,0 +1,11 @@
+%% The live moment (11.6, D057): one synthetic message runs through the batch pipeline scoped to it, then the Sentinel, on the copied demo graph. Times are the first (cold) run; a cached replay takes 1-1.7 s.
+flowchart LR
+  M["Synthetic message<br/>msg:synthetic-…<br/>'CUST-0076 has reopened<br/>the bug …'"]:::file
+  S14["S1–S4<br/>validate · write · embed · link<br/>~4 s (cold model)"]:::code
+  S56["S5–S6<br/>extract its unit (Haiku)<br/>verify the quote<br/>~7 s, $0.0004"]:::ext
+  S78["S7–S8<br/>resolve + fold over all events<br/>policy decides<br/>0.5 s"]:::code
+  G[("lore_demo<br/>copy of lore_herb")]:::store
+  SE["Sentinel<br/>rule table → Alert<br/>blast radius · drafts<br/>0.2 s"]:::guard
+  IN["Inbox<br/>Approve / Dismiss"]:::human
+  D["Response Decision<br/>DECIDED_BY · CAUSED<br/>EVIDENCED_BY · PRECEDENT_FOR"]:::store
+  M --> S14 --> S56 --> S78 --> G --> SE --> IN --> D
