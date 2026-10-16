@@ -127,6 +127,14 @@ def test_collect_records_what_tools_returned_for_the_validator(company):
     assert "Add numbers to the summary." in texts["msg:m2"]
 
 
+def test_list_products_gives_codenames_and_counts_for_the_picker(company):
+    rows = db.run("list_products", {"limit": 10}, graph=company).rows
+    assert [r["id"] for r in rows] == ["Gadget", "Widget"]
+    widget = rows[1]
+    assert widget["aliases"] == ["wdAI"] and widget["artifacts"] > 0
+    assert rows[0]["aliases"] == [] and rows[0]["artifacts"] >= 0
+
+
 INDEXED = {
     "get_artifact": {"id": "x"},
     "artifact_people_detail": {"id": "x"},

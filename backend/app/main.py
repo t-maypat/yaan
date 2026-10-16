@@ -95,6 +95,23 @@ def artifact(artifact_id: str) -> dict:
     return out
 
 
+@app.get("/products")
+def products() -> dict:
+    """The products in the graph with their codenames, for the UI's product picker."""
+    rows = db.run("list_products", {"limit": 100}).rows
+    return {"products": rows, "cypher": ["list_products.cypher"]}
+
+
+@app.get("/query/{name}")
+def query_text(name: str) -> dict:
+    """The text of one backend/queries file, for "Show the Cypher": the exact statement a
+    tool ran (tool results name their files; their parameters are in `tool_call.input`)."""
+    try:
+        return {"name": name, "text": db.load_query(name.removesuffix(".cypher"))}
+    except (ValueError, FileNotFoundError) as e:
+        raise HTTPException(404, str(e)) from e
+
+
 @app.get("/health")
 def health(response: Response) -> dict[str, str]:
     """200 when FalkorDB answers the reader's PING, else 503 (Phase 1.9).

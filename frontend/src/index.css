@@ -1,0 +1,146 @@
+@import "tailwindcss";
+
+/* Lore's tokens. The one loud element is the highlighter: a quote copied word for word from
+   a source is marked like a highlighter on paper, everywhere it appears (answer hover, source
+   card, full text, evidence graph). Everything else stays quiet: cool paper, ink, one petrol
+   blue for links and graph structure, one brick red for failures. */
+:root {
+  --paper: #f3f5f7;
+  --surface: #ffffff;
+  --ink: #18202b;
+  --muted: #5b6675;
+  --rule: #d5dbe2;
+  --mark: #f6de5c;
+  --mark-ink: #18202b;
+  --link: #1f6f8b;
+  --link-soft: #dbeaf0;
+  --warn: #a8432f;
+  --warn-soft: #f6e3de;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12171e;
+    --surface: #19202a;
+    --ink: #e6eaef;
+    --muted: #93a0af;
+    --rule: #2c3542;
+    --mark: #e9cf4a;
+    --mark-ink: #12171e;
+    --link: #6bb7cf;
+    --link-soft: #1d3540;
+    --warn: #e58a75;
+    --warn-soft: #3a2420;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #12171e;
+  --surface: #19202a;
+  --ink: #e6eaef;
+  --muted: #93a0af;
+  --rule: #2c3542;
+  --mark: #e9cf4a;
+  --mark-ink: #12171e;
+  --link: #6bb7cf;
+  --link-soft: #1d3540;
+  --warn: #e58a75;
+  --warn-soft: #3a2420;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-mark: var(--mark);
+  --color-mark-ink: var(--mark-ink);
+  --color-link: var(--link);
+  --color-link-soft: var(--link-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --font-serif: "Newsreader Variable", Georgia, serif;
+  --font-sans: "Schibsted Grotesk Variable", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+}
+
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* A verbatim quote: highlighter strokes, slightly ragged at the ends like a real marker. */
+mark.verbatim {
+  background: linear-gradient(
+    100deg,
+    transparent 0.2em,
+    var(--mark) 0.35em,
+    var(--mark) calc(100% - 0.35em),
+    transparent calc(100% - 0.2em)
+  );
+  color: var(--mark-ink);
+  padding: 0.05em 0.3em;
+  margin: 0 -0.15em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* The answer's prose (react-markdown output). */
+.answer {
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  line-height: 1.62;
+  max-width: 68ch;
+}
+.answer p,
+.answer ul,
+.answer ol {
+  margin: 0 0 0.85em;
+}
+.answer ul {
+  list-style: disc;
+  padding-left: 1.2em;
+}
+.answer ol {
+  list-style: decimal;
+  padding-left: 1.4em;
+}
+.answer li {
+  margin-bottom: 0.35em;
+}
+.answer a.ext {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  word-break: break-all;
+}
+.answer strong {
+  font-weight: 650;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .step-in {
+    animation: step-in 220ms ease-out both;
+  }
+}
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}

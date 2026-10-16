@@ -64,6 +64,21 @@ def test_ask_is_rate_limited_per_ip(monkeypatch):
     assert main.RateLimiter(1).allow("ip", now=0) and main.RateLimiter(1).allow("ip", now=61)
 
 
+def test_query_returns_the_file_a_tool_ran_and_nothing_else():
+    client = TestClient(main.app)
+    got = client.get("/query/product_issues.cypher").json()
+    assert got["name"] == "product_issues.cypher"
+    assert got["text"].startswith("// product_issues.cypher")
+    assert client.get("/query/no_such_query").status_code == 404
+    assert client.get("/query/..%2F..%2F.env").status_code == 404
+
+
+def test_products_lists_the_graphs_products(monkeypatch):
+    rows = [{"id": "W", "name": "W", "aliases": ["wdAI"], "artifacts": 3}]
+    monkeypatch.setattr(main.db, "run", lambda name, params: type("R", (), {"rows": rows}))
+    assert TestClient(main.app).get("/products").json()["products"] == rows
+
+
 def test_ask_rejects_empty_or_huge_questions():
     client = TestClient(main.app)
     assert client.post("/ask", json={"question": ""}).status_code == 422

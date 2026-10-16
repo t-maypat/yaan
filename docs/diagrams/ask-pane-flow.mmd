@@ -1,0 +1,10 @@
+%% The Ask pane (12.2-12.4): one question streams in; hovers and "Show the Cypher" fetch on demand.
+flowchart LR
+  U["You<br/>type a question<br/>or click a chip"]:::human --> UI["Ask pane<br/>React in the browser"]:::ext
+  UI -->|"POST /ask"| API["FastAPI<br/>main.py"]:::code
+  API --> AG["Answer agent<br/>loop.answer()"]:::code
+  AG --> DB[("FalkorDB<br/>graph lore_herb")]:::store
+  AG -->|"SSE events in order:<br/>tool_call, tool_result,<br/>answer, citations,<br/>subgraph, done"| UI
+  UI -->|"hover a number:<br/>GET /artifact/id"| API
+  UI -->|"Show the Cypher:<br/>GET /query/name<br/>(FastAPI reads the file)"| Q["backend/queries/<br/>*.cypher files"]:::file
+  UI -->|"page load:<br/>GET /products"| API
