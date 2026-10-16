@@ -1,0 +1,24 @@
+%% The blast radius of one real regression (ExplainabilityForce, D053): impact_of.cypher starts at the new decision and follows edges outward; every box is one row with a reason.
+flowchart LR
+  N["New decision: reopened<br/>8 Mar · 'customer CUST-0011 has<br/>reopened the bug ...'"]:::guard
+  O["Replaced decision: resolved<br/>7 Mar → 8 Mar"]:::store
+  M["Message that said fixed<br/>'... has been resolved. You can<br/>check the details in the PR'"]:::file
+  I["Issue: Improper Authentication<br/>Token Validation<br/>API Security Module"]:::store
+  PR["PR 57 (merged)<br/>Fix: Proper Validation of<br/>Authentication Tokens"]:::file
+  DT["David Taylor, Software Engineer<br/>authored the fix · assignee ·<br/>said it was resolved"]:::human
+  BD["Bob Davis, Engineering Lead<br/>reviewed: APPROVED"]:::human
+  CU["Paul Brown (CUST-0011)<br/>reported the issue"]:::human
+  CO["DataSolutions<br/>the customer's company"]:::ext
+  SIB["4 sibling issues, same component<br/>resolved / dismissed → recheck"]:::store
+  T["2 teams WORKS_ON<br/>ExplainabilityForce"]:::human
+  N -- "SUPERSEDES" --> O
+  O -- "EVIDENCED_BY" --> M
+  O -- "DECIDED_BY" --> DT
+  N -- "AFFECTS" --> I
+  PR -- "FIXES" --> I
+  DT -- "AUTHORED" --> PR
+  BD -- "REVIEWED" --> PR
+  I -- "REPORTED_BY" --> CU
+  CU -- "WORKS_AT" --> CO
+  I -. "same component" .-> SIB
+  I -. "IN_PRODUCT ← WORKS_ON" .-> T
