@@ -79,7 +79,7 @@ def cmd_normalize(args: argparse.Namespace) -> int:
     return 0
 
 
-INGEST_STAGES = ("structural", "lexical", "link", "fold")  # fold: extracted events -> claims
+INGEST_STAGES = ("structural", "lexical", "link", "fold", "derive")  # fold: events -> claims
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
@@ -133,6 +133,10 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             f"fold over {', '.join(have)}: {stats}; unresolved {len(res.unresolved)}",
             file=sys.stderr,
         )
+    if "derive" in args.stages:
+        from app.ingest import derive
+
+        report["derive_works_on"] = derive.works_on(graph)
     print(f"{'query':<24}{'rows':>8}{'nodes+':>9}{'edges+':>9}{'props set':>11}")
     for query, r in report.items():
         print(
