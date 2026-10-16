@@ -118,3 +118,28 @@ def test_an_unknown_speaker_applies_with_lower_confidence():
     rows, stats = fold.rebuild(res(REPORT, ev("issue_resolved", 20, "eid_e5")), ctx())
     resolved = [d for d in rows["upsert_decisions"] if d["value"] == "resolved"]
     assert resolved[0]["confidence"] == 0.6 and stats["authority_unverified"] == 1
+
+
+def test_a_reassignment_keeps_a_reopened_issue_reopened():
+    rows, _ = fold.rebuild(
+        res(
+            REPORT,
+            ev("issue_dismissed", 20, "eid_b2"),
+            ev("issue_reopened", 30, "eid_a1"),
+            ev("issue_reported", 40, "eid_a1", person="eid_c3"),  # "I'll reassign the bug to you"
+        ),
+        ctx(),
+    )
+    assert [c[0] for c in chain(rows)] == ["reported", "dismissed", "reopened"]
+    [issue] = rows["upsert_issues"]
+    assert issue["current_status"] == "reopened" and issue["current_assignee"] == "eid_c3"
+    spans = sorted((a["person_id"], a["from_ms"], a["to_ms"]) for a in rows["link_assigned_to"])
+    assert spans == [("eid_b2", 10, 40), ("eid_c3", 40, None)]
+
+
+def test_holding_off_after_a_decision_not_to_merge_supports_it():
+    pr = {"pr_id": "pr:w1", "pr": "PR#1"}
+    rows, _ = fold.rebuild(
+        res(ev("pr_to_close", 10, "eid_a1", **pr), ev("pr_on_hold", 20, "eid_b2", **pr)), ctx()
+    )
+    assert chain(rows, "pr:w1/action") == [("to_close", 10, None, "active")]

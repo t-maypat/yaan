@@ -43,6 +43,12 @@ PR_VALUE = {
     "pr_on_hold": "on_hold",
     "pr_reverted": "reverted",
 }
+# (active value, claim value) pairs where the claim restates the active decision, so it
+# SUPPORTS it instead of replacing it (8.8 hand check, D051):
+# - a later "report" of a known issue is a (re)assignment ("I'll reassign the bug to you"),
+#   not a state change: a reopened bug stays reopened;
+# - "I'll hold off on merging" after the team agreed not to merge is compliance, not a pause.
+RESTATES = {(v, "reported") for v in ISSUE_VALUE.values()} | {("to_close", "on_hold")}
 _CUST = re.compile(r"CUST-\d+")
 _EID = re.compile(r"eid_[0-9a-f]+")
 
@@ -123,15 +129,21 @@ def rebuild(res: Resolution, ctx: Context) -> tuple[dict[str, list[dict]], dict[
         elif e["type"] in PR_VALUE and e.get("pr_id"):
             topics[f"{e['pr_id']}/action"].append(e)
     stats: dict[str, int] = defaultdict(int)
-    assignee = {i.id: _assignee(i, res, ctx) for i in res.issues.values()}
+    assigned = assignments(res, ctx)
     finals: dict[str, dict[str, Any]] = {}
     for topic in sorted(topics):
         claims = sorted(topics[topic], key=lambda e: (e["ts_ms"] or 0, e["artifact_id"]))
-        chain = fold_topic(topic, claims, ctx, assignee, rows, stats)
+        chain = fold_topic(topic, claims, ctx, assigned, rows, stats)
         if chain:
             finals[topic] = chain[-1]
     for issue in res.issues.values():
-        rows["upsert_issues"].append(_issue_row(issue, res, finals, assignee[issue.id]))
+        current = assigned.get(issue.id, [(0, None)])[-1][1]
+        rows["upsert_issues"].append(_issue_row(issue, res, finals, current))
+        steps = assigned.get(issue.id, [])
+        for (start, who), nxt in zip(steps, [*steps[1:], (None, None)], strict=False):
+            rows["link_assigned_to"].append(
+                {"issue_id": issue.id, "person_id": who, "from_ms": start, "to_ms": nxt[0]}
+            )
         rows["link_issue_in_product"].append({"issue_id": issue.id, "product_id": issue.product})
     for e in res.events:
         if e["type"] == "issue_reported" and e.get("issue_id"):
@@ -140,15 +152,6 @@ def rebuild(res: Resolution, ctx: Context) -> tuple[dict[str, list[dict]], dict[
             )
             for cust in sorted(set(_CUST.findall(e.get("customer") or "")) & ctx.customers):
                 rows["link_reported_by"].append({"issue_id": e["issue_id"], "customer_id": cust})
-            if (who := eid(e.get("person"))) and who in ctx.roles:
-                rows["link_assigned_to"].append(
-                    {
-                        "issue_id": e["issue_id"],
-                        "person_id": who,
-                        "from_ms": e["ts_ms"],
-                        "to_ms": None,
-                    }
-                )
         if e["type"] == "issue_resolved" and e.get("issue_id") and e.get("pr_id"):
             rows["link_fixes"].append({"pr_id": e["pr_id"], "issue_id": e["issue_id"]})
     for topic, d in finals.items():
@@ -168,7 +171,7 @@ def rebuild(res: Resolution, ctx: Context) -> tuple[dict[str, list[dict]], dict[
     return rows, dict(stats)
 
 
-def fold_topic(topic, claims, ctx, assignee, rows, stats) -> list[dict[str, Any]]:
+def fold_topic(topic, claims, ctx, assigned, rows, stats) -> list[dict[str, Any]]:
     """Apply one topic's claims in time order (§9.4); append rows; return the chain."""
     is_issue = topic.startswith("iss:")
     kind = "issue_status" if is_issue else "pr_action"
@@ -177,11 +180,11 @@ def fold_topic(topic, claims, ctx, assignee, rows, stats) -> list[dict[str, Any]
         value = (ISSUE_VALUE if is_issue else PR_VALUE)[e["type"]]
         target = e["issue_id"] if is_issue else e["pr_id"]
         speaker = e.get("speaker")
-        verdict = _verdict(kind, e, speaker, target, ctx, assignee)
+        verdict = _verdict(kind, e, speaker, target, ctx, assigned)
         decisive = True if is_issue else bool(e.get("decisive"))
         active = chain[-1] if chain else None
         cid = claim_id(e)
-        if active and active["value"] == value:
+        if active and (active["value"] == value or (active["value"], value) in RESTATES):
             outcome = "supports"
             rows["link_supports"].append({"claim_id": cid, "decision_id": active["id"]})
         elif verdict.outcome == "unauthorized":
@@ -278,7 +281,7 @@ def fold_topic(topic, claims, ctx, assignee, rows, stats) -> list[dict[str, Any]
     return chain
 
 
-def _verdict(kind, e, speaker, target, ctx: Context, assignee) -> policy.Verdict:
+def _verdict(kind, e, speaker, target, ctx: Context, assigned) -> policy.Verdict:
     if e["type"] == "issue_reported":
         return policy.Verdict("authorized", "report", "anyone may report an issue")
     pr = ctx.prs.get(target) if kind == "pr_action" else None
@@ -286,7 +289,9 @@ def _verdict(kind, e, speaker, target, ctx: Context, assignee) -> policy.Verdict
         speaker=speaker if speaker in ctx.roles else None,
         speaker_role=ctx.roles.get(speaker or ""),
         speaker_in_product=speaker in ctx.active.get(e["product"], set()),
-        assignee=assignee.get(target) if kind == "issue_status" else None,
+        assignee=assignee_at(assigned.get(target, []), e["ts_ms"] or 0)
+        if kind == "issue_status"
+        else None,
         pr_author=pr.author_eid if pr else None,
         pr_reviewers=frozenset(
             r["reviewer_eid"]
@@ -297,13 +302,26 @@ def _verdict(kind, e, speaker, target, ctx: Context, assignee) -> policy.Verdict
     return policy.decide(kind, facts)
 
 
-def _assignee(issue: Issue, res: Resolution, ctx: Context) -> str | None:
-    for e in res.events:
-        if e.get("issue_id") == issue.id and e["type"] == "issue_reported":
-            who = eid(e.get("person"))
-            if who in ctx.roles:
-                return who
-    return None
+def assignments(res: Resolution, ctx: Context) -> dict[str, list[tuple[int, str]]]:
+    """Per issue, who it was assigned to and from when, in time order: every report or
+    reassignment that names a known person (the same person twice in a row counts once)."""
+    out: dict[str, list[tuple[int, str]]] = defaultdict(list)
+    for e in sorted(res.events, key=lambda e: (e["ts_ms"] or 0, e["artifact_id"])):
+        who = eid(e.get("person"))
+        if e["type"] == "issue_reported" and e.get("issue_id") and who in ctx.roles:
+            steps = out[e["issue_id"]]
+            if not steps or steps[-1][1] != who:
+                steps.append((e["ts_ms"] or 0, who))
+    return dict(out)
+
+
+def assignee_at(steps: list[tuple[int, str]], ts: int) -> str | None:
+    """The assignee in force at `ts` (the policy judges a claim by the facts of its time)."""
+    current = None
+    for start, who in steps:
+        if start <= ts:
+            current = who
+    return current
 
 
 def _statement(topic: str, value: str, e: dict[str, Any], ctx: Context) -> str:
