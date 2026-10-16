@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { type AnswerEvent, ask, type Citation, getProducts, type Product, type Subgraph } from "./api";
 import { Answer } from "./components/Answer";
 import { EvidenceGraph } from "./components/EvidenceGraph";
@@ -39,6 +39,7 @@ export default function App() {
     abort.current = ctl;
     setActive(null);
     setRun({ question, product: productId, steps: [], citations: [], running: true });
+    window.scrollTo({ top: 0 });
     const update = (f: (r: Run) => Run) => setRun((r) => (r && !ctl.signal.aborted ? f(r) : r));
     ask(
       question,
@@ -91,53 +92,140 @@ export default function App() {
     start(s.question, s.product);
   };
 
+  const compact = !!run;
+  const artifacts = products.reduce((n, p) => n + p.artifacts, 0);
+  const form = (
+    <form onSubmit={submit} className={compact ? "" : "mt-10"}>
+      <label htmlFor="q" className={compact ? "sr-only" : "block text-sm text-muted mb-1"}>
+        Your question
+      </label>
+      <div className="flex flex-col sm:flex-row sm:items-end gap-x-4 gap-y-3">
+        <input
+          id="q"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          maxLength={500}
+          placeholder="Which customers are waiting on a fix?"
+          className={`flex-1 min-w-0 bg-transparent border-0 border-b-2 border-ink px-0 font-serif placeholder:text-muted/70 focus:outline-none focus-visible:outline-none focus:border-link ${
+            compact ? "text-lg py-1.5" : "text-[1.3rem] sm:text-[1.6rem] py-2"
+          }`}
+        />
+        <div className="flex gap-3 items-end">
+          <ProductPicker products={products} value={product} onChange={setProduct} error={productError} />
+          {run?.running ? (
+            <button type="button" onClick={stop} className="px-5 py-2 border-2 border-ink font-medium">
+              Stop
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={draft.trim().length < 3}
+              className="px-6 py-2 border-2 border-ink bg-ink text-paper font-medium disabled:opacity-35"
+            >
+              Ask
+            </button>
+          )}
+        </div>
+      </div>
+    </form>
+  );
+
   return (
     <div className="min-h-screen">
       <header className="border-b border-rule">
-        <div className="max-w-[90rem] mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-baseline gap-x-5 gap-y-1">
-          <h1 className="font-serif text-[1.7rem] font-semibold tracking-tight leading-none">Lore</h1>
-          <p className="text-muted text-sm">Answers from your company's graph, each sentence with its source.</p>
+        <div className="max-w-[90rem] mx-auto px-4 sm:px-8 py-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+          <button
+            type="button"
+            onClick={() => {
+              abort.current?.abort();
+              setRun(null);
+            }}
+            className="font-serif text-[1.6rem] font-semibold tracking-tight leading-none"
+            aria-label="Lore, back to the start"
+          >
+            Lore
+          </button>
+          <p className="text-sm text-muted">
+            {productError
+              ? `The graph didn't answer: ${productError}`
+              : products.length
+                ? `${artifacts.toLocaleString("en")} artifacts from ${products.length} products in the graph`
+                : "Connecting to the graph"}
+          </p>
         </div>
       </header>
 
-      <main className="max-w-[90rem] mx-auto px-4 sm:px-6 pb-16">
-        <form onSubmit={submit} className="pt-6 pb-5 max-w-[56rem]">
-          <label htmlFor="q" className="sr-only">
-            Your question
-          </label>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <ProductPicker products={products} value={product} onChange={setProduct} error={productError} />
-            <input
-              id="q"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              maxLength={500}
-              placeholder="Ask about people, PRs, bugs, customers or documents"
-              className="flex-1 min-w-0 bg-surface border border-rule px-3 py-2.5 text-base placeholder:text-muted focus:border-link"
-            />
-            {run?.running ? (
-              <button type="button" onClick={stop} className="px-5 py-2.5 border border-ink font-medium">
-                Stop
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={draft.trim().length < 3}
-                className="px-5 py-2.5 bg-ink text-paper font-medium disabled:opacity-40"
-              >
-                Ask
-              </button>
-            )}
+      <main className="max-w-[90rem] mx-auto px-4 sm:px-8 pb-20">
+        {compact ? (
+          <div className="pt-5 pb-4 max-w-[64rem]">
+            {form}
+            <details className="mt-3 group">
+              <summary className="text-sm text-link cursor-pointer w-fit hover:underline underline-offset-2">
+                Try another question
+              </summary>
+              <QuestionIndex onPick={pick} disabled={!!run?.running} products={products} />
+            </details>
           </div>
-          <Suggestions onPick={pick} compact={!!run} disabled={!!run?.running} />
-        </form>
-
-        {run ? (
-          <RunView run={run} active={active} setActive={setActive} />
         ) : (
-          <Intro />
+          <Opening form={form} onPick={pick} products={products} />
         )}
+        {run && <RunView run={run} active={active} setActive={setActive} />}
       </main>
+    </div>
+  );
+}
+
+function Opening({ form, onPick, products }: { form: ReactNode; onPick: (s: Suggestion) => void; products: Product[] }) {
+  return (
+    <section className="pt-14 sm:pt-20 max-w-[64rem]">
+      <h1 className="font-serif text-[2.4rem] sm:text-[3.4rem] leading-[1.05] tracking-[-0.015em] font-medium max-w-[20ch] text-balance">
+        What's true at the company, and who said so.
+      </h1>
+      <p className="mt-5 text-[1.05rem] text-muted max-w-[58ch] leading-relaxed">
+        Lore answers from a graph of Slack messages, meetings, documents and pull requests. Each sentence of an answer
+        links to a quote you can check against its source. When nothing supports an answer, Lore says so.
+      </p>
+      {form}
+      <div className="mt-14">
+        <h2 className="font-semibold">Try a question from the data</h2>
+        <p className="text-sm text-muted mt-0.5">
+          The data is HERB, a public synthetic company. Each product also goes by a codename in its chats.
+        </p>
+        <QuestionIndex onPick={onPick} products={products} />
+      </div>
+    </section>
+  );
+}
+
+// Suggested questions grouped by product: the product is a question's scope.
+function QuestionIndex({ onPick, disabled, products }: { onPick: (s: Suggestion) => void; disabled?: boolean; products: Product[] }) {
+  const groups = [...new Set(SUGGESTIONS.map((s) => s.product))];
+  const alias = (id: string) => products.find((p) => p.id === id)?.aliases[0];
+  return (
+    <div className="grid gap-x-10 gap-y-6 mt-5 sm:grid-cols-2 lg:grid-cols-3">
+      {groups.map((g) => (
+        <section key={g} aria-label={g}>
+          <h3 className="text-sm pb-1.5 mb-1 border-b border-rule">
+            <span className="font-semibold">{g}</span>
+            {alias(g) && <span className="text-muted">, called {alias(g)} in chats</span>}
+          </h3>
+          <ul>
+            {SUGGESTIONS.filter((s) => s.product === g).map((s) => (
+              <li key={s.question}>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onPick(s)}
+                  title={s.question}
+                  className="font-serif text-[1.08rem] leading-snug text-left py-1.5 w-full hover:text-link hover:underline underline-offset-[0.2em] decoration-1 disabled:opacity-50 disabled:no-underline"
+                >
+                  {s.short}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </div>
   );
 }
@@ -150,8 +238,8 @@ function ProductPicker(props: {
 }) {
   const { products, value, onChange, error } = props;
   return (
-    <>
-      <label htmlFor="product" className="sr-only">
+    <div>
+      <label htmlFor="product" className="block text-[0.78rem] text-muted">
         Product
       </label>
       <select
@@ -159,61 +247,23 @@ function ProductPicker(props: {
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
         title={error ? `Products not loaded: ${error}` : undefined}
-        className={`bg-surface border px-2.5 py-2.5 text-base ${error ? "border-warn text-warn" : "border-rule"}`}
+        className={`bg-transparent border-0 border-b-2 py-1.5 pr-1 ${error ? "border-warn text-warn" : "border-ink"}`}
       >
-        <option value="">{error ? "Products not loaded" : "Any product"}</option>
+        <option value="">{error ? "Not loaded" : "Any"}</option>
         {products.map((p) => (
           <option key={p.id} value={p.id}>
             {p.name}
-            {p.aliases.length ? ` (${p.aliases.join(", ")})` : ""}
           </option>
         ))}
       </select>
-    </>
-  );
-}
-
-function Suggestions({ onPick, compact, disabled }: { onPick: (s: Suggestion) => void; compact: boolean; disabled: boolean }) {
-  return (
-    <div className="mt-3">
-      {!compact && <p className="text-sm text-muted mb-2">Or try one of these, from the HERB dev products:</p>}
-      <ul className="flex flex-wrap gap-2">
-        {SUGGESTIONS.map((s) => (
-          <li key={s.question}>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => onPick(s)}
-              title={s.question}
-              className="text-[0.85rem] border border-rule bg-surface px-2.5 py-1 hover:border-link hover:text-link disabled:opacity-50 text-left"
-            >
-              {s.short} <span className="text-muted">{s.product}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
     </div>
-  );
-}
-
-function Intro() {
-  return (
-    <section className="max-w-[60ch] border-t border-rule pt-6 text-muted">
-      <p className="font-serif text-xl text-ink leading-snug">
-        Lore reads a company's Slack, meetings, documents and pull requests as one graph of people, work and decisions.
-      </p>
-      <p className="mt-3">
-        Ask a question and watch it walk that graph. Each sentence of the answer links to a quote copied word for word from
-        a source; point at a number to see it. If no source supports an answer, Lore says so instead of guessing.
-      </p>
-    </section>
   );
 }
 
 function RunView({ run, active, setActive }: { run: Run; active: number | null; setActive: (n: number | null) => void }) {
   const llm = run.answer?.llm;
   return (
-    <div className="grid gap-x-10 gap-y-8 border-t border-rule pt-6 lg:grid-cols-[16rem_minmax(0,1fr)_21rem]">
+    <div className="grid gap-x-12 gap-y-10 border-t border-rule pt-8 lg:grid-cols-[15rem_minmax(0,1fr)_21rem]">
       <section aria-labelledby="h-walk" className="order-3 lg:order-1">
         <h2 id="h-walk" className="font-semibold mb-3">
           How Lore found it
@@ -228,7 +278,7 @@ function RunView({ run, active, setActive }: { run: Run; active: number | null; 
       </section>
 
       <section aria-labelledby="h-answer" className="order-1 lg:order-2 min-w-0">
-        <h2 id="h-answer" className="font-serif text-[1.65rem] leading-tight mb-5 max-w-[40ch]">
+        <h2 id="h-answer" className="font-serif text-[1.75rem] leading-[1.15] tracking-[-0.01em] mb-6 max-w-[34ch]">
           {run.question}
         </h2>
         {run.error && (
@@ -241,19 +291,19 @@ function RunView({ run, active, setActive }: { run: Run; active: number | null; 
         {run.answer ? (
           <Answer answer={run.answer} citations={run.citations} active={active} setActive={setActive} />
         ) : (
-          !run.error && <p className="text-muted">Writing the answer once the evidence is in.</p>
+          !run.error && <p className="text-muted">The answer appears once the evidence is in.</p>
         )}
 
         {!!run.subgraph?.nodes.length && (
-          <section aria-labelledby="h-evidence" className="mt-10">
-            <h2 id="h-evidence" className="font-semibold mb-1">
-              Evidence
+          <section aria-labelledby="h-evidence" className="mt-12">
+            <h2 id="h-evidence" className="font-semibold">
+              Evidence in the graph
             </h2>
-            <p className="text-sm text-muted mb-3 max-w-[68ch]">
-              The cited sources and what the graph connects them to: who wrote them, the product, customers and
-              companies they mention, and the claims and decisions Lore extracted from them.
+            <p className="text-sm text-muted mt-0.5 mb-3 max-w-[68ch]">
+              The cited sources and what they connect to: authors, the product, customers and their companies, and the
+              claims and decisions Lore extracted from them.
             </p>
-            <EvidenceGraph graph={run.subgraph!} citations={run.citations} active={active} />
+            <EvidenceGraph graph={run.subgraph} citations={run.citations} active={active} />
           </section>
         )}
       </section>
@@ -261,9 +311,13 @@ function RunView({ run, active, setActive }: { run: Run; active: number | null; 
       <section aria-labelledby="h-sources" className="order-2 lg:order-3 min-w-0">
         {run.citations.length > 0 && (
           <>
-            <h2 id="h-sources" className="font-semibold mb-3">
+            <h2 id="h-sources" className="font-semibold">
               Sources
             </h2>
+            <p className="text-sm text-muted mt-0.5 mb-4">
+              Each quote was checked word for word against its source before the answer was shown. Point at one to see
+              the sentence it supports.
+            </p>
             <div className="pl-4">
               <Sources citations={run.citations} active={active} setActive={setActive} />
             </div>

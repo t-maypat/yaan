@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useContext, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { AnswerEvent, Citation } from "../api";
@@ -81,6 +81,13 @@ function CiteMark(props: {
 }) {
   const { n, citation, active, setActive } = props;
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const block = ref.current?.closest(".answer p, .answer li");
+    if (!block || !active) return;
+    block.classList.add("lit");
+    return () => block.classList.remove("lit");
+  }, [active]);
   const show = () => {
     setOpen(true);
     setActive(n);
@@ -90,7 +97,7 @@ function CiteMark(props: {
     setActive(null);
   };
   return (
-    <span className="relative inline-block align-baseline" onMouseEnter={show} onMouseLeave={hide}>
+    <span ref={ref} className="relative inline-block align-baseline" onMouseEnter={show} onMouseLeave={hide}>
       <a
         href={`#source-${n}`}
         onFocus={show}

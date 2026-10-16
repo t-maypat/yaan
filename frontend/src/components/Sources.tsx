@@ -40,9 +40,7 @@ function SourceCard({ c, active, setActive }: { c: Citation; active: boolean; se
       <p className="font-serif text-[1.02rem] leading-snug">
         <mark className="verbatim">{c.quote}</mark>
       </p>
-      <p className={`text-[0.78rem] mt-1 ${c.quote_ok === false ? "text-warn" : "text-muted"}`}>
-        {c.quote_ok === false ? "Quote not found in this source" : "Found word for word in the source"}
-      </p>
+      {c.quote_ok === false && <p className="text-[0.78rem] mt-1 text-warn">This quote was not found in its source</p>}
       <div className="text-[0.82rem] text-muted mt-1.5 leading-snug">
         {error && <span className="text-warn">Source not loaded: {error}</span>}
         {artifact && (

@@ -129,6 +129,18 @@ mark.verbatim {
   text-underline-offset: 0.15em;
   word-break: break-all;
 }
+/* The sentence a pointed-at source supports. */
+.answer .lit {
+  background: color-mix(in srgb, var(--mark) 28%, transparent);
+  box-shadow: -0.5rem 0 0 color-mix(in srgb, var(--mark) 28%, transparent),
+    0.5rem 0 0 color-mix(in srgb, var(--mark) 28%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .answer p,
+  .answer li {
+    transition: background-color 160ms ease-out, box-shadow 160ms ease-out;
+  }
+}
 .answer strong {
   font-weight: 650;
 }

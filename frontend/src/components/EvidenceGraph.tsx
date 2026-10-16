@@ -41,6 +41,7 @@ export function EvidenceGraph({ graph, citations, active }: Props) {
     if (!box.current || !graph.nodes.length) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const [ink, muted, rule, mark, link, surface] = ["--ink", "--muted", "--rule", "--mark", "--link", "--surface"].map(css);
+    const paper = surface;
     const instance = cytoscape({
       container: box.current,
       elements: [
@@ -51,7 +52,7 @@ export function EvidenceGraph({ graph, citations, active }: Props) {
             name: n.name ?? n.id,
             text: n.cited
               ? `[${(marks.get(n.id) ?? []).join("] [")}]`
-              : n.label === "claim"
+              : GROUP(n.label) === "extracted"
                 ? ""
                 : short(n.name ?? n.id),
           },
@@ -69,6 +70,9 @@ export function EvidenceGraph({ graph, citations, active }: Props) {
             color: muted,
             "text-valign": "bottom",
             "text-margin-y": 4,
+            "text-background-color": paper,
+            "text-background-opacity": 0.85,
+            "text-background-padding": "1px",
             width: 18,
             height: 18,
             "background-color": surface,
@@ -99,11 +103,22 @@ export function EvidenceGraph({ graph, citations, active }: Props) {
         },
         { selector: "edge.hover", style: { label: "data(rel)", "font-size": 9, color: muted, "line-color": muted } },
       ],
-      layout: { name: "cose", animate: !reduce, animationDuration: 400, padding: 24, nodeRepulsion: () => 9000, idealEdgeLength: () => 70 },
+      layout: { name: "cose", animate: !reduce, animationDuration: 400, padding: 24, nodeRepulsion: () => 16000, idealEdgeLength: () => 80 },
       wheelSensitivity: 0.2,
       minZoom: 0.3,
       maxZoom: 2.5,
     });
+    // Fitting a big graph zooms out until labels are unreadable: keep them ~12 px on screen.
+    const scaleLabels = () => {
+      const z = instance.zoom();
+      instance.batch(() => {
+        instance.nodes().style({ "font-size": 12 / z, "text-margin-y": 4 / z });
+        instance.edges().style({ "font-size": 10 / z });
+      });
+    };
+    instance.on("zoom", scaleLabels);
+    instance.on("layoutstop", scaleLabels);
+    scaleLabels();
     instance.on("mouseover", "node", (e) => {
       const n = e.target;
       n.connectedEdges().addClass("hover");
@@ -143,7 +158,7 @@ export function EvidenceGraph({ graph, citations, active }: Props) {
     <div>
       <div
         ref={box}
-        className="h-[26rem] w-full bg-surface border border-rule"
+        className="h-[30rem] w-full bg-surface border border-rule"
         role="img"
         aria-label={`Evidence graph: ${graph.nodes.length} nodes and ${graph.edges.length} links around the cited sources`}
       />
@@ -154,7 +169,7 @@ export function EvidenceGraph({ graph, citations, active }: Props) {
             {hovered.name}
           </>
         ) : (
-          <span className="text-muted">Point at a node to read it. Highlighted nodes are the cited sources.</span>
+          <span className="text-muted">Point at a node to read it. Yellow nodes are the cited sources, numbered as in the answer.</span>
         )}
       </p>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[0.78rem] text-muted mt-1">
