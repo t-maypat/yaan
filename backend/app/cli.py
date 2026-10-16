@@ -79,7 +79,7 @@ def cmd_normalize(args: argparse.Namespace) -> int:
     return 0
 
 
-INGEST_STAGES = ("structural", "lexical", "link")  # later phases add extract, …
+INGEST_STAGES = ("structural", "lexical", "link", "fold")  # fold: extracted events -> claims
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
@@ -114,6 +114,25 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         report |= linker.load(rows, graph)
         log = linker.write_unresolved(unresolved)
         print(f"unresolved mentions: {len(unresolved)} -> {log}", file=sys.stderr)
+    if "fold" in args.stages:
+        # every product with extracted events (`lore extract`), so a partial run never
+        # drops another product's claims: clear_extracted wipes the whole derived layer
+        from app.ingest import extract, fold, resolve
+
+        have = sorted(p.name for p in extract.out_dir("x").parent.glob("*") if p.name[0] != "_")
+        events = [e for p in have for e in extract.read_events(p)]
+        arts = {
+            p: artifacts.get(p) or read_jsonl(normalized_dir(p) / "artifacts.jsonl") for p in have
+        }
+        res = resolve.resolve(
+            events, {p: [a for a in v if a.kind == "pr"] for p, v in arts.items()}
+        )
+        rows, stats = fold.rebuild(res, fold.Context.build(structural.load_metadata(), arts))
+        report |= fold.load(rows, graph)
+        print(
+            f"fold over {', '.join(have)}: {stats}; unresolved {len(res.unresolved)}",
+            file=sys.stderr,
+        )
     print(f"{'query':<24}{'rows':>8}{'nodes+':>9}{'edges+':>9}{'props set':>11}")
     for query, r in report.items():
         print(

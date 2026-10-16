@@ -45,7 +45,9 @@ def call_tool(name: str, args: dict[str, Any], scope: str | None, graph: str | N
     if name == "issue_reports":
         return tools.issue_reports(product, graph)
     if name == "list_prs":
-        return tools.list_prs(product, args.get("status"), graph)
+        return tools.list_prs(product, args.get("status"), graph, args.get("action"))
+    if name == "list_issues":
+        return tools.list_issues(product, args.get("status"), args.get("company"), graph)
     if name == "links_shared":
         return tools.links_shared(product, graph)
     raise ToolError(f"unknown tool {name!r}")

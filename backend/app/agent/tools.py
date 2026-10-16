@@ -290,17 +290,63 @@ def issue_reports(product_id: str, graph: str | None = None) -> dict:
     }
 
 
-def list_prs(product_id: str, status: str | None = None, graph: str | None = None) -> dict:
+def list_prs(
+    product_id: str,
+    status: str | None = None,
+    graph: str | None = None,
+    action: str | None = None,
+) -> dict:
     """Tool 5, PR case: the product's own pull requests with their status chain from the PR
-    record and its reviews (D028). External PRs (HERB's distractors) are left out."""
-    params = {"product_id": product_id, "status": status, "limit": 200}
+    record and its reviews (D028), plus what the team said to do with each in Slack: the
+    `pr:<id>/action` chain from extracted claims (D049). External PRs are left out."""
+    params = {"product_id": product_id, "status": status, "action": action, "limit": 200}
     rows = db.run("product_prs", params, graph=graph).rows
     for r in rows:
         r["reviews"] = [rv for rv in r["reviews"] if rv["id"]]
         r["reverted_by"] = [
             {**u, "reason": clip(u["reason"], 300)} for u in r["reverted_by"] if u["number"]
         ]
+        r["said"] = [c for c in r["said"] if c["action"]]
     return {"product_id": product_id, "prs": rows, "cypher": ["product_prs.cypher"]}
+
+
+UNRESOLVED = ("reported", "reopened")
+
+
+def list_issues(
+    product_id: str,
+    status: str | None = None,
+    company: str | None = None,
+    graph: str | None = None,
+) -> dict:
+    """Tool 5, issue case (slice B): canonical customer issues (S7, D049) with their current
+    status from the fold, the status history as claims with quotes, the assignee, reporting
+    customers and companies, and the PRs that fixed them. `status='unresolved'` means
+    reported or reopened; `company` keeps issues reported by that company's customers."""
+    query_status = None if status == "unresolved" else status
+    params = {"product_id": product_id, "status": query_status, "limit": 200}
+    issues = []
+    for r in db.run("product_issues", params, graph=graph).rows:
+        r["customers"] = [c for c in r["customers"] if c["id"]]
+        r["assignees"] = [a for a in r["assignees"] if a["id"]]
+        r["fixed_by"] = [p for p in r["fixed_by"] if p["id"]]
+        r["history"] = [h for h in r["history"] if h["status"]]
+        if status == "unresolved" and r["status"] not in UNRESOLVED:
+            continue
+        companies = " ".join((c["company"] or "") for c in r["customers"]).casefold()
+        if company and company.casefold().replace(" ", "") not in companies.replace(" ", ""):
+            continue
+        issues.append(r)
+    counts: dict[str, int] = {}
+    for r in issues:
+        counts[r["status"]] = counts.get(r["status"], 0) + 1
+    return {
+        "product_id": product_id,
+        "filters": {"status": status, "company": company},
+        "counts_by_status": counts,
+        "issues": issues,
+        "cypher": ["product_issues.cypher"],
+    }
 
 
 def links_shared(product_id: str, graph: str | None = None) -> dict:
@@ -406,13 +452,44 @@ TOOL_SPECS = [
         "status history (open, approved, changes_requested, merged, closed), author and "
         "reviewers. 'Approved but not merged' PRs show status 'approved'. A PR undone by a "
         "later 'Revert PR# N' pull request lists it in reverted_by, with the stated reason: "
-        "the PRs that 'were reverted' are these originals, not the revert PRs.",
+        "the PRs that 'were reverted' are these originals, not the revert PRs. team_action is "
+        "what the team decided in Slack: to_merge, to_close (the team agreed not to merge "
+        "it: an approved PR that needs to be closed), on_hold, or reverted, with "
+        "action_reason (product_direction = a change in product direction, introduced_bugs "
+        "= it introduced bugs). 'said' lists those Slack messages with quotes to cite.",
         {
             "status": _nullable(
                 {
                     "type": "string",
                     "enum": ["open", "approved", "changes_requested", "merged", "closed"],
                 }
+            ),
+            "action": _nullable(
+                {"type": "string", "enum": ["to_merge", "to_close", "on_hold", "reverted"]}
+            ),
+            "product_id": PRODUCT,
+        },
+    ),
+    _tool(
+        "list_issues",
+        "The product's customer issues (bugs), one canonical issue per bug, built from the "
+        "support channels: title, component, current status, reopen_count, assignee, the "
+        "reporting customers with their companies, the PRs that fixed it (with author), and "
+        "the status history: each change with who said it, their role, the message id and "
+        "a quote to cite. Statuses: reported (open, not yet fixed), resolved (fixed), "
+        "dismissed (found to need no fix), reopened (open again). 'unresolved' = reported "
+        "or reopened. counts_by_status counts what was returned. Use it for bug counts, "
+        "unresolved / resolved / reopened / dismissed issues, who resolved or dismissed "
+        "them, and the companies affected.",
+        {
+            "status": _nullable(
+                {
+                    "type": "string",
+                    "enum": ["reported", "resolved", "dismissed", "reopened", "unresolved"],
+                }
+            ),
+            "company": _nullable(
+                {"type": "string", "description": "only issues reported by this company"}
             ),
             "product_id": PRODUCT,
         },

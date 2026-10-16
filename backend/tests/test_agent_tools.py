@@ -85,6 +85,33 @@ def test_list_prs_leaves_out_external_prs_and_shows_the_chain(company):
     assert [p["id"] for p in merged] == ["pr:w3"]
 
 
+def test_list_prs_shows_what_the_team_said_apart_from_the_record(company):
+    [pr] = [p for p in tools.list_prs("Widget", graph=company)["prs"] if p["id"] == "pr:w1"]
+    assert pr["chain"] == ["open", "approved"]  # the pr_action decision stays out (A20 shape)
+    assert pr["team_action"] == "to_close" and pr["action_reason"] == "product_direction"
+    [said] = pr["said"]
+    assert said["artifact_id"] == "msg:r3" and said["quote"] == "Hold off on merging PR# 1"
+    to_close = tools.list_prs("Widget", graph=company, action="to_close")["prs"]
+    assert [p["id"] for p in to_close] == ["pr:w1"]
+
+
+def test_list_issues_gives_status_history_customers_and_fixes(company):
+    out = tools.list_issues("Widget", graph=company)
+    [issue] = out["issues"]
+    assert issue["title"] == "Slow export" and issue["status"] == "resolved"
+    assert out["counts_by_status"] == {"resolved": 1}
+    assert issue["customers"] == [{"id": "CUST-0001", "name": "Dee Fox", "company": "Blue Wave"}]
+    assert [a["id"] for a in issue["assignees"]] == ["eid_c3"]
+    assert [p["number"] for p in issue["fixed_by"]] == [1]
+    assert [(h["status"], h["by"], h["artifact_id"]) for h in issue["history"]] == [
+        ("reported", "eid_b2", "msg:r1"),
+        ("resolved", "eid_c3", "msg:r2"),
+    ]
+    assert tools.list_issues("Widget", "unresolved", graph=company)["issues"] == []
+    assert len(tools.list_issues("Widget", company="bluewave", graph=company)["issues"]) == 1
+    assert tools.list_issues("Widget", company="Other Co", graph=company)["issues"] == []
+
+
 def test_links_shared_counts_only_this_products_sharers(company):
     [link] = tools.links_shared("Widget", graph=company)["links"]
     assert link["url"] == "https://www.rival.com/demo"
@@ -108,7 +135,8 @@ INDEXED = {
     "doc_discussion": {"doc_id": "x", "window_ms": 1, "limit": 1},
     "doc_meetings": {"doc_id": "x"},
     "issue_reports": {"product_id": "W", "limit": 1},
-    "product_prs": {"product_id": "W", "status": None, "limit": 1},
+    "product_prs": {"product_id": "W", "status": None, "action": None, "limit": 1},
+    "product_issues": {"product_id": "W", "status": None, "limit": 1},
     "links_shared": {"product_id": "W", "limit": 1},
     "people_by_role": {"product_id": "W", "role": "x", "k": 1},
 }

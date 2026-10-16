@@ -1,4 +1,4 @@
-// agent_company.cypher — invented fixture for the agent's slice-A tools (9.0): two namesakes, a document shared then revised, a meeting about it, a customer report, internal and external PRs, a link shared in two products, and a message with no title or url (A19)
+// agent_company.cypher — invented fixture for the agent's slice-A tools (9.0): two namesakes, a document shared then revised, a meeting about it, a customer report, internal and external PRs, a link shared in two products, a message with no title or url (A19), and the extracted layer (slice B): an issue reported then resolved, and a PR the team agreed not to merge (A20 shape)
 CREATE
   (widget:Product:Entity {id: 'Widget', name: 'Widget', current_name: 'Widget', aliases: ['wdAI']}),
   (gadget:Product:Entity {id: 'Gadget', name: 'Gadget', current_name: 'Gadget', aliases: []}),
@@ -31,7 +31,7 @@ CREATE
   (bo)-[:AUTHORED]->(r1), (cy)-[:AUTHORED]->(r2),
   (r1)-[:IN_CHANNEL]->(bug), (r2)-[:IN_CHANNEL]->(bug), (r1)-[:IN_PRODUCT]->(widget), (r2)-[:IN_PRODUCT]->(widget),
   (r1)-[:MENTIONS]->(dee), (r1)-[:MENTIONS]->(cy),
-  (p1:Artifact:PR {id: 'pr:w1', kind: 'pr', title: 'Add export', text: 'Adds CSV export.', url: 'https://github.com/salesforce/Widget/pull/1', number: 1, current_status: 'approved', external: false, ts_ms: 4000, ts_iso: '2026-05-01T00:00:04Z', product_id: 'Widget'}),
+  (p1:Artifact:PR {id: 'pr:w1', kind: 'pr', title: 'Add export', text: 'Adds CSV export.', url: 'https://github.com/salesforce/Widget/pull/1', number: 1, current_status: 'approved', current_action: 'to_close', action_reason: 'product_direction', external: false, ts_ms: 4000, ts_iso: '2026-05-01T00:00:04Z', product_id: 'Widget'}),
   (p2:Artifact:PR {id: 'pr:ext', kind: 'pr', title: 'Upstream fix', text: 'Elsewhere.', url: 'https://github.com/example/lib/pull/9', number: 9, current_status: 'merged', external: true, ts_ms: 100, ts_iso: '2025-01-01T00:00:00Z', product_id: 'Widget'}),
   (p3:Artifact:PR {id: 'pr:w3', kind: 'pr', title: 'Revert PR# 1: Add export', text: 'Reverting because of a change in product direction.', url: 'https://github.com/salesforce/Widget/pull/3', number: 3, current_status: 'merged', external: false, ts_ms: 4500, ts_iso: '2026-05-01T00:00:04Z', product_id: 'Widget'}),
   (p3)-[:REVERTS]->(p1), (p3)-[:IN_PRODUCT]->(widget),
@@ -48,4 +48,15 @@ CREATE
   (g1:Artifact:Message {id: 'msg:g1', kind: 'message', text: 'Same demo: https://www.rival.com/demo', ts_ms: 9100, ts_iso: '2026-05-01T00:00:09Z', product_id: 'Gadget', system: false}),
   (cy)-[:AUTHORED]->(m6), (ann)-[:AUTHORED]->(g1),
   (m6)-[:SHARES]->(l1), (g1)-[:SHARES]->(l1),
-  (m6)-[:IN_PRODUCT]->(widget), (g1)-[:IN_PRODUCT]->(gadget)
+  (m6)-[:IN_PRODUCT]->(widget), (g1)-[:IN_PRODUCT]->(gadget),
+  (r3:Artifact:Message {id: 'msg:r3', kind: 'message', text: 'Hold off on merging PR# 1, it is not needed now.', ts_ms: 8200, ts_iso: '2026-05-01T00:00:08Z', product_id: 'Widget', channel_id: 'ch-plan', system: false}),
+  (cy)-[:AUTHORED]->(r3), (r3)-[:IN_PRODUCT]->(widget),
+  (iss:Issue:Entity {id: 'iss:Widget:abc', name: 'Slow export', title: 'Slow export', product_id: 'Widget', component: 'Export Module', current_status: 'resolved', reopen_count: 0, reported_ms: 8000}),
+  (iss)-[:IN_PRODUCT]->(widget), (iss)-[:REPORTED_BY]->(dee), (iss)-[:ASSIGNED_TO {from_ms: 8000}]->(cy), (iss)-[:REPORTED_IN]->(r1), (p1)-[:FIXES]->(iss),
+  (c1:Claim {id: 'clm:1', topic: 'iss:Widget:abc/status', value: 'reported', quote: 'in the Export Module hurts CUST-0001', ts_ms: 8000, ts_iso: '2026-05-01T00:00:08Z', outcome: 'supports', product_id: 'Widget'}),
+  (c2:Claim {id: 'clm:2', topic: 'iss:Widget:abc/status', value: 'resolved', quote: 'on it', ts_ms: 8100, ts_iso: '2026-05-01T00:00:08Z', outcome: 'supersedes', product_id: 'Widget'}),
+  (c1)-[:ABOUT]->(iss), (c2)-[:ABOUT]->(iss), (c1)-[:FROM]->(r1), (c2)-[:FROM]->(r2), (c1)-[:ASSERTED_BY]->(bo), (c2)-[:ASSERTED_BY]->(cy),
+  (c3:Claim {id: 'clm:3', topic: 'pr:w1/action', value: 'to_close', reason: 'product_direction', quote: 'Hold off on merging PR# 1', ts_ms: 8200, ts_iso: '2026-05-01T00:00:08Z', outcome: 'supports', product_id: 'Widget'}),
+  (c3)-[:ABOUT]->(p1), (c3)-[:FROM]->(r3), (c3)-[:ASSERTED_BY]->(cy),
+  (dC:Decision {id: 'dec:pr:w1/action:8200', topic: 'pr:w1/action', kind: 'pr_action', value: 'to_close', valid_from_ms: 8200, status: 'active', origin: 'extracted'}),
+  (dC)-[:AFFECTS]->(p1)

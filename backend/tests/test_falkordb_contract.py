@@ -401,3 +401,22 @@ def test_a17_server_limits(admin, empty_graph):
     # A write ignores its own timeout: asked for 1 ms, it still finishes (~0.3 s).
     result = writer(empty_graph).query("UNWIND range(1, 200000) AS i CREATE (:T {i: i})", timeout=1)
     assert result.nodes_created == 200000
+
+
+def test_a20_optional_match_where_after_a_collect_drops_every_row(empty_graph):
+    """Found 16 Oct (D050). On 6.0.1, after `OPTIONAL MATCH ... WITH x, collect(...)`, a second
+    `OPTIONAL MATCH ... WHERE <property test>` matches nothing, though the same clause without
+    the earlier collect works (product_prs lost every PR's status chain). Filter inside the
+    aggregate instead: collect(CASE WHEN <test> THEN v END), which skips the nulls."""
+    writer(empty_graph).query(
+        "CREATE (p:P {id: 'p'}), (:U)-[:R]->(p), (:D {k: 'a', v: 1})-[:A]->(p), "
+        "(:D {k: 'b', v: 2})-[:A]->(p)"
+    )
+    head = "MATCH (p:P {id: 'p'}) OPTIONAL MATCH (u:U)-[:R]->(p) WITH p, collect(u) AS us "
+    broken = head + "OPTIONAL MATCH (d:D)-[:A]->(p) WHERE d.k = 'a' RETURN collect(d.v) LIMIT 1"
+    fixed = (
+        head + "OPTIONAL MATCH (d:D)-[:A]->(p) "
+        "RETURN collect(CASE WHEN d.k = 'a' THEN d.v END) LIMIT 1"
+    )
+    assert read(empty_graph, broken) == [[[]]]
+    assert read(empty_graph, fixed) == [[[1]]]
