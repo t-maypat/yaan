@@ -9,10 +9,12 @@ slack:
   alerts_channel: lore-alerts        # alert cards with Approve / Dismiss, and notifications
   people: {}                         # Slack user id -> eid
 github:
-  people: {}                         # GitHub login -> eid
+  people:                            # GitHub login -> eid; "self" = the token's own login
+    self: eid_9e9883de               # Hannah Garcia, Software Engineer: writes the fix
 jira:
   channel: ch-force-d79648           # ticket changes are filed as messages in this channel
-  people: {}                         # Jira account id -> eid
+  people:                            # Jira account id -> eid; "self" = the token's own account
+    self: eid_9e9883de               # Hannah Garcia: the ticket's assignee, who resolves it
 notion:
   channel: ch-vizai-afe877           # planning-VizForce: where Notion documents are shared
   people: {}                         # Notion user id -> eid

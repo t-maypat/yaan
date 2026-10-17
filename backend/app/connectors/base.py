@@ -61,12 +61,16 @@ class Maps:
     def source(self, name: str) -> dict[str, Any]:
         return self.sources.get(name) or {}
 
-    def person(self, source: str, account: str | None, text: str = "") -> str:
-        """Who an item is by: the persona its label names, else the account's mapping, else
-        the default person."""
+    def person(
+        self, source: str, account: str | None, text: str = "", own: str | None = None
+    ) -> str:
+        """Who an item is by: the persona its label names, else the account's mapping (the
+        key "self" means the connector's own account, `own`), else the default person."""
         if m := PERSONA.search(text or ""):
             return m.group(1)
         people = self.source(source).get("people") or {}
+        if own and account == own and "self" in people:
+            return people["self"]
         return people.get(account or "", self.default_person)
 
 

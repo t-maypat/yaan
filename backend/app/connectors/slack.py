@@ -25,6 +25,7 @@ from app.ingest.normalize import Artifact
 SKIP_SUBTYPES = {"channel_join", "channel_leave", "bot_message", "channel_topic", "channel_purpose"}
 LINK = re.compile(r"<(https?://[^|>]+)(?:\|([^>]+))?>")
 MENTION = re.compile(r"<@([A-Z0-9]+)(?:\|[^>]+)?>")
+SEEDED = "[synthetic demo · as "  # a bot post counts only when it opens with a persona label
 
 
 def ts_ms(ts: str) -> int:
@@ -97,8 +98,12 @@ class SlackConnector:
         return MENTION.sub(lambda m: "@" + self.maps.person("slack", m[1]), text)
 
     def normalize(self, m: dict[str, Any], cid: str, herb_id: str, herb_name: str) -> Item | None:
-        if m.get("bot_id") or m.get("subtype") in SKIP_SUBTYPES or not m.get("text"):
-            return None  # Lore's own posts and channel events aren't company knowledge
+        text = m.get("text") or ""
+        by_bot = bool(m.get("bot_id")) or m.get("subtype") == "bot_message"
+        if not text or m.get("subtype") in SKIP_SUBTYPES - {"bot_message"}:
+            return None  # channel events aren't company knowledge
+        if by_bot and not text.startswith(SEEDED):
+            return None  # Lore's own answers, cards and notifications: never read back
         text = self.plain(m["text"])
         author = self.maps.person("slack", m.get("user"), text)
         created = ts_ms(m["ts"])

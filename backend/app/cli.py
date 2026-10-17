@@ -417,6 +417,34 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     return 0
 
 
+def seed_sandboxes(act: str, connectors: list) -> dict:
+    """`lore connectors seed --act setup|regression` with each connector's own client."""
+    from app.connectors import base, seed
+
+    by = {c.name: c for c in connectors}
+    if act == "regression":
+        if "slack" not in by:
+            raise base.ConnectorError("seed regression needs Slack: SLACK_BOT_TOKEN")
+        slack = by["slack"]
+        channel = next(iter(slack.conf.get("channels") or {}), None)
+        cid = slack.channel_ids().get(channel or "")
+        if not cid:
+            raise base.ConnectorError(f"the bot can't see #{channel}: /invite @lore there")
+        return {"slack_ts": seed.regression(slack.client, cid)}
+    missing = [n for n in ("jira", "github") if n not in by]
+    if missing:
+        raise base.ConnectorError(f"seed setup needs {missing}: see docs/connectors.md")
+    notion = by.get("notion")
+    return seed.setup(
+        by["jira"].http,
+        by["jira"].project,
+        by["github"].http,
+        by["github"].repo,
+        notion.http if notion else None,
+        notion.page_id if notion else None,
+    )
+
+
 def cmd_connectors(args: argparse.Namespace) -> int:
     import json
 
@@ -429,6 +457,9 @@ def cmd_connectors(args: argparse.Namespace) -> int:
             runner.run_forever(graph, every_s=args.every)
             return 0
         connectors = runner.configured(graph)
+        if args.action == "seed":
+            print(json.dumps(seed_sandboxes(args.act, connectors), indent=1))
+            return 0
         if args.action == "status":
             print(f"maps: {base.CONFIG.name}, product {base.maps().product}")
             print(f"configured: {[c.name for c in connectors] or 'none (see docs/connectors.md)'}")
@@ -510,7 +541,8 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
     ],
     "connectors": [
-        ("action", {"choices": ("sync", "run", "status"), "help": "one round, run, or show"}),
+        ("action", {"choices": ("sync", "run", "status", "seed"), "help": "what to do"}),
+        ("--act", {"choices": ("setup", "regression"), "default": "setup", "help": "seed act"}),
         ("--graph", {"help": "the demo graph (default: LORE_DEMO_GRAPH)"}),
         ("--every", {"type": float, "default": 30, "help": "run: seconds between polls"}),
     ],

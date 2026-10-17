@@ -162,3 +162,20 @@ def test_alert_cards_offer_approve_and_dismiss_until_decided():
     assert blocks[-1]["elements"][0]["value"] == "alert:1"
     done = slack.alert_blocks(alert, decided="Approved by <@U1>")
     assert done[-1]["type"] == "context" and all(b["type"] != "actions" for b in done)
+
+
+def test_a_bot_post_counts_only_when_it_opens_with_a_persona_label(conn):
+    seeded = {
+        "bot_id": "B1",
+        "ts": "1805000500.0005",
+        "text": "[synthetic demo · as Ian Davis (eid_7017b913)] CUST-0003 has reopened it.",
+    }
+    item = conn.normalize(seeded, "C1", "ch-force-d79648", "bug-davidgarcia-VizForce")
+    assert item and item.artifact.author_eid == "eid_7017b913"
+    quoted = {
+        "bot_id": "B1",
+        "ts": "1805000600.0006",
+        "text": '*To Hannah Garcia*: "[synthetic '
+        'demo · as Ian Davis (eid_7017b913)] CUST-0003 has reopened it."',
+    }
+    assert conn.normalize(quoted, "C1", "ch-force-d79648", "bug-davidgarcia-VizForce") is None

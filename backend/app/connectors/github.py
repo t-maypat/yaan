@@ -40,6 +40,7 @@ class GitHubConnector:
         client: httpx.Client | None = None,
     ):
         self.repo, self.graph = repo, graph
+        self._own: str | None = None
         self.maps = maps or base.maps()
         self.http = client or httpx.Client(
             base_url=API,
@@ -58,6 +59,15 @@ class GitHubConnector:
                 f"GitHub GET {path}: {r.status_code} {r.json().get('message', '')}"
             )
         return r.json()
+
+    def who(self, login: str | None, text: str = "") -> str:
+        """The person a GitHub login plays; "self" in the map is the token's own login."""
+        own = None
+        if "self" in (self.maps.source("github").get("people") or {}):
+            if self._own is None:
+                self._own = self._get("/user")["login"]
+            own = self._own
+        return self.maps.person("github", login, text, own)
 
     def pr_id(self, number: int) -> str:
         return base.synthetic_id("pr", "github", f"{self.repo}-{number}")
@@ -85,7 +95,7 @@ class GitHubConnector:
     def normalize(self, pr: dict[str, Any], reviews: list[dict[str, Any]]) -> Item:
         body = pr.get("body") or ""
         login = (pr.get("user") or {}).get("login")
-        author = self.maps.person("github", login, body)
+        author = self.who(login, body)
         created = ms(pr["created_at"]) or 0
         a = Artifact(
             id=self.pr_id(pr["number"]),
@@ -110,8 +120,8 @@ class GitHubConnector:
                     {
                         "state": r["state"],
                         "login": (r.get("user") or {}).get("login"),
-                        "reviewer_eid": self.maps.person(
-                            "github", (r.get("user") or {}).get("login"), r.get("body") or ""
+                        "reviewer_eid": self.who(
+                            (r.get("user") or {}).get("login"), r.get("body") or ""
                         ),
                         "comment": r.get("body") or "",
                         "ts_ms": ms(r.get("submitted_at")),
