@@ -1,0 +1,22 @@
+%% Phase 10 (D059-D063): from work in the graph to "who knows this", the truck factor and the key-person alert. Read left to right.
+flowchart LR
+  IS["Issues with components<br/>+ the PRs that FIX them"]:::store
+  PR["Development PRs<br/>grouped by title<br/>(reverts join via REVERTS)"]:::store
+  CO["Reviews · meetings ·<br/>Slack conversations"]:::store
+  AR["Area nodes<br/>17 components<br/>72 work items"]:::code
+  KN["KNOWS edges<br/>degree of authorship<br/>+ recency + discussion"]:::code
+  CB["COLLAB edges<br/>1,157 weighted pairs"]:::code
+  PG["algo.pageRank<br/>(native FalkorDB)"]:::guard
+  TF["Truck factor<br/>per product<br/>CF 4 · EF 3 · VF 3"]:::code
+  WK["who_knows (tool 10)<br/>experts + evidence<br/>vs listed owners"]:::ext
+  AL["key_person alert<br/>Emma Jones: 10 areas<br/>Hannah Johnson: 5"]:::guard
+  IS --> AR
+  PR --> AR
+  AR --> KN
+  CO --> CB
+  CB --> PG
+  KN --> TF
+  KN --> WK
+  PG --> WK
+  TF --> AL
+  TF --> WK
