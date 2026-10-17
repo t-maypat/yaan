@@ -1,0 +1,9 @@
+%% From a fresh clone to a working Lore with no API key (15.1-15.4, D075).
+flowchart LR
+  C["git clone<br/>cp .env.example .env"]:::human --> U["docker compose --profile app<br/>up -d --build<br/>FalkorDB + the API image<br/>(UI built inside)"]:::code
+  U --> S["lore seed --from<br/>snapshot file or URL"]:::code
+  SN[("lore-snapshot.tar.gz<br/>graph DUMP + data/normalized<br/>+ data/extract + manifest")]:::file --> S
+  S --> V{"checks<br/>sha256, node and edge counts,<br/>declared indexes"}:::guard
+  V --> G[("FalkorDB<br/>lore_herb restored,<br/>lore_demo copied")]:::store
+  G --> A["http://127.0.0.1:8000<br/>UI, Inbox, Timeline,<br/>Health, Eval, /mcp tools"]:::ext
+  A -.->|"Ask and ask need<br/>ANTHROPIC_API_KEY"| K["key in .env<br/>(fails loudly without)"]:::human
