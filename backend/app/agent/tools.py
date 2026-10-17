@@ -690,8 +690,8 @@ TOOL_SPECS = [
         "the shortest chain of people who work together, from the owner to the expert), "
         "single_expert, and key_person when "
         "the person is in the product's truck factor (the people whose loss leaves most "
-        "areas with no expert). connectors (best-connected collaborators) appear when no "
-        "expert is left. Use it for who to ask, who is the expert, and who resolved issues "
+        "areas with no expert). connectors (collaborators who bridge groups, then the best "
+        "connected) appear when no expert is left. Use it for who to ask, who is the expert, and who resolved issues "
         "in a component.",
         {
             "topic": {"type": "string", "description": "the component or work, in plain words"},
