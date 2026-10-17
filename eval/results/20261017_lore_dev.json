@@ -1,0 +1,369 @@
+{
+ "run_id": "20261017T1729Z_lore_dev",
+ "system": "lore",
+ "split": "dev",
+ "products": [
+  "CollaborateForce",
+  "ExplainabilityForce",
+  "VizForce"
+ ],
+ "questions": {
+  "answerable": 96,
+  "unanswerable": 104
+ },
+ "categories": {
+  "content": {
+   "n": 32,
+   "score": 73.88
+  },
+  "person": {
+   "n": 19,
+   "score": 88.36
+  },
+  "company": {
+   "n": 11,
+   "score": 88.41
+  },
+  "url": {
+   "n": 34,
+   "score": 82.16
+  }
+ },
+ "avg": 83.2,
+ "unanswerable": 87.5,
+ "herb_script_avg": 25.19,
+ "abstain_rate_answerable": 4.17,
+ "errors": 0,
+ "citations": {
+  "total": 494,
+  "retrieved_pct": 100.0,
+  "quote_ok_pct": 100.0
+ },
+ "latency_s": {
+  "n_uncached": 198,
+  "p50": 9.39,
+  "p95": 19.48,
+  "search_p50_ms": 0.0
+ },
+ "validator": {
+  "answers": 200,
+  "first_answer_problems_pct": 33.0,
+  "repaired_pct": 33.0,
+  "dropped_sentences": 19,
+  "autocited": 21,
+  "turned_into_abstention": 1
+ },
+ "tool_latency_ms": {
+  "decision_lineage": {
+   "calls": 4,
+   "p50": 11.9,
+   "p95": 14.4
+  },
+  "doc_discussion": {
+   "calls": 81,
+   "p50": 11.0,
+   "p95": 13.5
+  },
+  "find_missing": {
+   "calls": 1,
+   "p50": 4.4,
+   "p95": 4.4
+  },
+  "get_artifact": {
+   "calls": 59,
+   "p50": 7.8,
+   "p95": 11.3
+  },
+  "graph_query": {
+   "calls": 7,
+   "p50": 5.3,
+   "p95": 20.7
+  },
+  "issue_reports": {
+   "calls": 1,
+   "p50": 7.9,
+   "p95": 7.9
+  },
+  "links_shared": {
+   "calls": 8,
+   "p50": 4.6,
+   "p95": 5.6
+  },
+  "list_issues": {
+   "calls": 55,
+   "p50": 13.7,
+   "p95": 23.0
+  },
+  "list_prs": {
+   "calls": 72,
+   "p50": 20.5,
+   "p95": 32.4
+  },
+  "person_profile": {
+   "calls": 2,
+   "p50": 14.6,
+   "p95": 18.1
+  },
+  "rank": {
+   "calls": 19,
+   "p50": 5.3,
+   "p95": 7.2
+  },
+  "resolve_entity": {
+   "calls": 66,
+   "p50": 15.4,
+   "p95": 35.9
+  },
+  "search_artifacts": {
+   "calls": 88,
+   "p50": 26.8,
+   "p95": 37.2
+  },
+  "who_knows": {
+   "calls": 26,
+   "p50": 17.0,
+   "p95": 21.7
+  }
+ },
+ "query_latency": {
+  "area_evidence": {
+   "n": 22,
+   "p50_ms": 2.957,
+   "p95_ms": 3.409,
+   "server_p50_ms": 0.31,
+   "server_p95_ms": 0.637
+  },
+  "area_experts": {
+   "n": 22,
+   "p50_ms": 3.475,
+   "p95_ms": 4.259,
+   "server_p50_ms": 0.384,
+   "server_p95_ms": 0.68
+  },
+  "area_owners": {
+   "n": 22,
+   "p50_ms": 2.4,
+   "p95_ms": 3.257,
+   "server_p50_ms": 0.235,
+   "server_p95_ms": 0.334
+  },
+  "artifact_people": {
+   "n": 85,
+   "p50_ms": 2.621,
+   "p95_ms": 4.199,
+   "server_p50_ms": 0.288,
+   "server_p95_ms": 0.547
+  },
+  "artifact_people_detail": {
+   "n": 55,
+   "p50_ms": 4.876,
+   "p95_ms": 7.137,
+   "server_p50_ms": 2.378,
+   "server_p95_ms": 3.11
+  },
+  "artifact_texts": {
+   "n": 257,
+   "p50_ms": 3.217,
+   "p95_ms": 3.998,
+   "server_p50_ms": 0.172,
+   "server_p95_ms": 0.31
+  },
+  "collab_paths": {
+   "n": 13,
+   "p50_ms": 1.836,
+   "p95_ms": 3.028,
+   "server_p50_ms": 0.126,
+   "server_p95_ms": 0.311
+  },
+  "decision_chain": {
+   "n": 4,
+   "p50_ms": 4.402,
+   "p95_ms": 6.736,
+   "server_p50_ms": 0.741,
+   "server_p95_ms": 0.885
+  },
+  "doc_discussion": {
+   "n": 81,
+   "p50_ms": 4.246,
+   "p95_ms": 4.936,
+   "server_p50_ms": 0.474,
+   "server_p95_ms": 0.784
+  },
+  "doc_meetings": {
+   "n": 81,
+   "p50_ms": 2.742,
+   "p95_ms": 3.423,
+   "server_p50_ms": 0.294,
+   "server_p95_ms": 0.467
+  },
+  "find_docs": {
+   "n": 81,
+   "p50_ms": 3.481,
+   "p95_ms": 4.611,
+   "server_p50_ms": 0.241,
+   "server_p95_ms": 0.417
+  },
+  "find_missing": {
+   "n": 1,
+   "p50_ms": 3.82,
+   "p95_ms": 3.82,
+   "server_p50_ms": 0.445,
+   "server_p95_ms": 0.445
+  },
+  "get_artifact": {
+   "n": 55,
+   "p50_ms": 2.937,
+   "p95_ms": 3.843,
+   "server_p50_ms": 0.188,
+   "server_p95_ms": 0.377
+  },
+  "graph_query": {
+   "n": 7,
+   "p50_ms": 2.446,
+   "p95_ms": 3.24,
+   "server_p50_ms": 0.127,
+   "server_p95_ms": 0.186
+  },
+  "issue_reports": {
+   "n": 1,
+   "p50_ms": 6.703,
+   "p95_ms": 6.703,
+   "server_p50_ms": 1.39,
+   "server_p95_ms": 1.39
+  },
+  "lineage_subjects": {
+   "n": 4,
+   "p50_ms": 6.239,
+   "p95_ms": 7.242,
+   "server_p50_ms": 0.37,
+   "server_p95_ms": 0.386
+  },
+  "links_shared": {
+   "n": 8,
+   "p50_ms": 4.038,
+   "p95_ms": 5.247,
+   "server_p50_ms": 0.388,
+   "server_p95_ms": 0.554
+  },
+  "people_by_role": {
+   "n": 66,
+   "p50_ms": 6.576,
+   "p95_ms": 8.808,
+   "server_p50_ms": 3.939,
+   "server_p95_ms": 5.36
+  },
+  "person_activity": {
+   "n": 2,
+   "p50_ms": 3.671,
+   "p95_ms": 4.349,
+   "server_p50_ms": 1.254,
+   "server_p95_ms": 1.664
+  },
+  "person_links": {
+   "n": 2,
+   "p50_ms": 4.847,
+   "p95_ms": 5.494,
+   "server_p50_ms": 1.643,
+   "server_p95_ms": 1.737
+  },
+  "person_profile": {
+   "n": 2,
+   "p50_ms": 3.145,
+   "p95_ms": 3.678,
+   "server_p50_ms": 0.306,
+   "server_p95_ms": 0.493
+  },
+  "person_truck": {
+   "n": 2,
+   "p50_ms": 2.29,
+   "p95_ms": 2.441,
+   "server_p50_ms": 0.052,
+   "server_p95_ms": 0.089
+  },
+  "product_areas": {
+   "n": 26,
+   "p50_ms": 4.157,
+   "p95_ms": 4.675,
+   "server_p50_ms": 0.204,
+   "server_p95_ms": 0.282
+  },
+  "product_issues": {
+   "n": 55,
+   "p50_ms": 12.053,
+   "p95_ms": 17.713,
+   "server_p50_ms": 1.195,
+   "server_p95_ms": 1.891
+  },
+  "product_prs": {
+   "n": 72,
+   "p50_ms": 18.45,
+   "p95_ms": 28.034,
+   "server_p50_ms": 2.124,
+   "server_p95_ms": 3.694
+  },
+  "product_truck": {
+   "n": 22,
+   "p50_ms": 2.0,
+   "p95_ms": 2.828,
+   "server_p50_ms": 0.052,
+   "server_p95_ms": 0.084
+  },
+  "rank_companies": {
+   "n": 16,
+   "p50_ms": 4.883,
+   "p95_ms": 5.611,
+   "server_p50_ms": 0.484,
+   "server_p95_ms": 0.617
+  },
+  "rank_people": {
+   "n": 3,
+   "p50_ms": 5.904,
+   "p95_ms": 6.359,
+   "server_p50_ms": 0.563,
+   "server_p95_ms": 0.642
+  },
+  "resolve_names": {
+   "n": 66,
+   "p50_ms": 6.999,
+   "p95_ms": 23.688,
+   "server_p50_ms": 4.139,
+   "server_p95_ms": 20.792
+  },
+  "resolve_product": {
+   "n": 66,
+   "p50_ms": 2.793,
+   "p95_ms": 3.374,
+   "server_p50_ms": 0.065,
+   "server_p95_ms": 0.13
+  },
+  "search_fulltext": {
+   "n": 87,
+   "p50_ms": 10.288,
+   "p95_ms": 14.639,
+   "server_p50_ms": 5.737,
+   "server_p95_ms": 10.126
+  },
+  "search_vector_scoped": {
+   "n": 87,
+   "p50_ms": 8.215,
+   "p95_ms": 10.827,
+   "server_p50_ms": 3.3,
+   "server_p95_ms": 4.288
+  }
+ },
+ "tokens_per_answer": 1633.2,
+ "cost_usd": {
+  "answers_this_run": 0.5826,
+  "judge_this_run": 0.0174
+ },
+ "models": {
+  "answer": "claude-haiku-5-5",
+  "answer_effort": "medium",
+  "judge": "claude-haiku-5-5",
+  "judge_effort": "low"
+ },
+ "deviations": [
+  "judge claude-haiku-5-5 instead of gpt-4o (D035)",
+  "dev split: 3 products, product-scoped retrieval"
+ ]
+}

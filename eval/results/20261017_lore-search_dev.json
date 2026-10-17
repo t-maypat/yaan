@@ -1,0 +1,127 @@
+{
+ "run_id": "20261017T1735Z_lore-search_dev",
+ "system": "lore-search",
+ "split": "dev",
+ "products": [
+  "CollaborateForce",
+  "ExplainabilityForce",
+  "VizForce"
+ ],
+ "questions": {
+  "answerable": 96,
+  "unanswerable": 104
+ },
+ "categories": {
+  "content": {
+   "n": 32,
+   "score": 18.78
+  },
+  "person": {
+   "n": 19,
+   "score": 44.26
+  },
+  "company": {
+   "n": 11,
+   "score": 0.0
+  },
+  "url": {
+   "n": 34,
+   "score": 36.76
+  }
+ },
+ "avg": 24.95,
+ "unanswerable": 81.73,
+ "herb_script_avg": 6.48,
+ "abstain_rate_answerable": 41.67,
+ "errors": 0,
+ "citations": {
+  "total": 317,
+  "retrieved_pct": 100.0,
+  "quote_ok_pct": 100.0
+ },
+ "latency_s": {
+  "n_uncached": 198,
+  "p50": 13.24,
+  "p95": 21.06,
+  "search_p50_ms": 0.0
+ },
+ "validator": {
+  "answers": 200,
+  "first_answer_problems_pct": 26.5,
+  "repaired_pct": 26.5,
+  "dropped_sentences": 16,
+  "autocited": 18,
+  "turned_into_abstention": 0
+ },
+ "tool_latency_ms": {
+  "get_artifact": {
+   "calls": 770,
+   "p50": 7.7,
+   "p95": 9.8
+  },
+  "search_artifacts": {
+   "calls": 753,
+   "p50": 26.8,
+   "p95": 41.0
+  }
+ },
+ "query_latency": {
+  "artifact_people": {
+   "n": 698,
+   "p50_ms": 2.433,
+   "p95_ms": 3.535,
+   "server_p50_ms": 0.234,
+   "server_p95_ms": 0.339
+  },
+  "artifact_people_detail": {
+   "n": 667,
+   "p50_ms": 4.775,
+   "p95_ms": 6.036,
+   "server_p50_ms": 2.262,
+   "server_p95_ms": 3.406
+  },
+  "artifact_texts": {
+   "n": 241,
+   "p50_ms": 3.197,
+   "p95_ms": 3.976,
+   "server_p50_ms": 0.165,
+   "server_p95_ms": 0.274
+  },
+  "get_artifact": {
+   "n": 668,
+   "p50_ms": 2.799,
+   "p95_ms": 3.832,
+   "server_p50_ms": 0.189,
+   "server_p95_ms": 0.306
+  },
+  "search_fulltext": {
+   "n": 702,
+   "p50_ms": 9.962,
+   "p95_ms": 15.488,
+   "server_p50_ms": 5.555,
+   "server_p95_ms": 10.349
+  },
+  "search_vector_scoped": {
+   "n": 702,
+   "p50_ms": 8.236,
+   "p95_ms": 11.593,
+   "server_p50_ms": 3.303,
+   "server_p95_ms": 4.415
+  }
+ },
+ "tokens_per_answer": 2001.3,
+ "cost_usd": {
+  "answers_this_run": 0.5801,
+  "judge_this_run": 0.0226
+ },
+ "models": {
+  "answer": "claude-haiku-5-5",
+  "answer_effort": "medium",
+  "judge": "claude-haiku-5-5",
+  "judge_effort": "low"
+ },
+ "deviations": [
+  "judge claude-haiku-5-5 instead of gpt-4o (D035)",
+  "dev split: 3 products, product-scoped retrieval"
+ ]
+}

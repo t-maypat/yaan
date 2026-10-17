@@ -1,0 +1,88 @@
+{
+ "run_id": "20261017T1744Z_baseline_dev",
+ "system": "baseline",
+ "split": "dev",
+ "products": [
+  "CollaborateForce",
+  "ExplainabilityForce",
+  "VizForce"
+ ],
+ "questions": {
+  "answerable": 96,
+  "unanswerable": 104
+ },
+ "categories": {
+  "content": {
+   "n": 32,
+   "score": 12.81
+  },
+  "person": {
+   "n": 19,
+   "score": 27.57
+  },
+  "company": {
+   "n": 11,
+   "score": 0.0
+  },
+  "url": {
+   "n": 34,
+   "score": 18.24
+  }
+ },
+ "avg": 14.66,
+ "unanswerable": 73.08,
+ "herb_script_avg": 4.39,
+ "abstain_rate_answerable": 68.75,
+ "errors": 0,
+ "citations": {
+  "total": 428,
+  "retrieved_pct": 100.0,
+  "quote_ok_pct": 97.9
+ },
+ "latency_s": {
+  "n_uncached": 168,
+  "p50": 5.18,
+  "p95": 9.86,
+  "search_p50_ms": 26.3
+ },
+ "validator": null,
+ "tool_latency_ms": null,
+ "query_latency": {
+  "artifact_people": {
+   "n": 200,
+   "p50_ms": 2.991,
+   "p95_ms": 4.173,
+   "server_p50_ms": 0.324,
+   "server_p95_ms": 0.494
+  },
+  "search_fulltext": {
+   "n": 200,
+   "p50_ms": 13.318,
+   "p95_ms": 21.532,
+   "server_p50_ms": 8.07,
+   "server_p95_ms": 13.136
+  },
+  "search_vector_scoped": {
+   "n": 200,
+   "p50_ms": 9.175,
+   "p95_ms": 15.647,
+   "server_p50_ms": 3.108,
+   "server_p95_ms": 4.986
+  }
+ },
+ "tokens_per_answer": 4248.6,
+ "cost_usd": {
+  "answers_this_run": 0.1422,
+  "judge_this_run": 0.023
+ },
+ "models": {
+  "answer": "claude-haiku-5-5",
+  "answer_effort": "medium",
+  "judge": "claude-haiku-5-5",
+  "judge_effort": "low"
+ },
+ "deviations": [
+  "judge claude-haiku-5-5 instead of gpt-4o (D035)",
+  "dev split: 3 products, product-scoped retrieval"
+ ]
+}

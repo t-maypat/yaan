@@ -1,0 +1,51 @@
+{
+ "run_id": "20261017T1749Z_baseline_drift",
+ "system": "baseline",
+ "split": "drift",
+ "products": [
+  "CollaborateForce",
+  "ExplainabilityForce",
+  "VizForce"
+ ],
+ "questions": {
+  "drift": 24
+ },
+ "n": 24,
+ "correct_pct": 54.2,
+ "stale_answer_rate": 6.7,
+ "abstained": 9,
+ "wrong": 1,
+ "by_kind": {
+  "as_of_status": {
+   "n": 10,
+   "correct_pct": 60.0,
+   "stale_answer_rate": 0.0,
+   "abstained": 4,
+   "wrong": 0
+  },
+  "current_status": {
+   "n": 11,
+   "correct_pct": 54.5,
+   "stale_answer_rate": 12.5,
+   "abstained": 3,
+   "wrong": 1
+  },
+  "why": {
+   "n": 3,
+   "correct_pct": 33.3,
+   "stale_answer_rate": 0.0,
+   "abstained": 2,
+   "wrong": 0
+  }
+ },
+ "errors": 0,
+ "tokens_per_answer": 3848.0,
+ "cost_usd": {
+  "answers_this_run": 0.0197,
+  "judge_this_run": 0.0031
+ },
+ "models": {
+  "answer": "claude-haiku-5-5",
+  "judge": "claude-haiku-5-5"
+ }
+}
