@@ -1,0 +1,8 @@
+%% The MCP server (17.1): any MCP client gets Lore's read-only tools, plus ask, over stdio or HTTP.
+flowchart LR
+  CL["MCP client<br/>Claude Code, Claude Desktop,<br/>Cursor, another agent"]:::ext --> T{"Transport<br/>stdio: lore mcp<br/>HTTP: /mcp on the API<br/>(localhost host guard)"}:::guard
+  T --> M["mcp_server.py<br/>tools built from the agent's registry<br/>16 graph tools + ask<br/>(graph_query left out)"]:::code
+  M -->|"a tool call"| CT["loop.call_tool<br/>product id checked,<br/>errors returned to the client"]:::code
+  M -->|"ask"| AG["The whole agent<br/>tools → answer → validator<br/>quotes checked word for word"]:::code
+  CT --> DB[("FalkorDB<br/>read-only queries")]:::store
+  AG --> DB

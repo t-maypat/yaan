@@ -1,0 +1,26 @@
+%% Connectors (Phase 17, D073-D074): company tools in on the left, approved actions out on the right.
+flowchart LR
+  subgraph IN["In: what the team writes"]
+    direction TB
+    S1["Slack message<br/>#vizforce-bugs"]:::ext
+    G1["GitHub PR<br/>+ reviews"]:::ext
+    J1["Jira ticket<br/>status changes, comments"]:::ext
+    N1["Notion page<br/>+ comments"]:::ext
+  end
+  S1 ~~~ G1 ~~~ J1 ~~~ N1
+  IN --> C["Connector<br/>fetch since cursor →<br/>normalize to Lore's artifacts<br/>(Jira status = event, no LLM)"]:::code
+  C --> L["Live path S1–S8<br/>structure, chunks, links,<br/>extraction, fold"]:::code
+  L --> DB[("FalkorDB<br/>lore_demo")]:::store
+  DB --> SE{"Sentinel<br/>rule table"}:::guard
+  SE --> AL["Alert + blast radius<br/>+ drafted actions"]:::file
+  AL --> AP["Approve in Slack<br/>(or the Inbox)"]:::human
+  AP --> D["deliver()<br/>each approved action<br/>to the tool holding its target"]:::code
+  D --> OUT
+  subgraph OUT["Out: where the team will see it"]
+    direction TB
+    J2["Jira comment<br/>on the ticket"]:::ext
+    G2["GitHub comment<br/>on the fix PR"]:::ext
+    N2["Notion comment<br/>on the page"]:::ext
+    S2["Slack message<br/>to the people affected"]:::ext
+  end
+  J2 ~~~ G2 ~~~ N2 ~~~ S2
