@@ -1,0 +1,8 @@
+%% The Timeline (12.4, R2 W4): from a node in the evidence graph to an answer for a past moment.
+flowchart LR
+  N["Click an issue or PR<br/>in the evidence graph"]:::human --> L["GET /decision/{id}/lineage<br/>subject_product.cypher → product<br/>decision_chain.cypher → states"]:::code
+  L --> C["Chain of states<br/>reported → dismissed → reopened<br/>each with valid_from … valid_to"]:::store
+  C --> S["Slider picks moment t<br/>the state whose window holds t<br/>is marked in force"]:::human
+  S --> A["POST /ask<br/>same question + as_of_ms = t"]:::code
+  A --> T["Agent's status tools take as_of<br/>list_issues / list_prs: later items left out<br/>decision_lineage: marks the state in force"]:::store
+  T --> R["Answer for that moment<br/>with an As of badge,<br/>quotes checked as always"]:::file
