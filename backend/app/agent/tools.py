@@ -358,6 +358,142 @@ def links_shared(product_id: str, graph: str | None = None) -> dict:
     return {"product_id": product_id, "links": rows, "cypher": ["links_shared.cypher"]}
 
 
+AREA_MATCH_MIN = 70  # rapidfuzz token-set score for a topic to name an area
+AREA_MATCH_SPREAD = 8  # keep areas within this many points of the best match
+
+
+def match_areas(topic: str, areas: list[dict]) -> list[dict]:
+    """The areas a topic names: best rapidfuzz token-set score over name and aliases."""
+    from rapidfuzz import fuzz
+
+    t = topic.casefold()
+    scored = []
+    for a in areas:
+        names = [a["name"], *(a.get("aliases") or [])]
+        best = max(fuzz.token_set_ratio(t, n.casefold()) for n in names if n)
+        # a subset scores 100 under token-set ("API" in "API & Data Integration Layer"), so
+        # ties go to the closer full string
+        exact = max(fuzz.ratio(t, n.casefold()) for n in names if n)
+        scored.append((best, exact, a))
+    scored.sort(key=lambda x: (-x[0], -x[1], x[2]["id"]))
+    if not scored or scored[0][0] < AREA_MATCH_MIN:
+        return []
+    top = scored[0][0]
+    return [
+        {**a, "match": s} for s, _, a in scored if s >= max(AREA_MATCH_MIN, top - AREA_MATCH_SPREAD)
+    ][:3]
+
+
+def who_knows(topic: str, product_id: str, graph: str | None = None) -> dict:
+    """Tool 10 (10.7, D059): who knows an area of the product best. The topic is matched to
+    the product's areas (bug components and development work items). For each area: the
+    experts by degree-of-authorship with recency (`author` = holds the area), the PRs they
+    wrote there as quotable evidence, the listed owner (who its issues are assigned to), and
+    whether an expert is a key person in the product's truck factor. When no author is left,
+    `connectors` are the best-connected collaborators (PageRank over COLLAB)."""
+    areas = match_areas(
+        topic, db.run("product_areas", {"product_id": product_id, "limit": 500}, graph=graph).rows
+    )
+    cypher = ["product_areas.cypher"]
+    if not areas:
+        return {
+            "topic": topic,
+            "product_id": product_id,
+            "areas": [],
+            "cypher": cypher,
+            "note": "no component or work item of this product matches the topic; "
+            "try search_artifacts",
+        }
+    ids = [a["id"] for a in areas]
+    params = {"ids": ids, "limit": 200}
+    experts = db.run("area_experts", params, graph=graph).rows
+    evidence = db.run("area_evidence", params, graph=graph).rows
+    owners = db.run("area_owners", params, graph=graph).rows
+    truck = (db.run("product_truck", {"product_id": product_id}, graph=graph).rows or [{}])[0]
+    key_people = set(truck.get("truck_people") or [])
+    cypher += [
+        "area_experts.cypher",
+        "area_evidence.cypher",
+        "area_owners.cypher",
+        "product_truck.cypher",
+    ]
+    out_areas = []
+    any_author = False
+    for a in areas:
+        # authors first: an area's author still knows it after the recency score has decayed
+        mine = sorted(
+            (e for e in experts if e["area_id"] == a["id"]),
+            key=lambda e: (not e["author"], -e["score"]),
+        )
+        authors = [e for e in mine if e["author"]]
+        any_author = any_author or bool(authors)
+        ranked = []
+        for e in mine[:6]:
+            prs = [
+                {
+                    "artifact_id": v["artifact_id"],
+                    "number": v["number"],
+                    "title": v["title"],
+                    "ts_iso": v["ts_iso"],
+                }
+                for v in evidence
+                if v["area_id"] == a["id"] and v["person_id"] == e["id"]
+            ][:3]
+            ranked.append(
+                {
+                    "id": e["id"],
+                    "name": e["name"],
+                    "role": e["role"],
+                    "author": e["author"],
+                    "first": e["first"],
+                    "deliveries": e["deliveries"],
+                    "discussion": e["discussion"],
+                    "score": e["score"],
+                    "key_person": e["id"] in key_people,
+                    "evidence": prs,
+                }
+            )
+        assigned = [o for o in owners if o["area_id"] == a["id"]]
+        open_ = [o for o in assigned if o["status"] in UNRESOLVED]
+        listed = open_ or assigned
+        out_areas.append(
+            {
+                "id": a["id"],
+                "name": a["name"],
+                "kind": a["kind"],
+                "match": a["match"],
+                "experts": ranked,
+                "single_expert": len(authors) == 1,
+                "listed_owners": [
+                    {
+                        "id": o["id"],
+                        "name": o["name"],
+                        "role": o["role"],
+                        "issue": o["title"],
+                        "status": o["status"],
+                    }
+                    for o in listed[:5]
+                ],
+            }
+        )
+    out = {
+        "topic": topic,
+        "product_id": product_id,
+        "areas": out_areas,
+        "truck_factor": {
+            "value": truck.get("truck_factor"),
+            "key_people": truck.get("truck_people") or [],
+            "meaning": "removing these people in order leaves more than half of the "
+            "product's areas with no author",
+        },
+        "cypher": cypher,
+    }
+    if not any_author:
+        out["connectors"] = db.run("area_connectors", {"ids": ids, "limit": 5}, graph=graph).rows
+        out["cypher"].append("area_connectors.cypher")
+    return out
+
+
 def agent_search(
     query: str,
     kinds: list[str] | None = None,

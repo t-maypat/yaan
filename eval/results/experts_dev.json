@@ -1,0 +1,190 @@
+{
+ "run_at": "2026-10-17T14:41:41+00:00",
+ "graph": "lore_herb",
+ "questions": 5,
+ "mean": {
+  "lore": {
+   "hit@1": 1.0,
+   "recall@3": 0.87,
+   "recall@5": 0.96
+  },
+  "naive": {
+   "hit@1": 0.0,
+   "recall@3": 0.207,
+   "recall@5": 0.207
+  }
+ },
+ "rows": [
+  {
+   "product": "VizForce",
+   "component": "AI Model & Data Processing Engine",
+   "truth": [
+    "eid_b7702c98",
+    "eid_cc27a0cd"
+   ],
+   "area": "AI Model & Data Processing Engine",
+   "who_knows": [
+    "eid_b7702c98",
+    "eid_cc27a0cd",
+    "eid_bd791efc",
+    "eid_131494b8",
+    "eid_86044ae5"
+   ],
+   "baseline": [
+    "eid_bd791efc",
+    "eid_131494b8",
+    "eid_70223d0a",
+    "eid_ab6f41bc",
+    "eid_86044ae5"
+   ],
+   "lore": {
+    "hit@1": 1.0,
+    "recall@3": 1.0,
+    "recall@5": 1.0
+   },
+   "naive": {
+    "hit@1": 0.0,
+    "recall@3": 0.0,
+    "recall@5": 0.0
+   }
+  },
+  {
+   "product": "VizForce",
+   "component": "User Interface & Rendering Layer",
+   "truth": [
+    "eid_8986ddc3",
+    "eid_dbc6178f",
+    "eid_b7702c98",
+    "eid_13df35ed"
+   ],
+   "area": "User Interface & Rendering Layer",
+   "who_knows": [
+    "eid_b7702c98",
+    "eid_8986ddc3",
+    "eid_dbc6178f",
+    "eid_13df35ed",
+    "eid_0c373165"
+   ],
+   "baseline": [
+    "eid_bd791efc",
+    "eid_131494b8",
+    "eid_70223d0a",
+    "eid_ab6f41bc",
+    "eid_86044ae5"
+   ],
+   "lore": {
+    "hit@1": 1.0,
+    "recall@3": 0.75,
+    "recall@5": 1.0
+   },
+   "naive": {
+    "hit@1": 0.0,
+    "recall@3": 0.0,
+    "recall@5": 0.0
+   }
+  },
+  {
+   "product": "VizForce",
+   "component": "API & Data Integration Layer",
+   "truth": [
+    "eid_dbc6178f",
+    "eid_9e9883de",
+    "eid_70223d0a",
+    "eid_57e922c4",
+    "eid_67036b20"
+   ],
+   "area": "API & Data Integration Layer",
+   "who_knows": [
+    "eid_57e922c4",
+    "eid_dbc6178f",
+    "eid_9e9883de",
+    "eid_70223d0a",
+    "eid_ab6f41bc"
+   ],
+   "baseline": [
+    "eid_bd791efc",
+    "eid_131494b8",
+    "eid_70223d0a",
+    "eid_ab6f41bc",
+    "eid_86044ae5"
+   ],
+   "lore": {
+    "hit@1": 1.0,
+    "recall@3": 0.6,
+    "recall@5": 0.8
+   },
+   "naive": {
+    "hit@1": 0.0,
+    "recall@3": 0.2,
+    "recall@5": 0.2
+   }
+  },
+  {
+   "product": "VizForce",
+   "component": "Database & Data Management System",
+   "truth": [
+    "eid_70223d0a",
+    "eid_c702b642"
+   ],
+   "area": "Database & Data Management System",
+   "who_knows": [
+    "eid_c702b642",
+    "eid_70223d0a",
+    "eid_131494b8",
+    "eid_86044ae5",
+    "eid_bd791efc"
+   ],
+   "baseline": [
+    "eid_bd791efc",
+    "eid_131494b8",
+    "eid_70223d0a",
+    "eid_ab6f41bc",
+    "eid_86044ae5"
+   ],
+   "lore": {
+    "hit@1": 1.0,
+    "recall@3": 1.0,
+    "recall@5": 1.0
+   },
+   "naive": {
+    "hit@1": 0.0,
+    "recall@3": 0.5,
+    "recall@5": 0.5
+   }
+  },
+  {
+   "product": "VizForce",
+   "component": "Security & Authentication",
+   "truth": [
+    "eid_8a3b36d4",
+    "eid_70223d0a",
+    "eid_9685a278"
+   ],
+   "area": "Security & Authentication Module",
+   "who_knows": [
+    "eid_8a3b36d4",
+    "eid_70223d0a",
+    "eid_9685a278",
+    "eid_131494b8",
+    "eid_bd791efc"
+   ],
+   "baseline": [
+    "eid_bd791efc",
+    "eid_131494b8",
+    "eid_70223d0a",
+    "eid_ab6f41bc",
+    "eid_86044ae5"
+   ],
+   "lore": {
+    "hit@1": 1.0,
+    "recall@3": 1.0,
+    "recall@5": 1.0
+   },
+   "naive": {
+    "hit@1": 0.0,
+    "recall@3": 0.333,
+    "recall@5": 0.333
+   }
+  }
+ ]
+}

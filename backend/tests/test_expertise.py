@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from app import db
+from app.agent import tools
 from app.ingest import derive
 from app.ingest import expertise as ex
 
@@ -155,3 +156,36 @@ def test_collab_and_pagerank_on_the_invented_company(empty_graph):
         graph=empty_graph,
     ).rows
     assert edges == [{"w": 2.0, "r": 2}]
+
+
+def test_match_areas_prefers_the_exact_name_over_a_subset():
+    areas = [
+        {"id": "area:V:c:api", "name": "API", "aliases": ["API"]},
+        {"id": "area:V:c:api-data", "name": "API & Data Integration Layer", "aliases": []},
+        {"id": "area:V:c:ui", "name": "User Interface", "aliases": []},
+    ]
+    got = tools.match_areas("API & Data Integration Layer", areas)
+    assert got[0]["id"] == "area:V:c:api-data" and got[0]["match"] == 100
+    assert tools.match_areas("quantum billing", areas) == []
+
+
+@pytest.mark.db
+def test_who_knows_names_the_expert_the_owner_and_the_evidence(empty_graph):
+    db.run_text(FIXTURE.read_text(encoding="utf-8"), label="f", graph=empty_graph, readonly=False)
+    derive.collab(empty_graph, min_w=0.5)
+    derive.expertise(empty_graph)
+    out = tools.who_knows("export module", "Widget", graph=empty_graph)
+    [area] = [a for a in out["areas"] if a["name"] == "Export Module"]
+    top = area["experts"][0]
+    assert (top["id"], top["author"], top["key_person"]) == ("eid_c3", True, True)
+    assert top["evidence"] == [
+        {
+            "artifact_id": "pr:w1",
+            "number": 1,
+            "title": "Speed up export",
+            "ts_iso": "2026-05-01T00:00:02Z",
+        }
+    ]
+    assert {o["id"] for o in area["listed_owners"]} == {"eid_c3"} and area["single_expert"]
+    assert out["truck_factor"]["value"] == 1 and "connectors" not in out
+    assert tools.who_knows("quantum billing", "Widget", graph=empty_graph)["areas"] == []

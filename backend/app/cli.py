@@ -360,6 +360,19 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_bench_experts(args: argparse.Namespace) -> int:
+    from app.eval import experts
+
+    result = experts.bench(args.graph)
+    for r in result["rows"]:
+        area = r["area"] or "-"
+        print(f"{r['component'][:40]:<42}{area:<42}lore {r['lore']}  naive {r['naive']}")
+    print()
+    print(f"{result['questions']} questions; mean {json.dumps(result['mean'])}")
+    print(f"-> {experts.write(result)}")
+    return 0
+
+
 # command -> (help text, handler)
 COMMANDS = {
     "schema": ("create and verify the indexes for a graph (queries/00_schema.cypher)", cmd_schema),
@@ -376,6 +389,10 @@ COMMANDS = {
     "llm-check": ("one tiny LLM call: is the API key set and does it have credit?", cmd_llm_check),
     "eval": ("answer a split's HERB questions and score them (Phase 5)", cmd_eval),
     "eval-report": ("rebuild eval/results/table.md from the results files", cmd_eval_report),
+    "bench-experts": (
+        "who_knows vs HERB's component-expert answers on dev (10.8)",
+        cmd_bench_experts,
+    ),
     "demo": ("reset the demo graph, or inject a synthetic message live (11.6)", cmd_demo),
 }
 
@@ -395,6 +412,7 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--sample", {"type": int, "help": "only N units spread over the products -> _sample"}),
         ("--workers", {"type": int, "default": 6, "help": "parallel LLM calls"}),
     ],
+    "bench-experts": [("--graph", {"help": "graph name (default: LORE_GRAPH)"})],
     "demo": [
         ("action", {"choices": ("reset", "inject")}),
         ("file", {"nargs": "?", "help": "inject: an exports/inject/*.json message"}),
