@@ -37,6 +37,7 @@ DISMISSED = {
     "duplicate",
 }
 CUSTOMER = re.compile(r"\bCUST-\d{4}\b")
+PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
 
 
 def ms(iso: str) -> int:
@@ -214,6 +215,12 @@ class JiraConnector:
             )
         ]
         items = [Item(a, updated_ms=created, events=events)]
+        comments = self._paged(f"/rest/api/3/issue/{key}/comment")
+        # PR links the ticket itself gives, in time order: a resolution names the latest one
+        mentions = [(created, u) for u in PR_URL.findall(description)]
+        for c in comments:
+            mentions += [(ms(c["created"]), u) for u in PR_URL.findall(adf_text(c.get("body")))]
+        mentions.sort()
         for h in self._paged(f"/rest/api/3/issue/{key}/changelog"):
             for change in h.get("items") or []:
                 kind = change_kind(change.get("fromString"), change.get("toString"))
@@ -221,20 +228,19 @@ class JiraConnector:
                     continue
                 who = self.maps.person("jira", (h.get("author") or {}).get("accountId"))
                 stamp = ms(h["created"])
+                named = [u for t, u in mentions if t <= stamp]
+                fix = named[-1:] if kind == "issue_resolved" else []
                 line = (
                     f"Jira {key} '{title}' moved from {change.get('fromString')} to "
                     f"{change.get('toString')}"
                 )
-                body = f"{base.LABEL}] {line} by @{who}."
+                body = f"{base.LABEL}] {line} by @{who}" + (f", fixed by {fix[0]}." if fix else ".")
                 b = self._artifact(key, f"change-{h['id']}", stamp, who, body, channel_name)
-                items.append(
-                    Item(
-                        b,
-                        updated_ms=stamp,
-                        events=[base.structured_event(kind, b, line, who, issue=title)],
-                    )
+                event = base.structured_event(
+                    kind, b, line, who, issue=title, pr=fix[0] if fix else None
                 )
-        for c in self._paged(f"/rest/api/3/issue/{key}/comment"):
+                items.append(Item(b, updated_ms=stamp, events=[event]))
+        for c in comments:
             body = adf_text(c.get("body")).strip()
             who = self.maps.person("jira", (c.get("author") or {}).get("accountId"), body)
             stamp = ms(c["created"])

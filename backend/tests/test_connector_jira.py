@@ -61,8 +61,15 @@ CHANGELOG = {
     ],
 }
 COMMENTS = {
-    "total": 1,
+    "total": 2,
     "comments": [
+        {
+            "id": "8",
+            "author": {"accountId": "acc-hannah"},
+            "created": "2027-03-12T20:00:00.000+0000",
+            "updated": "2027-03-12T20:00:00.000+0000",
+            "body": doc("[synthetic demo] Fix: https://github.com/acme/lore-demo-sandbox/pull/1"),
+        },
         {
             "id": "9",
             "author": {"accountId": "acc-me"},
@@ -119,9 +126,10 @@ def test_a_ticket_becomes_a_report_its_changes_and_its_comments(conn):
     assert ids == [
         "msg:synthetic-jira-VIZ-1-created",
         "msg:synthetic-jira-VIZ-1-change-101",
+        "msg:synthetic-jira-VIZ-1-comment-8",
         "msg:synthetic-jira-VIZ-1-comment-9",
     ]  # To Do -> In Progress states nothing
-    report, done, comment = items
+    report, done, _, comment = items
     a = report.artifact
     assert (a.channel_id, a.meta["channel_name"]) == ("ch-force-d79648", "bug-davidgarcia-VizForce")
     assert a.author_eid == "eid_7017b913"  # the persona in the description's label
@@ -141,6 +149,8 @@ def test_a_ticket_becomes_a_report_its_changes_and_its_comments(conn):
         "eid_9e9883de",
     )
     assert done.artifact.text.startswith("[synthetic demo] Jira VIZ-1")  # labeled (rule 5)
+    # the resolution names the fix PR the ticket's own comment gave: the fold links FIXES
+    assert ev2["pr"] == "https://github.com/acme/lore-demo-sandbox/pull/1"
     assert comment.events is None  # the extractor reads comments like any message
     assert (
         "times out again" in comment.artifact.text and comment.artifact.author_eid == "eid_7017b913"
