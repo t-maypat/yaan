@@ -144,6 +144,9 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         from app.ingest import derive
 
         report["derive_works_on"] = derive.works_on(graph)
+        out = derive.collab(graph)
+        report |= out["report"]
+        print(f"collab: {out['pairs']} pairs; PageRank top {out['top']}", file=sys.stderr)
         out = derive.expertise(graph)
         report |= out["report"]
         print(f"expertise: {out['areas']} areas; truck factor {out['truck']}", file=sys.stderr)

@@ -83,3 +83,81 @@ def expertise(graph: str | None = None) -> dict:
     result = db.run("set_product_truck", {"rows": truck}, graph=graph, readonly=False)
     report["set_product_truck"] = {"rows": len(truck), **result.stats}
     return {"report": report, "truck": truck, "areas": len(areas)}
+
+
+COLLAB_MIN_W = 0.25  # one 55-person meeting adds 1/54 per pair; keep repeated, real collaboration
+
+
+def collab_weights(
+    meetings: list[dict], messages: list[dict], prs: list[dict], reviews: list[dict]
+) -> dict[tuple[str, str], dict]:
+    """Pair weights (a < b) from three signals (10.1, D060): each review links reviewer and PR
+    author (1 per review); each meeting with n attendees adds 1/(n-1) per pair; so does each
+    Slack conversation (channel + HERB's conversation key) with n writers."""
+    from collections import defaultdict
+
+    pairs: dict[tuple[str, str], dict] = defaultdict(
+        lambda: {"w": 0.0, "reviews": 0, "meetings": 0, "chats": 0}
+    )
+
+    def groups(rows, key, member):
+        out = defaultdict(set)
+        for r in rows:
+            out[key(r)].add(r[member])
+        return out
+
+    for kind, by in (
+        ("meetings", groups(meetings, lambda r: r["meeting_id"], "person_id")),
+        (
+            "chats",
+            groups(
+                messages,
+                lambda r: (r["channel_id"], r["message_id"].removeprefix("msg:").split("-", 1)[0]),
+                "person_id",
+            ),
+        ),
+    ):
+        for people in by.values():
+            ps = sorted(people)
+            for i, a in enumerate(ps):
+                for b in ps[i + 1 :]:
+                    pairs[(a, b)]["w"] += 1 / (len(ps) - 1)
+                    pairs[(a, b)][kind] += 1
+    author = {p["id"]: p["author"] for p in prs}
+    for r in reviews:
+        a, b = r["person_id"], author.get(r["pr_id"])
+        if a and b and a != b:
+            key = (min(a, b), max(a, b))
+            pairs[key]["w"] += 1
+            pairs[key]["reviews"] += 1
+    return dict(pairs)
+
+
+def collab(graph: str | None = None, min_w: float = COLLAB_MIN_W) -> dict:
+    """10.1 + 10.4: rebuild COLLAB (both directions, pairs with weight >= min_w), then run
+    FalkorDB's PageRank on it and store each person's score and rank."""
+
+    def read(name: str) -> list[dict]:
+        return db.run(name, {"limit": READ_LIMIT}, graph=graph, timeout_ms=60_000).rows
+
+    pairs = collab_weights(
+        read("collab_meetings"), read("collab_messages"), read("area_prs"), read("area_reviews")
+    )
+    rows = []
+    for (a, b), v in sorted(pairs.items()):
+        if v["w"] >= min_w:
+            v = {**v, "w": round(v["w"], 4)}
+            rows += [{"a": a, "b": b, **v}, {"a": b, "b": a, **v}]
+    report = {
+        "clear_collab": {"rows": 0, **db.run("clear_collab", {}, graph=graph, readonly=False).stats}
+    }
+    if rows:
+        result = db.run("upsert_collab", {"rows": rows}, graph=graph, readonly=False)
+        report["upsert_collab"] = {"rows": len(rows), **result.stats}
+    ranked = db.run("person_pagerank", {"limit": READ_LIMIT}, graph=graph, timeout_ms=60_000).rows
+    scores = [
+        {"id": r["id"], "score": round(r["score"], 6), "rank": n} for n, r in enumerate(ranked, 1)
+    ]
+    result = db.run("set_person_pagerank", {"rows": scores}, graph=graph, readonly=False)
+    report["set_person_pagerank"] = {"rows": len(scores), **result.stats}
+    return {"report": report, "pairs": len(rows) // 2, "top": scores[:5]}

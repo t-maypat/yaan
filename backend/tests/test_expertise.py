@@ -120,3 +120,38 @@ def test_derive_writes_areas_knows_and_the_truck_factor(empty_graph):
     assert issues == [{"n": 3}]
     again = derive.expertise(empty_graph)  # idempotent: cleared and rewritten
     assert again["report"]["upsert_areas"]["rows"] == out["report"]["upsert_areas"]["rows"]
+
+
+def test_collab_weights_split_a_meeting_and_count_each_review():
+    meetings = [{"meeting_id": "m1", "person_id": p} for p in ("a", "b", "c")]
+    messages = [
+        {"message_id": "msg:20270101-0-x", "channel_id": "ch", "person_id": "a"},
+        {"message_id": "msg:20270101-1-y", "channel_id": "ch", "person_id": "b"},
+        {"message_id": "msg:20270102-0-z", "channel_id": "ch", "person_id": "c"},
+    ]
+    prs = [{"id": "pr:1", "author": "a"}]
+    reviews = [{"person_id": "b", "pr_id": "pr:1"}, {"person_id": "b", "pr_id": "pr:1"}]
+    w = derive.collab_weights(meetings, messages, prs, reviews)
+    assert w[("a", "b")] == {"w": 0.5 + 1 + 2, "reviews": 2, "meetings": 1, "chats": 1}
+    assert w[("a", "c")] == {"w": 0.5, "reviews": 0, "meetings": 1, "chats": 0}  # c chatted alone
+
+
+@pytest.mark.db
+def test_collab_and_pagerank_on_the_invented_company(empty_graph):
+    db.run_text(FIXTURE.read_text(encoding="utf-8"), label="f", graph=empty_graph, readonly=False)
+    out = derive.collab(empty_graph, min_w=0.5)
+    assert out["pairs"] == 2  # Bo and Di each reviewed Cy's PR
+    rows = db.run_text(
+        "MATCH (p:Person) WHERE p.pagerank_rank IS NOT NULL "
+        "RETURN p.id AS id, p.pagerank_rank AS rank ORDER BY rank LIMIT 10",
+        label="pr",
+        graph=empty_graph,
+    ).rows
+    assert rows[0]["id"] == "eid_c3"  # the author both reviewers link to
+    edges = db.run_text(
+        "MATCH (:Person {id: 'eid_b2'})-[c:COLLAB]->(:Person {id: 'eid_c3'}) "
+        "RETURN c.w AS w, c.reviews AS r LIMIT 1",
+        label="c",
+        graph=empty_graph,
+    ).rows
+    assert edges == [{"w": 2.0, "r": 2}]
