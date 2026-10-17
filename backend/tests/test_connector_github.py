@@ -156,3 +156,13 @@ def test_issue_fix_prs_finds_the_fixing_pr(empty_graph):
         "issue_fix_prs", {"issue_id": "iss:Widget:abc", "limit": 5}, graph=empty_graph
     ).rows
     assert [r["id"] for r in rows] == ["pr:w1"]
+
+
+@pytest.mark.db
+def test_issue_report_ids_lists_the_reporting_messages(empty_graph):
+    text = (Path(__file__).parent / "fixtures" / "agent_company.cypher").read_text(encoding="utf-8")
+    db.run_text(text, label="agent_company", graph=empty_graph, readonly=False)
+    rows = db.run(
+        "issue_report_ids", {"issue_id": "iss:Widget:abc", "limit": 5}, graph=empty_graph
+    ).rows
+    assert [r["id"] for r in rows] == ["msg:r1"]

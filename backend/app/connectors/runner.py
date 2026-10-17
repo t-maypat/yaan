@@ -115,6 +115,14 @@ def configured(graph: str) -> list[Connector]:
         from app.connectors.slack import SlackConnector
 
         out.append(SlackConnector(WebClient(token=st.slack_bot_token), graph))
+    if st.jira_base_url and st.jira_email and st.jira_api_token and st.jira_project:
+        from app.connectors.jira import JiraConnector
+
+        out.append(
+            JiraConnector(
+                st.jira_base_url, st.jira_email, st.jira_api_token, st.jira_project, graph
+            )
+        )
     if st.github_token and st.github_repo:
         from app.connectors.github import GitHubConnector
 
