@@ -127,6 +127,10 @@ def configured(graph: str) -> list[Connector]:
         from app.connectors.github import GitHubConnector
 
         out.append(GitHubConnector(st.github_token, st.github_repo, graph))
+    if st.notion_token and st.notion_page_id:
+        from app.connectors.notion import NotionConnector
+
+        out.append(NotionConnector(st.notion_token, st.notion_page_id, graph))
     return out
 
 
