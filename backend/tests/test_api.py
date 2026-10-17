@@ -10,6 +10,8 @@ from app.agent import loop
 from app.config import Settings
 from app.sentinel import approve, blast_radius, engine, live
 
+ASKED: list = []  # the as_of_ms each faked answer got
+
 
 def events(text: str) -> list[tuple[str, dict]]:
     out = []
@@ -19,7 +21,8 @@ def events(text: str) -> list[tuple[str, dict]]:
     return out
 
 
-def fake_answer(question, product_id=None, graph=None, on_event=loop._quiet):
+def fake_answer(question, product_id=None, graph=None, on_event=loop._quiet, as_of_ms=None):
+    ASKED.append(as_of_ms)
     on_event("tool_call", {"tool": "list_issues", "input": {"status": "unresolved"}})
     on_event("tool_result", {"tool": "list_issues", "ms": 3.0, "cypher": ["product_issues.cypher"]})
     on_event("answer", {"answer_markdown": f"{question} [1]", "abstain": False})
@@ -170,3 +173,63 @@ def test_ingest_artifact_needs_the_secret(monkeypatch):
     assert client.post("/ingest/artifact", json={}).status_code == 401
     r = client.post("/ingest/artifact", json={}, headers={"X-Lore-Secret": "s3"})
     assert r.json() == {"ok": True}
+
+
+def test_ask_passes_the_timelines_as_of_moment(monkeypatch):
+    monkeypatch.setattr(loop, "answer", fake_answer)
+    monkeypatch.setattr(main, "ask_limiter", main.RateLimiter(10))
+    client = TestClient(main.app)
+    body = {"question": "Status?", "product_id": "W", "as_of_ms": 1_800_000_000_000}
+    client.post("/ask", json=body)
+    assert ASKED[-1] == 1_800_000_000_000
+    assert client.post("/ask", json={"question": "Status?", "as_of_ms": -1}).status_code == 422
+
+
+def fake_db(tables):
+    """db.run faked by query name: tables = {name: rows}."""
+    return lambda name, params, **k: type("R", (), {"rows": tables[name]})
+
+
+def test_lineage_finds_the_subjects_product_and_404s_otherwise(monkeypatch):
+    from app.agent import tools
+
+    calls = []
+
+    def lineage(subject, product, as_of_ms, graph):
+        calls.append((subject, product, as_of_ms))
+        return {"subjects": [{"id": subject}], "cypher": ["decision_chain.cypher"]}
+
+    monkeypatch.setattr(tools, "decision_lineage", lineage)
+    monkeypatch.setattr(main.db, "run", fake_db({"subject_product": [{"product_id": "W"}]}))
+    client = TestClient(main.app)
+    r = client.get("/decision/iss:W:abc/lineage?as_of_ms=5")
+    assert r.status_code == 200 and calls == [("iss:W:abc", "W", 5)]
+    assert r.json()["cypher"] == ["subject_product.cypher", "decision_chain.cypher"]
+    assert client.get("/decision/eid_1/lineage").status_code == 404  # not an issue or PR
+    monkeypatch.setattr(main.db, "run", fake_db({"subject_product": [{"product_id": None}]}))
+    assert client.get("/decision/pr:nope/lineage").status_code == 404
+
+
+def test_entity_counts_links_and_profiles_people(monkeypatch):
+    from app.agent import tools
+
+    card = {"labels": ["Person", "Entity"], "props": {"id": "eid_1", "name": "Ann"}}
+    rows = [{**card, "rels": ["AUTHORED", "AUTHORED", "REVIEWED"]}]
+    monkeypatch.setattr(main.db, "run", fake_db({"entity_card": rows}))
+    monkeypatch.setattr(tools, "person_profile", lambda p, product, graph: {"person": p})
+    out = TestClient(main.app).get("/entity/eid_1").json()
+    assert out["links"] == {"AUTHORED": 2, "REVIEWED": 1} and out["profile"] == {"person": "eid_1"}
+    assert TestClient(main.app).get("/entity/msg:1").status_code == 404  # an artifact
+    monkeypatch.setattr(main.db, "run", fake_db({"entity_card": []}))
+    assert TestClient(main.app).get("/entity/nobody").status_code == 404
+
+
+def test_graph_health_and_eval_latest(monkeypatch):
+    from app.ingest import health
+
+    monkeypatch.setattr(health, "report", lambda graph: {"total_nodes": 7})
+    assert TestClient(main.app).get("/graph/health").json()["total_nodes"] == 7
+    out = TestClient(main.app).get("/eval/latest").json()  # the committed eval/results files
+    systems = {r["system"] for r in out["systems"]}
+    assert {"baseline", "lore", "lore-search"} <= systems
+    assert out["drift"]["lore"]["split"] == "drift" and out["reference"]["avg"] == 43.41

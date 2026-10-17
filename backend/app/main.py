@@ -4,6 +4,10 @@ Phase 12 step 1 (R1-8): `/ask` streams the agent's fixed event sequence as Serve
 Events: `tool_call`, `tool_result` (one pair per tool), `answer`, `citations`, `subgraph`,
 then `done`, or `error` if the agent fails (fail loudly: no canned fallback answer).
 
+R2 W4: `/ask` takes `as_of_ms` (the Timeline's slider re-asks for the state at a moment);
+`/decision/{id}/lineage`, `/entity/{id}`, `/graph/health` and `/eval/latest` serve the
+Timeline, the entity panel and the Graph Health and Eval pages (12.1, 12.4, 12.6).
+
 Step 2 (with Phase 11): the Inbox (`/alerts`, `/alerts/detail`, `/alerts/approve`,
 `/alerts/dismiss`) and the live demo (`/demo/injections`, `/demo/inject/{name}`, `/demo/reset`;
 `/ingest/artifact` behind a secret header). Everything reads and writes `LORE_API_GRAPH`
@@ -16,11 +20,11 @@ import json
 import queue
 import threading
 import time
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from collections.abc import Iterator
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -80,9 +84,14 @@ def demo_write(request: Request, work):
         raise HTTPException(409, str(e)) from e
 
 
+MAX_MS = 4_102_444_800_000  # 2100-01-01: epoch ms beyond this is a unit mistake
+
+
 class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=500)
     product_id: str | None = Field(default=None, max_length=100)
+    # the Timeline's as-of slider (12.4): answer for the state at this moment (UTC epoch ms)
+    as_of_ms: int | None = Field(default=None, ge=0, le=MAX_MS)
 
 
 def sse(name: str, data: Any) -> str:
@@ -105,6 +114,7 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
                 body.product_id,
                 graph=graph(),
                 on_event=lambda n, d: events.put((n, d)),
+                as_of_ms=body.as_of_ms,
             )
         except Exception as e:  # shown to the viewer as an error event, never a fake answer
             events.put(("error", {"error": type(e).__name__, "message": str(e)[:500]}))
@@ -131,6 +141,77 @@ def artifact(artifact_id: str) -> dict:
     if "error" in out:
         raise HTTPException(404, out["error"])
     return out
+
+
+@app.get("/decision/{subject_id}/lineage")
+def decision_lineage(
+    subject_id: str, as_of_ms: int | None = Query(default=None, ge=0, le=MAX_MS)
+) -> dict:
+    """How an issue's or PR's state changed, who decided each step and why (agent tool 6),
+    for the Timeline (12.4). The product comes from the subject itself."""
+    from app.agent import tools
+
+    if not subject_id.startswith(("iss:", "pr:")):
+        raise HTTPException(404, "a lineage belongs to an issue (iss:…) or a pull request (pr:…)")
+    rows = db.run("subject_product", {"id": subject_id}, graph=graph()).rows
+    product = rows[0]["product_id"] if rows else None
+    if not product:
+        raise HTTPException(404, f"no issue or pull request {subject_id!r} in the graph")
+    out = tools.decision_lineage(subject_id, product, as_of_ms, graph())
+    if not out["subjects"]:
+        raise HTTPException(404, f"{subject_id!r} has no recorded states")
+    out["cypher"] = ["subject_product.cypher", *out["cypher"]]
+    return out
+
+
+@app.get("/entity/{entity_id}")
+def entity(entity_id: str, product_id: str | None = Query(default=None, max_length=100)) -> dict:
+    """One person, customer, company, product, issue or area: its properties and links
+    counted by type; a person also gets their profile (agent tool 4). Artifacts have
+    `/artifact/{id}`."""
+    from app.agent import loop, tools
+
+    if loop.ARTIFACT_ID.match(entity_id):
+        raise HTTPException(404, f"{entity_id!r} is an artifact: use /artifact/{entity_id}")
+    rows = db.run("entity_card", {"id": entity_id}, graph=graph()).rows
+    if not rows:
+        raise HTTPException(404, f"no entity {entity_id!r} in the graph")
+    row = rows[0]
+    out: dict[str, Any] = {
+        "id": entity_id,
+        "labels": row["labels"],
+        "properties": row["props"],
+        "links": dict(Counter(row["rels"]).most_common()),
+        "cypher": ["entity_card.cypher"],
+    }
+    if "Person" in row["labels"]:
+        out["profile"] = tools.person_profile(entity_id, product_id, graph())
+    return out
+
+
+@app.get("/graph/health")
+def graph_health() -> dict:
+    """The Graph Health page (12.6): node and edge counts, isolated nodes, PR chains,
+    duplicate ids, unresolved mentions (Phase 3 health report) on the API's graph."""
+    from app.ingest import health
+
+    return {"graph": graph(), **health.report(graph())}
+
+
+@app.get("/eval/latest")
+def eval_latest() -> dict:
+    """The Eval page (12.6): the newest results per system (eval/results/*.json), their
+    HERB-Drift rows, the who_knows benchmark and HERB's published reference row."""
+    from app.eval import report
+
+    latest, drift = report.latest_results()
+    experts = report.results_dir() / "experts_dev.json"
+    return {
+        "systems": [r for _, r in sorted(latest.items())],
+        "drift": drift,
+        "experts": json.loads(experts.read_text(encoding="utf-8")) if experts.is_file() else None,
+        "reference": report.HERB_REF,
+    }
 
 
 @app.get("/products")

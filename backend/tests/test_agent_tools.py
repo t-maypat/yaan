@@ -143,6 +143,23 @@ def test_call_tool_refuses_a_product_id_the_graph_lacks(company):
     assert loop.call_tool("list_prs", {"product_id": ""}, scope)["prs"]  # "" = the question's
 
 
+def test_subject_product_names_an_issues_or_prs_product(company):
+    one = lambda i: db.run("subject_product", {"id": i}, graph=company).rows[0]["product_id"]  # noqa: E731
+    assert one("iss:Widget:abc") == "Widget" and one("pr:w1") == "Widget"
+    assert one("pr:nope") is None
+
+
+def test_entity_card_finds_any_entity_kind_by_id(company):
+    card = lambda i: db.run("entity_card", {"id": i}, graph=company).rows  # noqa: E731
+    [person] = card("eid_b2")
+    assert "Person" in person["labels"] and person["props"]["id"] == "eid_b2"
+    assert "AUTHORED" in person["rels"]
+    [co] = card("co:blue-wave")
+    assert co["props"]["name"] == "Blue Wave" and "Company" in co["labels"]
+    assert card("iss:Widget:abc")[0]["props"]["title"] == "Slow export"
+    assert card("nobody") == []
+
+
 def test_list_products_gives_codenames_and_counts_for_the_picker(company):
     rows = db.run("list_products", {"limit": 10}, graph=company).rows
     assert [r["id"] for r in rows] == ["Gadget", "Widget"]
@@ -163,6 +180,8 @@ INDEXED = {
     "product_issues": {"product_id": "W", "status": None, "limit": 1},
     "links_shared": {"product_id": "W", "limit": 1},
     "people_by_role": {"product_id": "W", "role": "x", "k": 1},
+    "subject_product": {"id": "x"},
+    "entity_card": {"id": "x"},
 }
 
 

@@ -241,11 +241,14 @@ def results_dir() -> Path:
     return get_settings().eval_dir / "results"
 
 
-def table(paths: list[Path] | None = None) -> str:
-    """The §7.4 markdown table from every results file (newest file per system and split)."""
+def latest_results(
+    paths: list[Path] | None = None,
+) -> tuple[dict[tuple[str, str], dict], dict[str, dict]]:
+    """The newest results file per (system, split), and per system its newest HERB-Drift
+    result. Shared by the markdown table and the API's Eval page (`/eval/latest`)."""
     paths = paths or sorted(results_dir().glob("*.json"))
     latest: dict[tuple[str, str], dict] = {}
-    drift: dict[str, dict] = {}  # system -> its latest HERB-Drift result (the stale column)
+    drift: dict[str, dict] = {}
     for p in paths:  # names start with the date, so a later file replaces an earlier one
         r = json.loads(p.read_text(encoding="utf-8"))
         if "system" not in r:  # e.g. experts_dev.json (10.8), not a system run
@@ -254,6 +257,12 @@ def table(paths: list[Path] | None = None) -> str:
             drift[r["system"]] = r
         else:
             latest[(r["system"], r["split"])] = r
+    return latest, drift
+
+
+def table(paths: list[Path] | None = None) -> str:
+    """The §7.4 markdown table from every results file (newest file per system and split)."""
+    latest, drift = latest_results(paths)
     head = [
         "System",
         *[label for _, label in CATEGORIES],
