@@ -20,6 +20,7 @@ class Settings(BaseSettings):
         "127.0.0.1"  # not "localhost": on Windows it tries IPv6 first, +2 s per connection
     )
     falkordb_port: int = 6379
+    falkordb_tag: str = "unknown"  # the pinned image (D009); snapshots record it
     lore_graph: str = "lore_herb"
     lore_demo_graph: str = "lore_demo"
     # The graph the API serves (Ask, Inbox, live demo). Eval and batch ingest use lore_graph.

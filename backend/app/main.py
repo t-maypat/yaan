@@ -387,3 +387,12 @@ def health(response: Response) -> dict[str, str]:
         response.status_code = 503
         return {"status": "unavailable", "version": __version__, "falkordb": type(e).__name__}
     return {"status": "ok", "version": __version__, "falkordb": "ok"}
+
+
+# The built web UI (the Docker image, R2 W6). Mounted last, so every API route above wins; in
+# development Vite serves the UI and proxies the API instead.
+DIST = REPO_ROOT / "frontend" / "dist"
+if DIST.is_dir():
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/", StaticFiles(directory=DIST, html=True), name="web")

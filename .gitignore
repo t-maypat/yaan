@@ -31,3 +31,6 @@ Thumbs.db
 # Claude Code: personal settings only (project commands in .claude/commands are shared)
 .claude/settings.local.json
 CLAUDE.local.md
+
+# Snapshots: ~45 MB, published as a release asset (lore seed --from <url>)
+snapshots/*.tar.gz

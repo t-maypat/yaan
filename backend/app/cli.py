@@ -10,9 +10,7 @@ import json
 import sys
 
 # command -> (docs/PLAN.md phase that builds it, help text)
-PENDING: dict[str, tuple[str, str]] = {
-    "seed": ("Phase 15", "rebuild the demo graph from exports/ without LLM calls"),
-}
+PENDING: dict[str, tuple[str, str]] = {}
 
 
 def cmd_schema(args: argparse.Namespace) -> int:
@@ -406,6 +404,34 @@ def cmd_bench_experts(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_snapshot(args: argparse.Namespace) -> int:
+    import json
+
+    from app import snapshot
+
+    try:
+        out = snapshot.snapshot(tuple(args.graphs) if args.graphs else None)
+    except (snapshot.SnapshotError, OSError) as e:
+        print(f"lore snapshot: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(out, indent=1))
+    return 0
+
+
+def cmd_seed(args: argparse.Namespace) -> int:
+    import json
+
+    from app import snapshot
+
+    try:
+        out = snapshot.seed(args.source or snapshot.SNAPSHOT, force=args.force)
+    except (snapshot.SnapshotError, OSError) as e:
+        print(f"lore seed: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(out, indent=1, default=str))
+    return 0
+
+
 def cmd_mcp(args: argparse.Namespace) -> int:
     """Serve Lore's tools over MCP on stdin/stdout, e.g. for Claude Code:
     claude mcp add lore -- uv run --project backend lore mcp"""
@@ -494,6 +520,8 @@ COMMANDS = {
     ),
     "demo": ("reset the demo graph, or inject a synthetic message live (11.6)", cmd_demo),
     "mcp": ("serve Lore's read-only tools (and ask) over MCP on stdio (17.1)", cmd_mcp),
+    "snapshot": ("save the graph + live-path data to snapshots/ (no LLM; 15.2)", cmd_snapshot),
+    "seed": ("restore a snapshot (file or URL) and the demo graph, no API key (15.2)", cmd_seed),
     "connectors": (
         "company tools in, approved actions out: sync once, run, or status (17.2)",
         cmd_connectors,
@@ -539,6 +567,11 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--baseline", {"action": "store_true", "help": "hybrid RAG, no graph tools"}),
         ("--product", {"help": "product id, e.g. VizForce"}),
         ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
+    ],
+    "snapshot": [("--graphs", {"nargs": "+", "help": "graphs to save (default: LORE_GRAPH)"})],
+    "seed": [
+        ("--from", {"dest": "source", "help": "snapshot path or URL (default: snapshots/)"}),
+        ("--force", {"action": "store_true", "help": "replace existing graphs and files"}),
     ],
     "connectors": [
         ("action", {"choices": ("sync", "run", "status", "seed"), "help": "what to do"}),

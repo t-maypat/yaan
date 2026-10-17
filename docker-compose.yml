@@ -1,6 +1,6 @@
 # Local stack: FalkorDB + Browser. The image's run.sh starts
 #   redis-server $REDIS_ARGS --protected-mode no --dir /var/lib/falkordb/data --loadmodule falkordb.so $FALKORDB_ARGS
-# Phase 15 adds the api, web and TLS proxy services for deployment.
+# Profile `app` adds the API serving the built UI (R2 W6); a TLS proxy is the deployment's.
 name: lore
 
 services:
@@ -49,6 +49,25 @@ services:
       retries: 20
     # always: comes back whenever Docker starts, e.g. after a reboot or a Docker Desktop quit (D034).
     restart: always
+
+  # The API with the built web UI (R2 W6): docker compose --profile app up -d --build
+  # Seed it once, no API key needed: docker compose --profile app run --rm api lore seed --from <path or URL>
+  api:
+    profiles: ["app"]
+    build: .
+    image: lore-api
+    env_file: .env
+    environment:
+      FALKORDB_HOST: falkordb # the service name, inside the compose network
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000" # put a TLS proxy in front for a public deployment
+    volumes:
+      - ./data:/app/data # embedding model, caches, the live path's data (seeded)
+      - ./snapshots:/app/snapshots
+    restart: unless-stopped
 
 volumes:
   falkordb-data:

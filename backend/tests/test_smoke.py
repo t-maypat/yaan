@@ -48,8 +48,8 @@ def test_paths_resolve_from_repo_root():
     assert (get_settings().queries_dir / "00_schema.cypher").is_file()
 
 
-@pytest.mark.parametrize("command", sorted(PENDING))
-def test_unbuilt_commands_fail_loudly(command, capsys):
-    assert main([command]) == 2
-    phase, _ = PENDING[command]
-    assert phase in capsys.readouterr().err
+def test_unbuilt_commands_fail_loudly(capsys, monkeypatch):
+    # every planned command is built now (seed was last, 15.2); the guard still has to hold
+    monkeypatch.setitem(PENDING, "teleport", ("Phase 99", "not a real command"))
+    assert main(["teleport"]) == 2
+    assert "Phase 99" in capsys.readouterr().err

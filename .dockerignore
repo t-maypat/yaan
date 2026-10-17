@@ -1,0 +1,15 @@
+# Keep the build context small and secret-free.
+.env
+.env.*
+.git
+data/
+snapshots/
+third_party/
+eval/runs/
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+frontend/dist
+docs/img

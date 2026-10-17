@@ -153,7 +153,9 @@ def test_only_the_labeled_injection_files_can_be_injected(monkeypatch):
     ok = client.post("/demo/inject/02-unauthorized-dismissal").json()
     assert ok == {"artifact_id": "msg:synthetic-20270309-2"}
     assert client.post("/demo/inject/nope").status_code == 404
-    assert client.post("/demo/inject/..%2F..%2F.env").status_code == 404
+    # refused either way: no route matches it, and the built UI's static files take no POST
+    assert client.post("/demo/inject/..%2F..%2F.env").status_code in (404, 405)
+    assert client.get("/..%2F.env").status_code == 404  # static files stay inside frontend/dist
 
 
 def test_demo_writes_are_rate_limited(monkeypatch):
