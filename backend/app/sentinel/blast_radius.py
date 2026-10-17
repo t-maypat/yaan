@@ -76,6 +76,15 @@ def person_radius(person_id: str, *, graph: str | None = None, limit: int = 50) 
             backups.setdefault(r["via"], []).append(r)
     for area_backups in backups.values():
         area_backups.sort(key=lambda r: -float(r["detail"] or 0))
+    # how close each area's best backup already is to the person (shortestPath, D065)
+    from app.agent.tools import collab_paths
+
+    best = {b[0]["id"] for b in backups.values() if b}
+    paths = collab_paths([(person_id, b) for b in sorted(best)], graph)
+    for r in rows:
+        if r["why"] == "could_back_up" and r["id"] in best:
+            names = paths.get((person_id, r["id"])) or []
+            r["hops"] = len(names) - 1 if names else None
     return {
         "person_id": person_id,
         "areas": [r for r in rows if r["why"] == "only_expert"],

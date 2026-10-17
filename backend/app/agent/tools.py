@@ -384,6 +384,19 @@ def match_areas(topic: str, areas: list[dict]) -> list[dict]:
     ][:3]
 
 
+def collab_paths(pairs: list[tuple[str, str]], graph: str | None = None) -> dict[tuple, list]:
+    """Shortest COLLAB paths (<= 4 hops, FalkorDB shortestPath) for (from, to) person pairs:
+    {(a, b): [names along the path]}; an empty list when they aren't connected (D065)."""
+    if not pairs:
+        return {}
+    rows = db.run(
+        "collab_paths",
+        {"pairs": [{"a": a, "b": b} for a, b in pairs], "limit": 200},
+        graph=graph,
+    ).rows
+    return {(r["a"], r["b"]): r["names"] for r in rows}
+
+
 def who_knows(topic: str, product_id: str, graph: str | None = None) -> dict:
     """Tool 10 (10.7, D059): who knows an area of the product best. The topic is matched to
     the product's areas (bug components and development work items). For each area: the
@@ -476,6 +489,32 @@ def who_knows(topic: str, product_id: str, graph: str | None = None) -> dict:
                 ],
             }
         )
+    # how each area's first listed owner reaches its top expert, when they differ (D065)
+    pairs = []
+    for a in out_areas:
+        if (
+            a["listed_owners"]
+            and a["experts"]
+            and a["listed_owners"][0]["id"] != a["experts"][0]["id"]
+        ):
+            pairs.append((a["listed_owners"][0]["id"], a["experts"][0]["id"]))
+    paths = collab_paths(pairs, graph)
+    for a in out_areas:
+        if a["listed_owners"] and a["experts"]:
+            owner, expert = a["listed_owners"][0], a["experts"][0]
+            if owner["id"] == expert["id"]:
+                a["owner_is_expert"] = True
+            else:
+                names = paths.get((owner["id"], expert["id"])) or []
+                a["owner_is_expert"] = False
+                a["owner_to_expert"] = {
+                    "owner": owner["name"],
+                    "expert": expert["name"],
+                    "path": names,
+                    "hops": len(names) - 1 if names else None,
+                }
+    if pairs:
+        cypher.append("collab_paths.cypher")
     out = {
         "topic": topic,
         "product_id": product_id,
@@ -647,7 +686,9 @@ TOOL_SPECS = [
         "or a development work item (e.g. 'GraphQL schema versioning'). For each matching "
         "area: experts ranked by degree of authorship (author = holds the area; deliveries = "
         "bugs fixed or PRs written there) with the PRs they wrote as evidence to cite, the "
-        "listed owners (who its issues are assigned to), single_expert, and key_person when "
+        "listed owners (who its issues are assigned to), owner_to_expert (when they differ: "
+        "the shortest chain of people who work together, from the owner to the expert), "
+        "single_expert, and key_person when "
         "the person is in the product's truck factor (the people whose loss leaves most "
         "areas with no expert). connectors (best-connected collaborators) appear when no "
         "expert is left. Use it for who to ask, who is the expert, and who resolved issues "

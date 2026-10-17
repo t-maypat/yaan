@@ -130,6 +130,7 @@ export type RadiusRow = {
   via: string | null;
   detail: string | null;
   quote: string | null;
+  hops?: number | null; // a key person's backup: COLLAB hops to them (null = not connected)
 };
 export type Radius = {
   people: Notified[];

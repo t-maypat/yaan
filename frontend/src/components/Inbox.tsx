@@ -428,7 +428,9 @@ function RadiusList({ detail }: { detail: AlertDetail }) {
   const open = radius.open_issues_same_component;
   if (isPersonAlert(detail.alert)) {
     const areas = radius.rows.filter((r) => r.why === "only_expert");
-    const backup = (aid: string) => radius.rows.find((r) => r.why === "could_back_up" && r.via === aid)?.name;
+    const backup = (aid: string) => radius.rows.find((r) => r.why === "could_back_up" && r.via === aid);
+    const closeness = (h: number | null | undefined) =>
+      h === 1 ? "works with them directly" : h ? `${h} hops away` : "no working tie yet";
     return (
       <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 mt-5 text-[0.92rem]">
         <div>
@@ -438,7 +440,9 @@ function RadiusList({ detail }: { detail: AlertDetail }) {
               {areas.map((a) => (
                 <li key={a.id}>
                   {a.name}
-                  <span className="text-muted">, {backup(a.id) ? `next: ${backup(a.id)}` : "nobody else on record"}</span>
+                  <span className="text-muted">
+                    , {backup(a.id) ? `next: ${backup(a.id)?.name} (${closeness(backup(a.id)?.hops)})` : "nobody else on record"}
+                  </span>
                 </li>
               ))}
             </ul>
