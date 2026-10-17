@@ -6,7 +6,7 @@ import { type EvalLatest, getEvalLatest, type SystemResult } from "../api";
 
 const SYSTEM_WORDS: Record<string, string> = {
   lore: "Lore",
-  "lore-unvalidated": "Lore without the citation validator",
+  "lore-unvalidated": "Lore's first answers, as written (no validator, no abstention line)",
   "lore-search": "Lore without graph tools (search and read only)",
   baseline: "Plain RAG baseline",
 };

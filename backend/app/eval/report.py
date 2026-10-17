@@ -299,6 +299,11 @@ def table(paths: list[Path] | None = None) -> str:
         "reference row is HERB's published product-specific result: a different answer "
         "model and setup, so context only.",
         "",
+        "lore-unvalidated scores the same run's first answers as the model wrote them: no "
+        "citation validator and no fixed abstention line. Its low Unanswerable comes mostly from "
+        "the line: the model abstained on its own in all 91 declines, but its abstentions often "
+        "explain near-misses, which HERB's judge counts as attempts (D076).",
+        "",
         "Run-to-run spread: answers are sampled (Haiku 5.5 takes no temperature), so one dev run "
         "of the same system moves by a few Avg points. The baseline scored 16.4 and 13.8 on two "
         "13 Oct runs; between them only the search changed (4.9). Per question, scores moved "
