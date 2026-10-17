@@ -863,6 +863,7 @@ dependencies = [
     { name = "mcp" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pyyaml" },
     { name = "rapidfuzz" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -885,6 +886,7 @@ requires-dist = [
     { name = "mcp", specifier = ">=2.3.0" },
     { name = "pydantic", specifier = ">=2.6" },
     { name = "pydantic-settings", specifier = ">=2.2" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "rapidfuzz", specifier = ">=3.14.6" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29" },
 ]

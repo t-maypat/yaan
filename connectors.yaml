@@ -1,0 +1,17 @@
+# Connector maps (Phase 17, D073-D074). The demo sandboxes play VizForce's team and hold only
+# labeled synthetic items ("[synthetic demo …]"); everything they send lands in the demo graph.
+# A seeded item can name the person it is written as: "[synthetic demo · as Name (eid_…)]".
+product: VizForce
+default_person: eid_bd791efc        # David Garcia, Engineering Lead: who an unmapped account plays
+slack:
+  channels:                          # Slack channel name -> the VizForce channel it plays
+    vizforce-bugs: ch-force-d79648    # bug-davidgarcia-VizForce
+  alerts_channel: lore-alerts        # alert cards with Approve / Dismiss, and notifications
+  people: {}                         # Slack user id -> eid
+github:
+  people: {}                         # GitHub login -> eid
+jira:
+  channel: ch-force-d79648           # ticket changes are filed as messages in this channel
+  people: {}                         # Jira account id -> eid
+notion:
+  people: {}                         # Notion user id -> eid

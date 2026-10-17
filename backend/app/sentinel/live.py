@@ -16,6 +16,12 @@ live message folds over them too; `reset_demo` copies lore_herb into lore_demo (
 and clears that folder.
 
 Writes go to the demo graph only: `ingest` and `reset_demo` refuse the main graph.
+
+`ingest_artifact` (17.2, D074) is the same path for any artifact a connector brings: a message,
+a pull request, a document. A connector may pass deterministic `events` (a Jira status change
+is a structured fact, so no LLM reads it; each quote is still checked against the text), and
+`replace=True` re-ingests a newer version of an artifact already in the graph (a PR that got a
+review): its old row and events are swapped out before the fold runs again.
 """
 
 import json
@@ -25,13 +31,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from app import db
+from app import db, llm
 from app.config import get_settings
 from app.ingest import chunk_embed, extract, fold, linker, resolve, structural
 from app.ingest.normalize import Artifact, normalized_dir, parse_ts, read_jsonl
 from app.sentinel import engine
 
 SYNTHETIC_PREFIX = "msg:synthetic-"
+LIVE_KINDS = ("message", "pr", "doc")
 
 
 class LiveError(ValueError):
@@ -88,20 +95,42 @@ def artifact(msg: dict[str, Any]) -> Artifact:
 
 def ingest(msg: dict[str, Any], graph: str | None = None) -> dict[str, Any]:
     """Run one message through S1-S8 and the Sentinel; return the new alerts and the lag."""
+    return ingest_artifact(artifact(msg), graph)
+
+
+def check_synthetic(artifact_id: str) -> None:
+    """Rule 5: everything live is a labeled synthetic item, id `<kind>:synthetic-…`."""
+    if not artifact_id.partition(":")[2].startswith("synthetic-"):
+        raise LiveError(f"live ids must look like '<kind>:synthetic-…' (rule 5): {artifact_id!r}")
+
+
+def ingest_artifact(
+    a: Artifact,
+    graph: str | None = None,
+    events: list[dict[str, Any]] | None = None,
+    replace: bool = False,
+) -> dict[str, Any]:
+    """Run one artifact (message, PR or doc) through S1-S8 and the Sentinel; return the new
+    alerts and the lag. `events` skips the LLM; `replace` swaps in a newer version."""
     graph = demo_graph(graph)
     received_ms = int(time.time() * 1000)
     t0 = time.perf_counter()
     stages: dict[str, float] = {}
 
-    a = artifact(msg)
     product = a.product_hint
     meta = _metadata()
+    check_synthetic(a.id)
+    if a.kind not in LIVE_KINDS:
+        raise LiveError(f"live ingestion takes {LIVE_KINDS}, not {a.kind!r}")
     if a.author_eid not in meta.employees:
         raise LiveError(f"unknown author {a.author_eid!r}")
-    if a.id in injected_ids(graph):
+    seen = injected_ids(graph)
+    if a.id in seen and not replace:
         raise LiveError(f"{a.id!r} is already in {graph!r}: run `lore demo reset` to replay it")
-    if not db.run("get_channel", {"id": a.channel_id}, graph=graph).rows:
+    if a.channel_id and not db.run("get_channel", {"id": a.channel_id}, graph=graph).rows:
         raise LiveError(f"channel {a.channel_id!r} is not in {graph!r}: run `lore demo reset`")
+    if a.kind == "message" and not a.channel_id:
+        raise LiveError("a live message needs its channel")
     stages["s1_validate"] = _ms(t0)
 
     t = time.perf_counter()
@@ -120,8 +149,18 @@ def ingest(msg: dict[str, Any], graph: str | None = None) -> dict[str, Any]:
     stages["s4_link"] = _ms(t)
 
     t = time.perf_counter()
-    units = extract.units(product, [a])
-    kept, dropped, xstats = extract.run(units, workers=1) if units else ([], [], {"cost_usd": 0})
+    if events is None:
+        units = extract.units(product, [a])
+        kept, dropped, xstats = (
+            extract.run(units, workers=1) if units else ([], [], {"cost_usd": 0})
+        )
+    else:  # structured facts from the source: no LLM, but every quote must be in the text
+        kept = [e for e in events if llm.quote_in(e["quote"], a.text)]
+        dropped = [e for e in events if not llm.quote_in(e["quote"], a.text)]
+        xstats = {"cost_usd": 0}
+    if a.id in seen:  # a newer version replaces the old row and the events read from it
+        _rewrite(graph, "artifacts.jsonl", lambda r: r["id"] != a.id)
+        _rewrite(graph, "events.jsonl", lambda r: r["artifact_id"] != a.id)
     _append(graph, "artifacts.jsonl", [a.model_dump()])
     _append(graph, "events.jsonl", kept)
     stages["s5_s6_extract_verify"] = _ms(t)
@@ -206,6 +245,14 @@ def _append(graph: str, name: str, rows: list[dict[str, Any]]) -> None:
     folder = live_dir(graph)
     folder.mkdir(parents=True, exist_ok=True)
     with (folder / name).open("a", encoding="utf-8", newline="\n") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+
+def _rewrite(graph: str, name: str, keep) -> None:
+    rows = [r for r in _read(graph, name) if keep(r)]
+    path = live_dir(graph) / name
+    with path.open("w", encoding="utf-8", newline="\n") as f:
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
