@@ -10,6 +10,14 @@ export const TOOL_WORDS: Record<string, string> = {
   list_issues: "Listed customer issues",
   links_shared: "Listed shared links",
   who_knows: "Found who knows the area",
+  decision_lineage: "Traced how a state changed",
+  rank: "Counted and ranked in the graph",
+  find_missing: "Looked for what's missing",
+  impact_of: "Traced what a change affects",
+  open_alerts: "Read the Sentinel's alerts",
+  person_profile: "Read a person's profile",
+  connection_path: "Found how two people connect",
+  graph_query: "Ran a guarded Cypher query",
 };
 
 export const KIND_WORDS: Record<string, string> = {

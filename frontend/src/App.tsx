@@ -1,15 +1,20 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { type AnswerEvent, ask, type Citation, getProducts, type Product, type Subgraph } from "./api";
 import { Answer } from "./components/Answer";
+import { EvalPage } from "./components/EvalPage";
 import { EvidenceGraph } from "./components/EvidenceGraph";
+import { GraphHealthPage } from "./components/GraphHealthPage";
 import { Inbox } from "./components/Inbox";
 import { Sources } from "./components/Sources";
+import { Timeline } from "./components/Timeline";
 import { type Step, Walk } from "./components/Walk";
 import { SUGGESTIONS, type Suggestion } from "./suggestions";
+import { when } from "./words";
 
 type Run = {
   question: string;
   product: string | null;
+  asOfMs: number | null; // answered for the state at this moment (the Timeline's slider)
   steps: Step[];
   answer?: AnswerEvent;
   citations: Citation[];
@@ -18,8 +23,13 @@ type Run = {
   running: boolean;
 };
 
-type View = "ask" | "inbox";
-const viewFromHash = (): View => (window.location.hash === "#inbox" ? "inbox" : "ask");
+const VIEWS = ["ask", "inbox", "health", "eval"] as const;
+type View = (typeof VIEWS)[number];
+const VIEW_WORDS: Record<View, string> = { ask: "Ask", inbox: "Inbox", health: "Graph health", eval: "Evaluation" };
+const viewFromHash = (): View => {
+  const h = window.location.hash.slice(1);
+  return (VIEWS as readonly string[]).includes(h) ? (h as View) : "ask";
+};
 
 export default function App() {
   const [view, setView] = useState<View>(viewFromHash);
@@ -45,12 +55,12 @@ export default function App() {
     );
   }, []);
 
-  const start = (question: string, productId: string | null) => {
+  const start = (question: string, productId: string | null, asOfMs: number | null = null) => {
     abort.current?.abort();
     const ctl = new AbortController();
     abort.current = ctl;
     setActive(null);
-    setRun({ question, product: productId, steps: [], citations: [], running: true });
+    setRun({ question, product: productId, asOfMs, steps: [], citations: [], running: true });
     window.scrollTo({ top: 0 });
     const update = (f: (r: Run) => Run) => setRun((r) => (r && !ctl.signal.aborted ? f(r) : r));
     ask(
@@ -81,6 +91,7 @@ export default function App() {
         }
       },
       ctl.signal,
+      asOfMs,
     ).catch((err: Error) => {
       if (ctl.signal.aborted) return;
       setRun((r) => r && { ...r, running: false, error: err.message });
@@ -158,21 +169,18 @@ export default function App() {
           >
             Lore
           </button>
-          <nav aria-label="Views" className="flex gap-5 text-[0.95rem] mr-auto ml-4">
-            <a
-              href="#ask"
-              aria-current={view === "ask" ? "page" : undefined}
-              className={view === "ask" ? "font-semibold border-b-2 border-ink" : "text-link hover:underline underline-offset-2"}
-            >
-              Ask
-            </a>
-            <a
-              href="#inbox"
-              aria-current={view === "inbox" ? "page" : undefined}
-              className={view === "inbox" ? "font-semibold border-b-2 border-ink" : "text-link hover:underline underline-offset-2"}
-            >
-              Inbox{openAlerts ? ` (${openAlerts} open)` : ""}
-            </a>
+          <nav aria-label="Views" className="flex flex-wrap gap-x-5 gap-y-1 text-[0.95rem] mr-auto ml-4">
+            {VIEWS.map((v) => (
+              <a
+                key={v}
+                href={`#${v}`}
+                aria-current={view === v ? "page" : undefined}
+                className={view === v ? "font-semibold border-b-2 border-ink" : "text-link hover:underline underline-offset-2"}
+              >
+                {VIEW_WORDS[v]}
+                {v === "inbox" && openAlerts ? ` (${openAlerts} open)` : ""}
+              </a>
+            ))}
           </nav>
           <p className="text-sm text-muted">
             {productError
@@ -187,6 +195,10 @@ export default function App() {
       <main className="max-w-[90rem] mx-auto px-4 sm:px-8 pb-20">
         {view === "inbox" ? (
           <Inbox onCount={countAlerts} />
+        ) : view === "health" ? (
+          <GraphHealthPage />
+        ) : view === "eval" ? (
+          <EvalPage />
         ) : compact ? (
           <div className="pt-5 pb-4 max-w-[64rem]">
             {form}
@@ -200,7 +212,14 @@ export default function App() {
         ) : (
           <Opening form={form} onPick={pick} products={products} />
         )}
-        {view === "ask" && run && <RunView run={run} active={active} setActive={setActive} />}
+        {view === "ask" && run && (
+          <RunView
+            run={run}
+            active={active}
+            setActive={setActive}
+            onReask={(asOfMs) => start(run.question, run.product, asOfMs)}
+          />
+        )}
       </main>
     </div>
   );
@@ -291,8 +310,19 @@ function ProductPicker(props: {
   );
 }
 
-function RunView({ run, active, setActive }: { run: Run; active: number | null; setActive: (n: number | null) => void }) {
+function RunView(props: {
+  run: Run;
+  active: number | null;
+  setActive: (n: number | null) => void;
+  onReask: (asOfMs: number | null) => void;
+}) {
+  const { run, active, setActive, onReask } = props;
   const llm = run.answer?.llm;
+  const [picked, setPicked] = useState<string | null>(null);
+  // Issues and PRs in the evidence have a chain of states: cited ones first.
+  const subjects = (run.subgraph?.nodes ?? [])
+    .filter((n) => n.label === "issue" || n.label === "pr")
+    .sort((a, b) => Number(b.cited) - Number(a.cited));
   return (
     <div className="grid gap-x-12 gap-y-10 border-t border-rule pt-8 lg:grid-cols-[15rem_minmax(0,1fr)_21rem]">
       <section aria-labelledby="h-walk" className="order-3 lg:order-1">
@@ -312,6 +342,12 @@ function RunView({ run, active, setActive }: { run: Run; active: number | null; 
         <h2 id="h-answer" className="font-serif text-[1.75rem] leading-[1.15] tracking-[-0.01em] mb-6 max-w-[34ch]">
           {run.question}
         </h2>
+        {run.asOfMs !== null && (
+          <p className="-mt-4 mb-5 text-sm">
+            <span className="bg-mark text-mark-ink px-1 font-semibold">As of {when(new Date(run.asOfMs).toISOString())}</span>{" "}
+            <span className="text-muted">Lore answers for the state in force at that moment.</span>
+          </p>
+        )}
         {run.error && (
           <div className="border-l-4 border-warn bg-warn-soft px-4 py-3 mb-4 max-w-[68ch]" role="alert">
             <p className="font-semibold text-warn">The question failed</p>
@@ -334,7 +370,38 @@ function RunView({ run, active, setActive }: { run: Run; active: number | null; 
               The cited sources and what they connect to: authors, the product, customers and their companies, and the
               claims and decisions Lore extracted from them.
             </p>
-            <EvidenceGraph graph={run.subgraph} citations={run.citations} active={active} />
+            <EvidenceGraph
+              graph={run.subgraph}
+              citations={run.citations}
+              active={active}
+              onPick={setPicked}
+              hint={
+                subjects.length
+                  ? "Point at a node to read it. Yellow nodes are the cited sources. Click an issue or pull request to see its timeline below."
+                  : undefined
+              }
+            />
+          </section>
+        )}
+
+        {subjects.length > 0 && (
+          <section aria-labelledby="h-timeline" className="mt-12">
+            <h2 id="h-timeline" className="font-semibold">
+              How it changed over time
+            </h2>
+            <p className="text-sm text-muted mt-0.5 mb-4 max-w-[68ch]">
+              Each state holds from one moment until the next one replaces it. Lore never deletes a replaced state; it
+              closes its window. Move the slider to see what was true then, and ask the question again as of that moment.
+            </p>
+            <Timeline
+              subjects={subjects}
+              selected={picked}
+              onSelect={setPicked}
+              question={run.question}
+              asOfMs={run.asOfMs}
+              onReask={onReask}
+              running={run.running}
+            />
           </section>
         )}
       </section>

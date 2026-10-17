@@ -10,7 +10,9 @@ type Props = {
   hint?: string; // the line under the graph when nothing is pointed at
   label?: string; // the graph's accessible name
   root?: string; // draw rings around this node (the Inbox's blast radius) instead of a force layout
+  onPick?: (id: string) => void; // a click on an issue or PR node (opens its Timeline, 12.4)
 };
+const PICKABLE = new Set(["issue", "pr"]);
 
 // Node shapes carry the type (so it reads without color); color separates people and
 // organizations from artifacts and from what Lore extracted (claims, issues, decisions).
@@ -35,9 +37,11 @@ const GROUP = (label: string) =>
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const short = (s: string | null, n = 26) => (!s ? "" : s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
-export function EvidenceGraph({ graph, citations, active, hint, label, root }: Props) {
+export function EvidenceGraph({ graph, citations, active, hint, label, root, onPick }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const cy = useRef<Core | null>(null);
+  const pick = useRef(onPick);
+  pick.current = onPick;
   const [hovered, setHovered] = useState<{ label: string; name: string } | null>(null);
   const scheme = useScheme();
   const marks = useMemo(() => {
@@ -113,9 +117,7 @@ export function EvidenceGraph({ graph, citations, active, hint, label, root }: P
         },
         { selector: "edge.hover", style: { label: "data(rel)", "font-size": 9, color: muted, "line-color": muted } },
       ],
-      layout: root
-        ? { name: "breadthfirst", roots: [root], circle: true, spacingFactor: 1.15, padding: 24, animate: false }
-        : { name: "cose", animate: !reduce, animationDuration: 400, padding: 24, nodeRepulsion: () => 16000, idealEdgeLength: () => 80 },
+      layout: { name: "preset" },
       wheelSensitivity: 0.2,
       minZoom: 0.3,
       maxZoom: 2.5,
@@ -136,10 +138,21 @@ export function EvidenceGraph({ graph, citations, active, hint, label, root }: P
       n.connectedEdges().addClass("hover");
       setHovered({ label: n.data("kind"), name: n.data("name") });
     });
+    instance.on("tap", "node", (e) => {
+      if (PICKABLE.has(e.target.data("kind"))) pick.current?.(e.target.id());
+    });
     instance.on("mouseout", "node", (e) => {
       e.target.connectedEdges().removeClass("hover");
       setHovered(null);
     });
+    // Run the layout separately so an unmount can stop it: a destroyed graph with a layout still
+    // animating throws on every remaining frame.
+    const layout = instance.layout(
+      root
+        ? { name: "breadthfirst", roots: [root], circle: true, spacingFactor: 1.15, padding: 24, animate: false }
+        : { name: "cose", animate: !reduce, animationDuration: 400, padding: 24, nodeRepulsion: () => 16000, idealEdgeLength: () => 80 },
+    );
+    layout.run();
     cy.current = instance;
     // Refit when the box changes size (window resize, phone rotation).
     const resize = new ResizeObserver(() => {
@@ -149,6 +162,7 @@ export function EvidenceGraph({ graph, citations, active, hint, label, root }: P
     resize.observe(box.current);
     return () => {
       resize.disconnect();
+      layout.stop();
       instance.destroy();
     };
   }, [graph, marks, scheme, root]);

@@ -63,11 +63,12 @@ export async function ask(
   productId: string | null,
   onEvent: (e: AskEvent) => void,
   signal?: AbortSignal,
+  asOfMs?: number | null,
 ): Promise<void> {
   const r = await fetch("/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, product_id: productId }),
+    body: JSON.stringify({ question, product_id: productId, as_of_ms: asOfMs ?? null }),
     signal,
   });
   if (!r.ok || !r.body) return failLoudly(r);
@@ -202,3 +203,79 @@ export const getArtifact = (id: string) => getJson<Artifact>(`/artifact/${encode
 export const getQuery = (name: string) =>
   getJson<{ name: string; text: string }>(`/query/${encodeURIComponent(name)}`);
 export const getProducts = () => getJson<{ products: Product[] }>("/products");
+
+// The Timeline (12.4): an issue's or PR's chain of states, each with its validity window.
+export type Decider = { id: string; name: string | null; role?: string | null };
+export type Evidence = { artifact_id: string; quote: string; ts_iso?: string | null };
+export type ChainState = {
+  decision_id: string;
+  value: string;
+  statement: string | null;
+  from: string | null;
+  to: string | null;
+  in_force: boolean;
+  origin: string | null;
+  decided_by: Decider[];
+  evidence: Evidence[];
+  said: (Evidence & {
+    by?: string | null;
+    by_name?: string | null;
+    by_role?: string | null;
+    outcome?: string | null;
+    authority?: string | null;
+    authority_reason?: string | null;
+  })[];
+  refused?: { id?: string; artifact_id?: string; quote?: string; reason?: string }[];
+  alerts?: { id: string; kind: string; status?: string }[];
+  time_inferred?: boolean;
+};
+export type LineageSubject = {
+  id: string;
+  kind: "issue" | "pr";
+  title?: string;
+  number?: number;
+  url?: string;
+  status?: string;
+  status_chain?: ChainState[];
+  action_chain?: ChainState[];
+};
+export type Lineage = { subject: string; product_id: string; subjects: LineageSubject[]; as_of?: string };
+export const getLineage = (id: string) => getJson<Lineage>(`/decision/${encodeURIComponent(id)}/lineage`);
+
+// The Graph Health and Eval pages (12.6).
+export type LabelCount = { labels: string; n: number };
+export type GraphHealth = {
+  graph: string;
+  total_nodes: number;
+  nodes: LabelCount[];
+  edges: { type: string; n: number }[];
+  isolated: LabelCount[];
+  isolated_pct: number;
+  duplicate_ids: { id: string; n: number }[];
+  linking: { mentions: number; unresolved: number; unresolved_pct: number };
+  pr_chains: Record<string, unknown>[];
+};
+export const getGraphHealth = () => send<GraphHealth>("GET", "/graph/health");
+
+export type SystemResult = {
+  run_id: string;
+  system: string;
+  split: string;
+  products: string[];
+  questions: { answerable: number; unanswerable: number };
+  categories: Record<string, { n: number; score: number | null }>;
+  avg: number | null;
+  unanswerable: number | null;
+  citations: { total: number; retrieved_pct: number | null; quote_ok_pct: number | null } | null;
+  latency_s: { p50: number; p95: number };
+  tokens_per_answer: number | null;
+  cost_usd?: Record<string, number>;
+};
+export type DriftResult = { system: string; n: number; correct_pct: number; stale_answer_rate: number | null };
+export type EvalLatest = {
+  systems: SystemResult[];
+  drift: Record<string, DriftResult>;
+  experts: { questions: number; mean: Record<string, Record<string, number>> } | null;
+  reference: { system: string; avg: number; unanswerable: number };
+};
+export const getEvalLatest = () => send<EvalLatest>("GET", "/eval/latest");
