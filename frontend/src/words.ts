@@ -9,6 +9,7 @@ export const TOOL_WORDS: Record<string, string> = {
   list_prs: "Listed pull requests",
   list_issues: "Listed customer issues",
   links_shared: "Listed shared links",
+  who_knows: "Found who knows the area",
 };
 
 export const KIND_WORDS: Record<string, string> = {

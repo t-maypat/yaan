@@ -62,6 +62,8 @@ def call_tool(name: str, args: dict[str, Any], scope: str | None, graph: str | N
         return tools.list_issues(product, args.get("status"), args.get("company"), graph)
     if name == "links_shared":
         return tools.links_shared(product, graph)
+    if name == "who_knows":
+        return tools.who_knows(args["topic"], product, graph)
     raise ToolError(f"unknown tool {name!r}")
 
 

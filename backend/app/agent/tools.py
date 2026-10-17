@@ -641,4 +641,20 @@ TOOL_SPECS = [
         "with their description, who shared each and in which message.",
         {"product_id": PRODUCT},
     ),
+    _tool(
+        "who_knows",
+        "Who knows an area of the product best: a bug component (e.g. 'API Security Module') "
+        "or a development work item (e.g. 'GraphQL schema versioning'). For each matching "
+        "area: experts ranked by degree of authorship (author = holds the area; deliveries = "
+        "bugs fixed or PRs written there) with the PRs they wrote as evidence to cite, the "
+        "listed owners (who its issues are assigned to), single_expert, and key_person when "
+        "the person is in the product's truck factor (the people whose loss leaves most "
+        "areas with no expert). connectors (best-connected collaborators) appear when no "
+        "expert is left. Use it for who to ask, who is the expert, and who resolved issues "
+        "in a component.",
+        {
+            "topic": {"type": "string", "description": "the component or work, in plain words"},
+            "product_id": PRODUCT,
+        },
+    ),
 ]
