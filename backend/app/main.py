@@ -4,6 +4,9 @@ Phase 12 step 1 (R1-8): `/ask` streams the agent's fixed event sequence as Serve
 Events: `tool_call`, `tool_result` (one pair per tool), `answer`, `citations`, `subgraph`,
 then `done`, or `error` if the agent fails (fail loudly: no canned fallback answer).
 
+Phase 17.1: `/mcp` serves Lore's read-only tools (and `ask`) over streamable HTTP to any MCP
+client (app/mcp_server.py); stdio is `lore mcp`.
+
 R2 W4: `/ask` takes `as_of_ms` (the Timeline's slider re-asks for the state at a moment);
 `/decision/{id}/lineage`, `/entity/{id}`, `/graph/health` and `/eval/latest` serve the
 Timeline, the entity panel and the Graph Health and Eval pages (12.1, 12.4, 12.6).
@@ -21,17 +24,28 @@ import queue
 import threading
 import time
 from collections import Counter, defaultdict, deque
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app import __version__, db
+from app import __version__, db, mcp_server
 from app.config import REPO_ROOT, get_settings
 
-app = FastAPI(title="Lore", version=__version__)
+mcp_http = mcp_server.HttpEndpoint()  # /mcp (17.1): Lore's tools for any MCP client
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    async with mcp_http.running():
+        yield
+
+
+app = FastAPI(title="Lore", version=__version__, lifespan=lifespan)
+app.router.add_route("/mcp", mcp_http, include_in_schema=False)
 ASK_PER_MINUTE = 6  # per IP; the LLM gateway's daily spend cap is the second guard
 
 

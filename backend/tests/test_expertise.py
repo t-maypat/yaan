@@ -187,6 +187,8 @@ def test_who_knows_names_the_expert_the_owner_and_the_evidence(empty_graph):
         }
     ]
     assert {o["id"] for o in area["listed_owners"]} == {"eid_c3"} and area["single_expert"]
+    [owner] = area["listed_owners"]  # the report message backs "listed owner" with a quote (D074)
+    assert owner["artifact_id"] == "msg:r1" and owner["text"]
     assert area["owner_is_expert"] and "owner_to_expert" not in area
     assert out["truck_factor"]["value"] == 1 and "connectors" not in out
     assert tools.who_knows("quantum billing", "Widget", graph=empty_graph)["areas"] == []

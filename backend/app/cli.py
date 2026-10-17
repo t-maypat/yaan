@@ -406,6 +406,17 @@ def cmd_bench_experts(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_mcp(args: argparse.Namespace) -> int:
+    """Serve Lore's tools over MCP on stdin/stdout, e.g. for Claude Code:
+    claude mcp add lore -- uv run --project backend lore mcp"""
+    import anyio
+
+    from app import mcp_server
+
+    anyio.run(mcp_server.serve_stdio)
+    return 0
+
+
 # command -> (help text, handler)
 COMMANDS = {
     "schema": ("create and verify the indexes for a graph (queries/00_schema.cypher)", cmd_schema),
@@ -427,6 +438,7 @@ COMMANDS = {
         cmd_bench_experts,
     ),
     "demo": ("reset the demo graph, or inject a synthetic message live (11.6)", cmd_demo),
+    "mcp": ("serve Lore's read-only tools (and ask) over MCP on stdio (17.1)", cmd_mcp),
 }
 
 # command -> [(flag, argparse options)]

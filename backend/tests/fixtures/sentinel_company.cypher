@@ -25,7 +25,7 @@ CREATE
   (iss3:Issue:Entity {id: 'iss:Widget:c3', title: 'Export timeout', name: 'Export timeout', product_id: 'Widget', component: 'Export Module', current_status: 'resolved', reported_ms: 1200, reported_iso: '2026-05-01T00:00:01Z'}),
   (iss4:Issue:Entity {id: 'iss:Widget:d4', title: 'Login flicker', name: 'Login flicker', product_id: 'Widget', component: 'Auth Module', current_status: 'reported', reported_ms: 1300, reported_iso: '2026-05-01T00:00:01Z'}),
   (iss)-[:IN_PRODUCT]->(widget), (iss2)-[:IN_PRODUCT]->(widget), (iss3)-[:IN_PRODUCT]->(widget), (iss4)-[:IN_PRODUCT]->(widget),
-  (iss)-[:REPORTED_BY]->(dee), (iss)-[:ASSIGNED_TO {from_ms: 1000}]->(cy), (p1)-[:FIXES]->(iss),
+  (iss)-[:REPORTED_BY]->(dee), (iss)-[:REPORTED_IN]->(r1), (iss)-[:ASSIGNED_TO {from_ms: 1000}]->(cy), (p1)-[:FIXES]->(iss),
   (dR:Decision {id: 'dec:iss:Widget:a1/status:1000', topic: 'iss:Widget:a1/status', kind: 'issue_status', value: 'reported', valid_from_ms: 1000, valid_to_ms: 3000, status: 'superseded', origin: 'extracted'}),
   (dF:Decision {id: 'dec:iss:Widget:a1/status:3000', topic: 'iss:Widget:a1/status', kind: 'issue_status', value: 'resolved', valid_from_ms: 3000, valid_to_ms: 5000, status: 'superseded', origin: 'extracted'}),
   (dO:Decision {id: 'dec:iss:Widget:a1/status:5000', topic: 'iss:Widget:a1/status', kind: 'issue_status', value: 'reopened', valid_from_ms: 5000, status: 'active', origin: 'extracted'}),

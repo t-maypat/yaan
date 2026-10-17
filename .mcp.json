@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "lore": {
+      "command": "uv",
+      "args": ["run", "--project", "backend", "lore", "mcp"]
+    }
+  }
+}

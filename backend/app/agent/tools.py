@@ -550,6 +550,8 @@ def who_knows(topic: str, product_id: str, graph: str | None = None) -> dict:
                 "match": a["match"],
                 "experts": ranked,
                 "single_expert": len(authors) == 1,
+                # each owner with the issue's report message, which asks them to take it:
+                # the listed owner is a graph fact, and this is the quote that backs it (D074)
                 "listed_owners": [
                     {
                         "id": o["id"],
@@ -557,6 +559,8 @@ def who_knows(topic: str, product_id: str, graph: str | None = None) -> dict:
                         "role": o["role"],
                         "issue": o["title"],
                         "status": o["status"],
+                        "artifact_id": o["report_id"],
+                        "text": clip(o["report_text"], 300),
                     }
                     for o in listed[:5]
                 ],
