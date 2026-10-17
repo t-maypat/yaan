@@ -144,14 +144,13 @@ def ingest_artifact(
     stages["s3_chunk_embed"] = _ms(t)
 
     t = time.perf_counter()
-    # a live PR is linked with the product's earlier live PRs, so "Revert PR# N" finds N
-    # whichever of the two arrived first
-    peers = [
-        Artifact(**r)
-        for r in _read(graph, "artifacts.jsonl")
-        if a.kind == "pr" and r["kind"] == "pr" and r["product_hint"] == product and r["id"] != a.id
+    # linked against everything already loaded (HERB's and earlier live artifacts): a url in
+    # the text finds its PR, doc or link, and "Revert PR# N" finds N, whichever came first
+    known = [
+        *_base_events_and_artifacts()[1].get(product, []),
+        *(Artifact(**r) for r in _read(graph, "artifacts.jsonl") if r["id"] != a.id),
     ]
-    link_rows, _ = linker.build_rows(meta, {product: [a, *peers]})
+    link_rows, _ = linker.build_rows(meta, {product: [a]}, context={product: known})
     linker.load(link_rows, graph)
     stages["s4_link"] = _ms(t)
 

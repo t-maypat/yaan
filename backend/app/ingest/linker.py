@@ -143,10 +143,15 @@ def resolve_speaker(
 
 # --- rows ------------------------------------------------------------------------------------
 def build_rows(
-    meta: Metadata, products: dict[str, list[Artifact]]
+    meta: Metadata,
+    products: dict[str, list[Artifact]],
+    context: dict[str, list[Artifact]] | None = None,
 ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
-    """All link rows for the given products, plus a log of every unresolved mention."""
-    d = dictionaries(meta, products)
+    """All link rows for the given products, plus a log of every unresolved mention.
+    `context` artifacts only resolve urls, names and revert targets; they aren't linked again
+    (the live path links one new artifact against everything already loaded, 17.2)."""
+    pool = {p: [*arts, *(context or {}).get(p, [])] for p, arts in products.items()}
+    d = dictionaries(meta, pool)
     rows: dict[str, list[dict[str, Any]]] = {name: [] for name in LOAD_ORDER}
     unresolved_log: list[dict[str, Any]] = []
     for product, artifacts in products.items():
@@ -165,14 +170,17 @@ def build_rows(
             unresolved_log += [
                 {"artifact_id": a.id, "product": product, "surface": u} for u in notes.unresolved
             ]
-        unresolved_log += link_reverts(artifacts, product, rows)
+        unresolved_log += link_reverts(artifacts, product, rows, pool[product])
     for name in LOAD_ORDER:  # identical rows (a link shared by two products) load once
         rows[name] = list({json.dumps(r, sort_keys=True): r for r in rows[name]}.values())
     return rows, unresolved_log
 
 
 def link_reverts(
-    artifacts: list[Artifact], product: str, rows: dict[str, list[dict[str, Any]]]
+    artifacts: list[Artifact],
+    product: str,
+    rows: dict[str, list[dict[str, Any]]],
+    pool: list[Artifact] | None = None,
 ) -> list[dict[str, Any]]:
     """(PR)-[:REVERTS]->(PR): a "Revert PR# N" pull request undoes PR N of its own repository.
 
@@ -181,7 +189,7 @@ def link_reverts(
     """
     by_number = {
         (a.meta.get("repo"), str(a.meta.get("number"))): a.id
-        for a in artifacts
+        for a in (pool or artifacts)
         if a.kind == "pr" and a.meta
     }
     missing = []
