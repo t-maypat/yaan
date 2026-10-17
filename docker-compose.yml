@@ -59,6 +59,7 @@ services:
     env_file: .env
     environment:
       FALKORDB_HOST: falkordb # the service name, inside the compose network
+      FALKORDB_PORT: "6379" # the container's port; .env's FALKORDB_PORT is the host's
     depends_on:
       falkordb:
         condition: service_healthy
