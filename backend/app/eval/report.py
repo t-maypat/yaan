@@ -44,21 +44,46 @@ def judge_row(row: dict[str, Any]) -> dict[str, Any]:
             else {"unanswered": False}
         )
         return {"id": row["id"], **verdict, "reason": "answer step failed", "judge_cost_usd": 0.0}
-    if row["kind"] == "ans":
+    if row["kind"] == "drift":
+        v = judge.score_drift(row["question"], row["ground_truth"], row["answer"])
+    elif row["kind"] == "ans":
         v = judge.score_answerable(row["question"], row["type"], row["ground_truth"], row["answer"])
     else:
         v = judge.score_unanswerable(row["question"], row["answer"])
     return {"id": row["id"], **v}
 
 
-def score_run(run: Path, workers: int = 4) -> Path:
-    """Judge a run folder and write its results file. Returns the results path."""
+VARIANTS = ("unvalidated",)
+
+
+def score_run(run: Path, workers: int = 4, variant: str | None = None) -> Path:
+    """Judge a run folder and write its results file. Returns the results path.
+
+    `variant="unvalidated"` scores the model's first final answers, before the citation
+    validator's autocite, repair and dropping: the Lore − citation validator ablation from the
+    same run, for the judge's cost only (R2). Its system is named `<system>-unvalidated`.
+    """
     meta = json.loads((run / "meta.json").read_text(encoding="utf-8"))
     rows = read_jsonl(run / "answers.jsonl")
+    if variant is not None:
+        if variant not in VARIANTS:
+            raise ValueError(f"unknown variant {variant!r}: {VARIANTS}")
+        missing = [r["id"] for r in rows if not r["error"] and not r.get(variant)]
+        if missing:
+            raise ValueError(f"{len(missing)} answers have no {variant!r} field, e.g. {missing[0]}")
+        rows = [
+            {**r, "answer": r[variant]["answer_markdown"], "abstain": r[variant]["abstain"]}
+            if r.get(variant)
+            else r
+            for r in rows
+        ]
+        meta = {**meta, "system": f"{meta['system']}-{variant}"}
     with ThreadPoolExecutor(max_workers=workers) as pool:
         verdicts = list(pool.map(judge_row, rows))
-    write_jsonl(run / "judged.jsonl", verdicts)
-    summary = summarize(meta, rows, verdicts)
+    write_jsonl(run / f"judged{'-' + variant if variant else ''}.jsonl", verdicts)
+    summary = (summarize_drift if meta["split"] == "drift" else summarize)(meta, rows, verdicts)
+    if variant is not None:  # its citations were never checked: the validator is what's removed
+        summary["citations"] = None
     name = f"{meta['started_utc'][:8]}_{meta['system']}_{meta['split']}.json"
     # Partial runs (--limit, --products) stay in their run folder, out of the results table.
     out = run / "results.json" if meta.get("partial") else results_dir() / name
@@ -113,6 +138,9 @@ def summarize(meta: dict, rows: list[dict], verdicts: list[dict]) -> dict[str, A
             "p95": round(percentile([r["answer_ms"] for r in fresh], 95) / 1000, 2),
             "search_p50_ms": round(percentile([r["search_ms"] for r in rows], 50), 1),
         },
+        "validator": validator_stats(rows),
+        "tool_latency_ms": tool_latency(rows),
+        "query_latency": meta.get("query_latency"),
         "tokens_per_answer": round(
             mean([r["llm"]["input_tokens"] + r["llm"]["output_tokens"] for r in answered]), 1
         )
@@ -135,6 +163,80 @@ def summarize(meta: dict, rows: list[dict], verdicts: list[dict]) -> dict[str, A
     }
 
 
+def summarize_drift(meta: dict, rows: list[dict], verdicts: list[dict]) -> dict[str, Any]:
+    """HERB-Drift (13.1): correct %, stale-answer rate (stale / answered, CONTEXT §7.2), and
+    abstentions, overall and per question kind (current status, as-of status, why)."""
+    by_id = {v["id"]: v for v in verdicts}
+
+    def block(subset: list[dict]) -> dict[str, Any]:
+        vs = [by_id[r["id"]] for r in subset]
+        answered = [v for v in vs if v.get("verdict") != "abstained"]
+        return {
+            "n": len(vs),
+            "correct_pct": pct([v.get("correct", False) for v in vs]),
+            "stale_answer_rate": pct([v.get("stale", False) for v in answered]),
+            "abstained": len(vs) - len(answered),
+            "wrong": sum(1 for v in vs if v.get("verdict") == "wrong"),
+        }
+
+    kinds = sorted({r["type"] for r in rows})
+    answered = [r for r in rows if not r["error"] and r["llm"]]
+    return {
+        "run_id": meta["run_id"],
+        "system": meta["system"],
+        "split": "drift",
+        "products": meta["products"],
+        "questions": {"drift": len(rows)},
+        **block(rows),
+        "by_kind": {k: block([r for r in rows if r["type"] == k]) for k in kinds},
+        "errors": sum(1 for r in rows if r["error"]),
+        "tokens_per_answer": round(
+            mean([r["llm"]["input_tokens"] + r["llm"]["output_tokens"] for r in answered]), 1
+        )
+        if answered
+        else None,
+        "cost_usd": {
+            "answers_this_run": round(sum(r["llm"]["cost_usd"] for r in answered), 4),
+            "judge_this_run": round(sum(v.get("judge_cost_usd", 0.0) for v in verdicts), 4),
+        },
+        "models": {"answer": meta["answer_model"], "judge": get_settings().lore_judge_model},
+    }
+
+
+def validator_stats(rows: list[dict]) -> dict[str, Any] | None:
+    """How often the citation validator acted: first answers with a problem, repaired, items
+    autocited, sentences dropped, and answers it turned into abstentions."""
+    checked = [r["validator"] for r in rows if r.get("validator")]
+    if not checked:
+        return None
+    return {
+        "answers": len(checked),
+        "first_answer_problems_pct": pct([bool(v["first_problems"]) for v in checked]),
+        "repaired_pct": pct([v["repaired"] for v in checked]),
+        "dropped_sentences": sum(len(v["dropped"]) for v in checked),
+        "autocited": sum(len(v["autocited"]) for v in checked),
+        "turned_into_abstention": sum(
+            1
+            for r in rows
+            if r.get("validator") and r["abstain"] and not r["validator"]["model_abstained"]
+        ),
+    }
+
+
+def tool_latency(rows: list[dict]) -> dict[str, dict[str, float]] | None:
+    """Per agent tool: calls, p50 / p95 wall-clock ms (graph queries + Python), from traces."""
+    by_tool: dict[str, list[float]] = {}
+    for r in rows:
+        for step in r.get("trace") or []:
+            by_tool.setdefault(step["tool"], []).append(step["ms"])
+    if not by_tool:
+        return None
+    return {
+        tool: {"calls": len(ms), "p50": percentile(ms, 50), "p95": percentile(ms, 95)}
+        for tool, ms in sorted(by_tool.items())
+    }
+
+
 def results_dir() -> Path:
     return get_settings().eval_dir / "results"
 
@@ -143,9 +245,15 @@ def table(paths: list[Path] | None = None) -> str:
     """The §7.4 markdown table from every results file (newest file per system and split)."""
     paths = paths or sorted(results_dir().glob("*.json"))
     latest: dict[tuple[str, str], dict] = {}
+    drift: dict[str, dict] = {}  # system -> its latest HERB-Drift result (the stale column)
     for p in paths:  # names start with the date, so a later file replaces an earlier one
         r = json.loads(p.read_text(encoding="utf-8"))
-        latest[(r["system"], r["split"])] = r
+        if "system" not in r:  # e.g. experts_dev.json (10.8), not a system run
+            continue
+        if r["split"] == "drift":
+            drift[r["system"]] = r
+        else:
+            latest[(r["system"], r["split"])] = r
     head = [
         "System",
         *[label for _, label in CATEGORIES],
@@ -164,7 +272,7 @@ def table(paths: list[Path] | None = None) -> str:
         cells += [
             fmt(r["avg"]),
             fmt(r["unanswerable"]),
-            "n/a",
+            stale_cell(drift.get(system)),
             fmt(r["latency_s"]["p50"]),
             fmt(r["tokens_per_answer"], 0),
         ]
@@ -189,6 +297,12 @@ def table(paths: list[Path] | None = None) -> str:
         "found (D043).",
     ]
     return "\n".join(lines) + "\n"
+
+
+def stale_cell(r: dict | None) -> str:
+    if r is None or r["stale_answer_rate"] is None:
+        return "n/a"
+    return f"{r['stale_answer_rate']:.1f}% ({r['correct_pct']:.0f}% right, n={r['n']})"
 
 
 def write_table() -> Path:

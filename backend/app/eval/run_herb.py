@@ -1,4 +1,4 @@
-"""Run a system (baseline | lore) over a split's HERB questions. Built in Phase 5.
+"""Run a system (baseline | lore | lore-search) over a split's HERB questions. Phase 5.
 
 Per run, eval/runs/<run_id>/ (gitignored) gets:
 - answers.jsonl: one row per question: the answer, abstain flag, citations, retrieved ids,
@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app import llm
+from app import db, llm
 from app.config import get_settings
 from app.eval.split import load_questions, read_split
 
@@ -51,11 +51,37 @@ def get_system(name: str) -> System:
             prepare=lambda q, product: product,
             respond=lambda q, product: loop.answer(q, product_id=product),
         )
-    raise ValueError(f"unknown system {name!r}: 'baseline' or 'lore'")
+    if name == "lore-search":  # Lore − graph tools (9.8, R1-7): search and reading only
+        from app.agent import loop, tools
+
+        return System(
+            prepare=lambda q, product: product,
+            respond=lambda q, product: loop.answer(
+                q, product_id=product, toolset=tools.SEARCH_ONLY
+            ),
+        )
+    raise ValueError(f"unknown system {name!r}: 'baseline', 'lore' or 'lore-search'")
 
 
 def questions(split: str = "dev", products: list[str] | None = None) -> list[dict[str, Any]]:
-    """The split's questions as rows with a stable id: <product>:ans:<i> / <product>:unans:<i>."""
+    """The split's questions as rows with a stable id: <product>:ans:<i> / <product>:unans:<i>.
+
+    `drift` is the hand-labeled HERB-Drift set on the dev products (13.1, eval/drift_set.json):
+    one row per item, kind "drift", with the item itself as the ground truth."""
+    if split == "drift":
+        items = json.loads((get_settings().eval_dir / "drift_set.json").read_text("utf-8"))
+        return [
+            {
+                "id": q["id"],
+                "product": q["product"],
+                "kind": "drift",
+                "question": q["question"],
+                "type": q["kind"],
+                "ground_truth": {k: q[k] for k in ("answer", "correct", "stale")},
+            }
+            for q in items["questions"]
+            if not products or q["product"] in products
+        ]
     if split != "dev":
         raise ValueError("only the dev split runs here; the held-out run is Phase 13")
     rows = []
@@ -125,13 +151,14 @@ def run(
             "citations": out.get("citations", []),
             "retrieved": out.get("retrieved", []),
             "llm": out.get("llm"),
-            **{k: out[k] for k in ("trace", "validator") if k in out},  # the agent's work
+            **{k: out[k] for k in ("trace", "validator", "unvalidated") if k in out},
             "search_ms": round(search_ms, 1),
             "answer_ms": round(search_ms + (time.perf_counter() - started) * 1000, 1),
             "error": error,
         }
 
     results: dict[str, dict[str, Any]] = {}
+    db.LATENCY.clear()  # this run's graph calls only: per-query p50/p95 go into meta.json
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = []
         for n, row in enumerate(rows, 1):
@@ -179,6 +206,7 @@ def run(
             "answer_model": s.lore_answer_model,
             "answer_effort": s.lore_answer_effort,
             "started_utc": run_id.split("_")[0],
+            "query_latency": db.latency_stats(),
         },
     )
     return out_dir

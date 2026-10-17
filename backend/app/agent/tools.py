@@ -320,8 +320,11 @@ def list_prs(
     kept = []
     for r in rows:
         r["reviews"] = [rv for rv in r["reviews"] if rv["id"]]
+        reverts_ms = [u.pop("ts_ms") for u in r["reverted_by"]]  # for as_of only; not shown
         r["reverted_by"] = [
-            {**u, "reason": clip(u["reason"], 300)} for u in r["reverted_by"] if u["number"]
+            {**u, "reason": clip(u["reason"], 300)}
+            for u, ms in zip(r["reverted_by"], reverts_ms, strict=True)
+            if u["number"] and (not as_of or (ms or 0) <= as_of_ms)
         ]
         r["said"] = [c for c in r["said"] if c["action"]]
         said_ms = [c.pop("ts_ms") for c in r["said"]]  # for as_of only; not shown

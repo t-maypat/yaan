@@ -13,8 +13,11 @@ app/llm.py. Everything else follows evaluate.py:
 Deviations (declared in D035): the judge model; JSON comes back as structured output
 instead of gpt-4o's JSON mode; temperature can't be set on Haiku 5.5 (the API rejects
 non-default sampling), so repeat runs are pinned by the gateway's cache instead; a short
-system line, since HERB sends only a user message. Citation-validity and stale-answer
-judges (CONTEXT §7.2) arrive with Phases 9 and 13.
+system line, since HERB sends only a user message.
+
+The stale-answer judge (CONTEXT §7.2, §7.3) is ours, for the HERB-Drift set: it compares an
+answer with the state that holds at the asked moment and the states that held at other
+times, and calls an answer stale when it presents one of those as the answer.
 """
 
 import re
@@ -117,6 +120,28 @@ class Likert(BaseModel):
     reason: str
 
 
+class DriftVerdict(BaseModel):
+    verdict: Literal["correct", "stale", "abstained", "wrong"]
+    reason: str
+
+
+DRIFT = (
+    "You judge whether an answer gets the state of a company record right for the moment the "
+    "question asks about (now, or a date the question names).\n\n"
+    "Question: {question}\n"
+    "Reference answer: {reference}\n"
+    "The correct state at that moment: {correct}\n"
+    "Stale states (true at another time, wrong for this moment): {stale}\n"
+    "Candidate answer: {candidate}\n\n"
+    "Classify the candidate answer:\n"
+    "- correct: it gives the correct state as its answer (extra true detail is fine);\n"
+    "- stale: it presents one of the stale states as the state at the asked moment;\n"
+    "- abstained: it says it can't find or can't answer;\n"
+    "- wrong: anything else (another wrong state, or no clear state).\n"
+    'Respond in JSON: {{"verdict": "correct|stale|abstained|wrong", "reason": "one sentence"}}'
+)
+
+
 EXTRACTORS: dict[str, tuple[str, type[BaseModel], str]] = {
     "person": (EMPLOYEE_IDS, Ids, "ids"),
     "url": (URLS, Links, "links"),
@@ -184,6 +209,28 @@ def score_answerable(question: str, qtype: str, reference: Any, answer: str | No
         "bucket": BUCKET[qtype],
         "score": f1_sets(reference, extracted),
         "extracted": extracted,
+        "judge_cost_usd": out.cost_usd,
+    }
+
+
+def score_drift(question: str, item: dict[str, Any], answer: str | None) -> dict:
+    """One HERB-Drift question -> {verdict, correct, stale}. A missing answer abstains."""
+    if answer is None:
+        return {"verdict": "abstained", "correct": False, "stale": False, "judge_cost_usd": 0.0}
+    user = DRIFT.format(
+        question=question,
+        reference=item["answer"],
+        correct=item["correct"],
+        stale="; ".join(item["stale"]),
+        candidate=answer_text(answer),
+    )
+    out = ask(user, DriftVerdict)
+    verdict = out.parsed["verdict"]
+    return {
+        "verdict": verdict,
+        "correct": verdict == "correct",
+        "stale": verdict == "stale",
+        "reason": out.parsed["reason"],
         "judge_cost_usd": out.cost_usd,
     }
 

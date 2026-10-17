@@ -305,12 +305,28 @@ def cmd_eval(args: argparse.Namespace) -> int:
                 args.system, args.split, args.products, args.limit, args.workers, progress=say
             )
             print(f"\nanswers: {run}", file=sys.stderr)
-        results = report.score_run(run, workers=args.workers)
-    except llm.LLMError as e:
+        results = report.score_run(run, workers=args.workers, variant=args.variant)
+    except (llm.LLMError, ValueError) as e:
         print(f"\nlore eval: {e}", file=sys.stderr)
         return 1
     r = json.loads(results.read_text(encoding="utf-8"))
     print(f"results: {results}")
+    if r["split"] == "drift":
+        print(
+            f"  HERB-Drift n={r['n']}: {r['correct_pct']}% right, stale-answer rate "
+            f"{r['stale_answer_rate']}% of answered, {r['abstained']} abstained, {r['wrong']} wrong"
+        )
+        for kind, b in r["by_kind"].items():
+            print(
+                f"    {kind:<15} n={b['n']:<3} right {b['correct_pct']}%  "
+                f"stale {b['stale_answer_rate']}%"
+            )
+        print(
+            f"  ${r['cost_usd']['answers_this_run']} answers + "
+            f"${r['cost_usd']['judge_this_run']} judge"
+        )
+        print(f"table: {report.write_table()}")
+        return 0
     for key, label in report.CATEGORIES:
         c = r["categories"][key]
         print(f"  {label:<9} {report.fmt(c['score'], none='-'):>6}  (n={c['n']})")
@@ -320,7 +336,8 @@ def cmd_eval(args: argparse.Namespace) -> int:
         f"(n={r['questions']['unanswerable']})"
     )
     print(
-        f"  errors {r['errors']} | citations quote-ok {r['citations']['quote_ok_pct']}% | "
+        f"  errors {r['errors']} | citations quote-ok "
+        f"{(r['citations'] or {}).get('quote_ok_pct', 'n/a')}% | "
         f"p50 {r['latency_s']['p50']} s | ${r['cost_usd']['answers_this_run']} answers + "
         f"${r['cost_usd']['judge_this_run']} judge | today ${llm.spent_today():.4f}"
     )
@@ -446,12 +463,19 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
     ],
     "eval": [
-        ("--system", {"choices": ("baseline", "lore"), "default": "baseline"}),
-        ("--split", {"choices": ("dev",), "default": "dev"}),
+        ("--system", {"choices": ("baseline", "lore", "lore-search"), "default": "baseline"}),
+        ("--split", {"choices": ("dev", "drift"), "default": "dev"}),
         ("--products", {"nargs": "+", "help": "a subset of the split's products"}),
         ("--limit", {"type": int, "help": "only the first N questions (a cheap smoke run)"}),
         ("--workers", {"type": int, "default": 4, "help": "parallel LLM calls"}),
         ("--score-only", {"metavar": "RUN_DIR", "help": "re-judge an existing eval/runs/ folder"}),
+        (
+            "--variant",
+            {
+                "choices": ("unvalidated",),
+                "help": "with --score-only: score the answers before the citation validator",
+            },
+        ),
     ],
 }
 

@@ -118,6 +118,9 @@ def test_as_of_shows_the_state_in_force_at_that_moment(company):
     [pr] = [p for p in early if p["id"] == "pr:w1"]
     assert pr["chain"] == ["open"] and pr["status"] == "open" and pr["said"] == []
     assert pr["team_action"] is None
+    assert pr["reverted_by"] == []  # the revert PR came at 4500: no leak from the future
+    later = tools.list_prs("Widget", graph=company, as_of_ms=4600)["prs"]
+    assert [u["number"] for p in later if p["id"] == "pr:w1" for u in p["reverted_by"]] == [3]
     assert tools.list_prs("Widget", graph=company, as_of_ms=3000)["prs"] == []
 
 
