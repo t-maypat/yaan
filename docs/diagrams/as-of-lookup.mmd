@@ -1,0 +1,8 @@
+%% How "as of a date" works (R2): each state of an issue is a Decision with a validity window; the tool picks the one whose window holds the date.
+flowchart LR
+  Q["Question<br/>status of 'Tooltip…' bug<br/>as of 2027-01-07?"]:::human --> T["as_of = 2027-01-07<br/>end of day, epoch ms"]:::code
+  T -->|"valid_from ≤ t &lt; valid_to"| D2
+  D3["reopened<br/>10 Jan → still in force<br/>quote: 'reopened by customer CUST-0027'"]:::store -->|SUPERSEDES| D2["dismissed<br/>5 Jan → 10 Jan<br/>quote: 'functioning as expected'<br/>decided by Julia Miller"]:::store
+  D2 -->|SUPERSEDES| D1["reported<br/>27 Dec → 5 Jan"]:::store
+  D2 --> A["Answer: dismissed on 5 Jan [1],<br/>reopened only on 10 Jan [2]"]:::file
+  A --> V{"Validator<br/>quotes word for word"}:::guard
