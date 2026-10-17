@@ -17,7 +17,7 @@ OPTIONAL MATCH (cl)-[cw:CONFLICTS_WITH]->(:Decision)
 WITH i, customers, assignees, fixed_by, cl, m, sp, cw
 ORDER BY cl.ts_ms
 WITH i, customers, assignees, fixed_by,
-     collect({status: cl.value, ts_iso: cl.ts_iso, by: sp.id, by_name: sp.name, by_role: sp.role, artifact_id: m.id,
+     collect({status: cl.value, ts_iso: cl.ts_iso, ts_ms: cl.ts_ms, by: sp.id, by_name: sp.name, by_role: sp.role, artifact_id: m.id,
               quote: cl.quote, outcome: cl.outcome, refused: cw.reason}) AS history
 ORDER BY i.reported_ms
 RETURN i.id AS id, i.title AS title, i.component AS component, i.current_status AS status,

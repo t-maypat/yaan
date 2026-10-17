@@ -13,16 +13,17 @@ WITH pr, authors, reviews, reverted_by, collect(DISTINCT orig.number) AS reverts
 OPTIONAL MATCH (d:Decision)-[:AFFECTS]->(pr)
 WITH pr, authors, reviews, reverted_by, reverts, d
 ORDER BY d.valid_from_ms
-WITH pr, authors, reviews, reverted_by, reverts, collect(CASE WHEN d.kind = 'pr_status' THEN d.value END) AS chain
+WITH pr, authors, reviews, reverted_by, reverts, collect(CASE WHEN d.kind = 'pr_status' THEN d.value END) AS chain,
+     collect(CASE WHEN d.kind = 'pr_status' THEN d.valid_from_ms END) AS chain_ms
 OPTIONAL MATCH (cl:Claim)-[:ABOUT]->(pr)
 OPTIONAL MATCH (cl)-[:FROM]->(m:Artifact)
-WITH pr, authors, reviews, reverted_by, reverts, chain, cl, m
+WITH pr, authors, reviews, reverted_by, reverts, chain, chain_ms, cl, m
 ORDER BY cl.ts_ms
-WITH pr, authors, reviews, reverted_by, reverts, chain,
-     collect({action: cl.value, reason: cl.reason, ts_iso: cl.ts_iso, artifact_id: m.id,
+WITH pr, authors, reviews, reverted_by, reverts, chain, chain_ms,
+     collect({action: cl.value, reason: cl.reason, ts_iso: cl.ts_iso, ts_ms: cl.ts_ms, artifact_id: m.id,
               quote: cl.quote, outcome: cl.outcome}) AS said
 ORDER BY pr.number
 RETURN pr.id AS id, pr.number AS number, pr.title AS title, pr.url AS url,
-       pr.current_status AS status, chain, authors, reviews, reverted_by, reverts,
+       pr.current_status AS status, chain, chain_ms, authors, reviews, reverted_by, reverts,
        pr.current_action AS team_action, pr.action_reason AS action_reason, said
 LIMIT $limit

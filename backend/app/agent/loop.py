@@ -22,7 +22,8 @@ from pydantic import ValidationError
 from app import db, llm
 from app.agent import tools, validator
 from app.agent.contract import SCHEMA, Answer
-from app.agent.prompts import SYSTEM, repair_message, user_message
+from app.agent.graph_query import MAX_ATTEMPTS as GRAPH_QUERY_ATTEMPTS
+from app.agent.prompts import repair_message, system_prompt, user_message
 
 MAX_TOOL_CALLS = 8
 MAX_TURNS = 12
@@ -42,29 +43,21 @@ class ToolError(Exception):
     """A tool call that can't run as asked; the model gets the message and can retry."""
 
 
-def call_tool(name: str, args: dict[str, Any], scope: str | None, graph: str | None) -> dict:
-    product = args.get("product_id") or scope
-    if name == "search_artifacts":
-        return tools.agent_search(args["query"], args.get("kinds"), product, args.get("k"), graph)
-    if name == "resolve_entity":
-        return tools.resolve_entity(args["text"], product, graph)
-    if name == "get_artifact":
-        return tools.get_artifact(args["artifact_id"], graph)
-    if not product:
+def call_tool(
+    name: str, args: dict[str, Any], scope: tools.Scope, allowed: frozenset[str] | None = None
+) -> dict:
+    """Run one tool from the registry (R2). The question's product and as-of moment fill in
+    when the model passes null; a tool outside this answer's toolset is refused."""
+    tool = tools.REGISTRY.get(name)
+    if tool is None or (allowed is not None and name not in allowed):
+        raise ToolError(f"unknown tool {name!r}")
+    product = args.get("product_id") or scope.product_id
+    if tool.needs_product and not product:
         raise ToolError(f"{name} needs a product: resolve the product's name first")
-    if name == "doc_discussion":
-        return tools.doc_discussion(args["doc"], product, graph)
-    if name == "issue_reports":
-        return tools.issue_reports(product, graph)
-    if name == "list_prs":
-        return tools.list_prs(product, args.get("status"), graph, args.get("action"))
-    if name == "list_issues":
-        return tools.list_issues(product, args.get("status"), args.get("company"), graph)
-    if name == "links_shared":
-        return tools.links_shared(product, graph)
-    if name == "who_knows":
-        return tools.who_knows(args["topic"], product, graph)
-    raise ToolError(f"unknown tool {name!r}")
+    try:
+        return tool.run(args, tools.Scope(product, scope.as_of_ms, scope.graph))
+    except tools.ToolInputError as e:
+        raise ToolError(str(e)) from e
 
 
 def collect(
@@ -109,9 +102,9 @@ def fence(value: Any) -> Any:
 def run_tools(
     turn: llm.Turn,
     state: dict[str, Any],
-    scope: str | None,
-    graph: str | None,
+    scope: tools.Scope,
     on_event: Listener = _quiet,
+    allowed: frozenset[str] | None = None,
 ) -> list:
     results = []
     for use in turn.tool_uses:
@@ -120,18 +113,24 @@ def run_tools(
         started = time.perf_counter()
         if state["calls"] >= MAX_TOOL_CALLS:
             content, error = "Tool budget used up: answer now with the evidence you have.", True
+        elif use["name"] == "graph_query" and state["graph_query_errors"] >= GRAPH_QUERY_ATTEMPTS:
+            content, error = "graph_query failed 3 times: answer with the other tools.", True
         else:
             state["calls"] += 1
             try:
-                out = call_tool(use["name"], use["input"], scope, graph)
+                out = call_tool(use["name"], use["input"], scope, allowed)
                 collect(out, state["seen"], state["texts"], state["urls"])
                 entry["cypher"] = out.get("cypher", [])
+                if "cypher_run" in out:  # graph_query: the generated statement, as run
+                    entry["cypher_text"] = out["cypher_run"]
                 content, error = json.dumps(fence(out), ensure_ascii=False, default=str), False
                 if len(content) > MAX_RESULT_CHARS:
                     content = content[:MAX_RESULT_CHARS] + " … [result cut: narrow the request]"
             except (ToolError, db.QueryError) as e:  # shown to the model and kept in the trace
                 content, error = f"Error: {e}", True
                 entry["error"] = str(e)
+                if use["name"] == "graph_query":
+                    state["graph_query_errors"] += 1
         entry["ms"] = round((time.perf_counter() - started) * 1000, 1)
         state["trace"].append(entry)
         on_event("tool_result", {**entry, "chars": len(content)})
@@ -163,22 +162,41 @@ def answer(
     product_id: str | None = None,
     graph: str | None = None,
     on_event: Listener = _quiet,
+    as_of_ms: int | None = None,
+    toolset: tuple[str, ...] | None = None,
 ) -> dict:
-    """Answer one question with the tools, validated citations, or an abstention."""
-    state: dict[str, Any] = {"calls": 0, "seen": set(), "texts": {}, "urls": {}, "trace": []}
+    """Answer one question with the tools, validated citations, or an abstention.
+
+    `as_of_ms` answers for the state at that moment (the Timeline's slider, 12.4): the
+    status tools use it unless the model names another date. `toolset` limits the tools,
+    for the Lore − graph tools ablation (`tools.SEARCH_ONLY`, 9.8); the prompt follows it.
+    """
+    names = list(toolset) if toolset else [t["name"] for t in tools.TOOL_SPECS]
+    specs = [tools.REGISTRY[n].spec for n in names]
+    system = system_prompt(names)
+    allowed = frozenset(names)
+    scope = tools.Scope(product_id, as_of_ms, graph)
+    state: dict[str, Any] = {
+        "calls": 0,
+        "seen": set(),
+        "texts": {},
+        "urls": {},
+        "trace": [],
+        "graph_query_errors": 0,
+    }
     messages: list[dict[str, Any]] = [
-        {"role": "user", "content": user_message(question, product_id)}
+        {"role": "user", "content": user_message(question, product_id, tools.iso(as_of_ms))}
     ]
     turns: list[llm.Turn] = []
 
     def ask() -> llm.Turn:
         turn = llm.converse(
             role="answer",
-            system=SYSTEM,
+            system=system,
             messages=messages,
-            tools=tools.TOOL_SPECS,
+            tools=specs,
             output_schema=SCHEMA,
-            purpose="lore",
+            purpose="lore" if toolset is None else "lore-search",
         )
         turns.append(turn)
         messages.append({"role": "assistant", "content": turn.content})
@@ -190,7 +208,7 @@ def answer(
         if not turn.tool_uses:
             final = parse(turn)
             break
-        results = run_tools(turn, state, product_id, graph, on_event)
+        results = run_tools(turn, state, scope, on_event, allowed)
         messages.append({"role": "user", "content": results})
     if final is None:
         raise llm.LLMError(f"no final answer after {MAX_TURNS} turns")
@@ -202,6 +220,7 @@ def answer(
             texts[aid] = texts.get(aid, []) + more
         return validator.check(candidate, state["seen"], texts)
 
+    unvalidated = {"answer_markdown": final["answer_markdown"], "abstain": final["abstain"]}
     final, autocited = validator.autocite(final, state["urls"])
     report = check(final)
     first_problems = list(report.problems)
@@ -235,6 +254,9 @@ def answer(
         ],
         "retrieved": sorted(state["seen"]),
         "trace": state["trace"],
+        # the model's first final answer, before autocite, repair and dropping: scoring it
+        # gives the Lore − citation validator ablation from the same run (R2, W2)
+        "unvalidated": unvalidated,
         "validator": {
             "first_problems": first_problems,
             "repaired": repaired,

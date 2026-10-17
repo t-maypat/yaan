@@ -8,6 +8,8 @@ Spec: docs/CONTEXT.md §9.6 (tool table and design rules).
 import re
 import threading
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from app import db
@@ -295,19 +297,54 @@ def list_prs(
     status: str | None = None,
     graph: str | None = None,
     action: str | None = None,
+    as_of_ms: int | None = None,
 ) -> dict:
     """Tool 5, PR case: the product's own pull requests with their status chain from the PR
     record and its reviews (D028), plus what the team said to do with each in Slack: the
-    `pr:<id>/action` chain from extracted claims (D049). External PRs are left out."""
-    params = {"product_id": product_id, "status": status, "action": action, "limit": 200}
+    `pr:<id>/action` chain from extracted claims (D049). External PRs are left out.
+
+    With `as_of_ms` (R2) every PR shows the state in force at that moment: PRs opened later
+    are left out, the chain stops there, and only what was said by then is kept."""
+    as_of = as_of_ms is not None
+    params = {
+        "product_id": product_id,
+        "status": None if as_of else status,
+        "action": None if as_of else action,
+        "limit": 200,
+    }
     rows = db.run("product_prs", params, graph=graph).rows
+    cypher = ["product_prs.cypher"]
+    states = states_at(product_id, as_of_ms, graph) if as_of else {}
+    if as_of:
+        cypher.append("states_at.cypher")
+    kept = []
     for r in rows:
         r["reviews"] = [rv for rv in r["reviews"] if rv["id"]]
         r["reverted_by"] = [
             {**u, "reason": clip(u["reason"], 300)} for u in r["reverted_by"] if u["number"]
         ]
         r["said"] = [c for c in r["said"] if c["action"]]
-    return {"product_id": product_id, "prs": rows, "cypher": ["product_prs.cypher"]}
+        said_ms = [c.pop("ts_ms") for c in r["said"]]  # for as_of only; not shown
+        chain_ms = r.pop("chain_ms")
+        if as_of:
+            state = states.get(r["id"], {})
+            if "pr_status" not in state:
+                continue  # not opened yet at that moment
+            r["chain"] = [v for v, ms in zip(r["chain"], chain_ms, strict=True) if ms <= as_of_ms]
+            r["status"] = state["pr_status"]
+            r["team_action"] = state.get("pr_action")
+            if r["team_action"] is None:
+                r["action_reason"] = None
+            r["said"] = [
+                c for c, ms in zip(r["said"], said_ms, strict=True) if (ms or 0) <= as_of_ms
+            ]
+            if (status and r["status"] != status) or (action and r["team_action"] != action):
+                continue
+        kept.append(r)
+    out = {"product_id": product_id, "prs": kept, "cypher": cypher}
+    if as_of:
+        out["as_of"] = iso(as_of_ms)
+    return out
 
 
 UNRESOLVED = ("reported", "reopened")
@@ -318,22 +355,39 @@ def list_issues(
     status: str | None = None,
     company: str | None = None,
     graph: str | None = None,
+    as_of_ms: int | None = None,
 ) -> dict:
     """Tool 5, issue case (slice B): canonical customer issues (S7, D049) with their current
     status from the fold, the status history as claims with quotes, the assignee, reporting
     customers and companies, and the PRs that fixed them. `status='unresolved'` means
-    reported or reopened; `company` keeps issues reported by that company's customers."""
-    query_status = None if status == "unresolved" else status
+    reported or reopened; `company` keeps issues reported by that company's customers.
+
+    With `as_of_ms` (R2) each issue shows the status in force at that moment (its decision's
+    validity window holds it), issues reported later are left out, and the history stops."""
+    as_of = as_of_ms is not None
+    query_status = None if status == "unresolved" or as_of else status
     params = {"product_id": product_id, "status": query_status, "limit": 200}
+    states = states_at(product_id, as_of_ms, graph) if as_of else {}
     issues = []
     for r in db.run("product_issues", params, graph=graph).rows:
         r["customers"] = [c for c in r["customers"] if c["id"]]
         r["assignees"] = [a for a in r["assignees"] if a["id"]]
         r["fixed_by"] = [p for p in r["fixed_by"] if p["id"]]
         r["history"] = [h for h in r["history"] if h["status"]]
+        history_ms = [h.pop("ts_ms") for h in r["history"]]  # for as_of only; not shown
         for h in r["history"]:  # only refused claims carry the key, so other output is unchanged
             if reason := h.pop("refused"):
                 h["not_applied"] = f"the authority policy refused this change: {reason}"
+        if as_of:
+            if "issue_status" not in states.get(r["id"], {}):
+                continue  # not reported yet at that moment
+            r["status"] = states[r["id"]]["issue_status"]
+            r["history"] = [
+                h for h, ms in zip(r["history"], history_ms, strict=True) if (ms or 0) <= as_of_ms
+            ]
+            r["reopen_count"] = sum(h["status"] == "reopened" for h in r["history"])
+            if status not in (None, "unresolved") and r["status"] != status:
+                continue
         if status == "unresolved" and r["status"] not in UNRESOLVED:
             continue
         companies = " ".join((c["company"] or "") for c in r["customers"]).casefold()
@@ -343,13 +397,17 @@ def list_issues(
     counts: dict[str, int] = {}
     for r in issues:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
-    return {
+    out = {
         "product_id": product_id,
         "filters": {"status": status, "company": company},
         "counts_by_status": counts,
         "issues": issues,
         "cypher": ["product_issues.cypher"],
     }
+    if as_of:
+        out["as_of"] = iso(as_of_ms)
+        out["cypher"].append("states_at.cypher")
+    return out
 
 
 def links_shared(product_id: str, graph: str | None = None) -> dict:
@@ -533,6 +591,436 @@ def who_knows(topic: str, product_id: str, graph: str | None = None) -> dict:
     return out
 
 
+# --- R2: the rest of the toolset (decisions, as-of, rankings, absences, impact, people) -----
+ISO_FORMAT = "%Y-%m-%dT%H:%M:%SZ"  # the artifacts' ts_iso form, so ISO strings compare in order
+DAY_MS = 86_400_000
+PR_NUMBER = re.compile(r"(?:\bPR\s*#?\s*|#)(\d+)\b", re.IGNORECASE)
+SUBJECT_MATCH_MIN = 70  # rapidfuzz token-set score for a phrase to name an issue or PR title
+QUOTE_CHARS = 300
+
+
+def iso(ms: int | None) -> str | None:
+    from datetime import UTC, datetime
+
+    return None if ms is None else datetime.fromtimestamp(ms / 1000, UTC).strftime(ISO_FORMAT)
+
+
+def parse_as_of(value: str | None) -> int | None:
+    """An ISO date or datetime -> epoch ms (UTC). A bare date means the end of that day, so
+    "as of 2027-01-15" includes everything said on the 15th."""
+    from datetime import UTC, datetime
+
+    if value is None or not str(value).strip():
+        return None
+    text = str(value).strip().replace("Z", "+00:00")
+    try:
+        if len(text) == 10:
+            day = datetime.fromisoformat(text).replace(tzinfo=UTC)
+            return int(day.timestamp() * 1000) + DAY_MS - 1
+        moment = datetime.fromisoformat(text)
+    except ValueError as e:
+        raise ValueError(f"as_of {value!r} is not an ISO date such as 2027-01-15") from e
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return int(moment.timestamp() * 1000)
+
+
+def states_at(product_id: str, as_of_ms: int, graph: str | None = None) -> dict[str, dict]:
+    """{subject id: {decision kind: value}} for the decisions in force at `as_of_ms`."""
+    rows = db.run(
+        "states_at", {"product_id": product_id, "as_of_ms": as_of_ms, "limit": 2000}, graph=graph
+    ).rows
+    out: dict[str, dict] = {}
+    for r in rows:
+        out.setdefault(r["subject_id"], {})[r["kind"]] = r["value"]
+    return out
+
+
+def match_subjects(subject: str, product_id: str, graph: str | None = None) -> list[dict]:
+    """The product's issues or own PRs a phrase names: an id (iss:… / pr:… / dec:…), a PR
+    number ("PR #12"), or a title, matched like who_knows matches areas. At most 3."""
+    from rapidfuzz import fuzz
+
+    text = subject.strip()
+    rows = db.run("lineage_subjects", {"product_id": product_id, "limit": 1000}, graph=graph).rows
+    if text.startswith("dec:"):  # dec:<topic>:<valid_from_ms>, topic = <subject id>/<facet>
+        text = text[4:].rsplit(":", 1)[0].rsplit("/", 1)[0]
+    if text.startswith(("iss:", "pr:")):
+        return [r for r in rows if r["id"] == text.split("/")[0]]
+    if m := PR_NUMBER.search(text):
+        return [r for r in rows if r["kind"] == "pr" and r["number"] == int(m[1])][:3]
+    t = text.casefold()
+    scored = []
+    for r in rows:
+        if not r["title"]:
+            continue
+        title = r["title"].casefold()
+        scored.append((fuzz.token_set_ratio(t, title), fuzz.ratio(t, title), r))
+    scored.sort(key=lambda x: (-x[0], -x[1], x[2]["id"]))
+    if not scored or scored[0][0] < SUBJECT_MATCH_MIN:
+        return []
+    top = scored[0][0]
+    return [r for s, _, r in scored if s >= max(SUBJECT_MATCH_MIN, top - AREA_MATCH_SPREAD)][:3]
+
+
+def topics_of(subject: dict) -> list[str]:
+    facets = ("status", "action") if subject["kind"] == "pr" else ("status",)
+    return [f"{subject['id']}/{f}" for f in facets]
+
+
+def _state(row: dict, as_of_ms: int | None) -> dict:
+    """One decision of a chain, compact: nulls left out of the nested lists."""
+    start, end = row["valid_from_ms"], row["valid_to_ms"]
+    in_force = (
+        start <= as_of_ms and (end is None or end > as_of_ms)
+        if as_of_ms is not None
+        else row["status"] == "active"
+    )
+    out = {
+        "decision_id": row["id"],
+        "value": row["value"],
+        "statement": row["statement"],
+        "from": iso(start),
+        "to": iso(end),
+        "in_force": in_force,
+        "origin": row["origin"],
+        "decided_by": [p for p in row["deciders"] if p["id"]],
+        "evidence": [
+            {**e, "quote": clip(e["quote"], QUOTE_CHARS)}
+            for e in row["evidence"]
+            if e["artifact_id"]
+        ],
+        "said": [
+            {**c, "quote": clip(c["quote"], QUOTE_CHARS)} for c in row["claims"] if c["artifact_id"]
+        ],
+    }
+    if row["ts_inferred"]:
+        out["time_inferred"] = True  # HERB has no merged_at / closed_at (D028)
+    for key in ("refused", "alerts", "responses", "precedents"):
+        items = [x for x in row[key] if x.get("id") or x.get("artifact_id")]
+        if items:
+            out[key] = items
+    return out
+
+
+def decision_lineage(
+    subject: str, product_id: str, as_of_ms: int | None = None, graph: str | None = None
+) -> dict:
+    """Tool 6 (R2): how an issue's or PR's state changed over time and why. Each state comes
+    with its validity window, who decided it, the verbatim evidence, the claims behind it
+    with the authority verdict, refused claims, the alerts it raised, the responses it caused
+    and similar earlier cases. `as_of_ms` marks the state in force at that moment."""
+    subjects = match_subjects(subject, product_id, graph)
+    cypher = ["lineage_subjects.cypher"]
+    if not subjects:
+        return {
+            "subject": subject,
+            "product_id": product_id,
+            "subjects": [],
+            "cypher": cypher,
+            "note": "no issue or pull request of this product matches; try list_issues or "
+            "list_prs to find its exact title or number",
+        }
+    topics = [t for s in subjects for t in topics_of(s)]
+    rows = db.run("decision_chain", {"topics": topics, "limit": 400}, graph=graph).rows
+    cypher.append("decision_chain.cypher")
+    out_subjects = []
+    for s in subjects:
+        item = {k: s[k] for k in ("id", "kind", "title", "number", "url", "status") if s[k]}
+        for facet in ("status", "action"):
+            chain = [_state(r, as_of_ms) for r in rows if r["topic"] == f"{s['id']}/{facet}"]
+            if chain:
+                item[f"{facet}_chain"] = chain
+                now = [c["value"] for c in chain if c["in_force"]]
+                item[f"{facet}_{'as_of' if as_of_ms is not None else 'now'}"] = (
+                    now[-1] if now else None
+                )
+        out_subjects.append(item)
+    out = {"subject": subject, "product_id": product_id, "subjects": out_subjects, "cypher": cypher}
+    if as_of_ms is not None:
+        out["as_of"] = iso(as_of_ms)
+    return out
+
+
+def impact_of(subject: str, product_id: str, graph: str | None = None) -> dict:
+    """Tool 11 (R2): the blast radius of an issue's or PR's current state (11.2, D053): the
+    fixing PRs with authors and reviewers, reporting customers and their companies,
+    assignees, other issues on the same component, the evidence of the state it replaced,
+    WORKS_ON teams and CAUSED decisions."""
+    from app.sentinel import blast_radius
+
+    decision_id = subject.strip() if subject.strip().startswith("dec:") else None
+    cypher = ["impact_of.cypher"]
+    found = None
+    if decision_id is None:
+        subjects = match_subjects(subject, product_id, graph)
+        cypher.insert(0, "lineage_subjects.cypher")
+        if not subjects:
+            return {
+                "subject": subject,
+                "product_id": product_id,
+                "cypher": cypher,
+                "note": "no issue or pull request of this product matches",
+            }
+        found = subjects[0]
+        rows = db.run(
+            "decision_chain", {"topics": [f"{found['id']}/status"], "limit": 200}, graph=graph
+        ).rows
+        cypher.insert(1, "decision_chain.cypher")
+        active = [r for r in rows if r["status"] == "active"] or rows[-1:]
+        if not active:
+            return {
+                "subject": subject,
+                "product_id": product_id,
+                "matched": {k: found[k] for k in ("id", "kind", "title")},
+                "cypher": cypher,
+                "note": "no recorded decision about it yet",
+            }
+        decision_id = active[-1]["id"]
+    radius = blast_radius.impact_of(decision_id, graph=graph)
+    radius.pop("rows")  # the Inbox draws from them; the agent reads the grouped lists
+    out = {"subject": subject, "product_id": product_id, **radius, "cypher": cypher}
+    if found:
+        out["matched"] = {k: found[k] for k in ("id", "kind", "title", "status") if found[k]}
+    return out
+
+
+ALERT_KEYS = (
+    "id",
+    "kind",
+    "severity",
+    "status",
+    "summary",
+    "subject_title",
+    "from_value",
+    "to_value",
+    "ts_iso",
+    "artifact_id",
+    "quote",
+    "actor_name",
+    "actor_role",
+    "reason",
+    "decision_id",
+)
+
+
+def open_alerts(
+    product_id: str | None, status: str | None = "open", kind: str | None = None, graph=None
+) -> dict:
+    """Tool 12 (R2): the Change Sentinel's alerts (11.1, 11.5): regressions, reopenings,
+    reversals, unauthorized changes, work outside the working group, key people; each with
+    the change, its evidence quote and who it notifies."""
+    rows = db.run(
+        "list_alerts", {"status": status, "product_id": product_id, "limit": 200}, graph=graph
+    ).rows
+    alerts = []
+    for r in rows:
+        if kind and r["kind"] != kind:
+            continue
+        a = {k: r[k] for k in ALERT_KEYS if r.get(k) is not None}
+        if a.get("quote"):
+            a["quote"] = clip(a["quote"], QUOTE_CHARS)
+        a["notifies"] = [n["name"] for n in r["notifies"] if n["id"]]
+        alerts.append(a)
+    counts: dict[str, int] = {}
+    for a in alerts:
+        counts[a["kind"]] = counts.get(a["kind"], 0) + 1
+    return {
+        "product_id": product_id,
+        "filters": {"status": status, "kind": kind},
+        "counts_by_kind": counts,
+        "alerts": alerts,
+        "cypher": ["list_alerts.cypher"],
+    }
+
+
+PEOPLE_METRICS = (
+    "prs_authored",
+    "prs_merged",
+    "prs_reviewed",
+    "prs_approved",
+    "changes_requested",
+    "bugs_fixed",
+    "open_bugs_assigned",
+)
+ISSUE_METRICS = {  # metric -> which of a company's issues count
+    "issues_reported": lambda i: True,
+    "issues_unresolved": lambda i: i["status"] in UNRESOLVED,
+    "issues_resolved": lambda i: i["status"] == "resolved",
+    "issues_dismissed": lambda i: i["status"] == "dismissed",
+    "issues_reopened": lambda i: i["status"] == "reopened" or (i["reopen_count"] or 0) > 0,
+}
+
+
+def rank(
+    metric: str, product_id: str, by: str | None = None, k: int | None = None, graph=None
+) -> dict:
+    """Tool 7 (R2): a ranking counted by the graph, not by the model. People by PR and bug
+    work, or companies (by='customer': customers) by the issues they reported. Ties share a
+    rank; each row names its evidence."""
+    k = min(k or 10, 50)
+    if metric in PEOPLE_METRICS:
+        rows = db.run(
+            "rank_people", {"product_id": product_id, "metric": metric, "limit": 200}, graph=graph
+        ).rows
+        ranking = [{**r, "n": int(r["n"])} for r in rows]
+        cypher = ["rank_people.cypher"]
+    elif metric in ISSUE_METRICS:
+        entity = "customer" if by == "customer" else "company"
+        rows = db.run(
+            "rank_companies",
+            {"product_id": product_id, "entity": entity, "limit": 500},
+            graph=graph,
+        ).rows
+        ranking = []
+        for r in rows:
+            counted = [i for i in r["issues"] if ISSUE_METRICS[metric](i)]
+            if counted:
+                ranking.append(
+                    {"id": r["id"], "name": r["name"], "n": len(counted), "issues": counted}
+                )
+        ranking.sort(key=lambda x: (-x["n"], x["name"] or ""))
+        cypher = ["rank_companies.cypher"]
+    else:
+        raise ValueError(f"unknown metric {metric!r}")
+    previous, place = None, 0
+    for i, r in enumerate(ranking, 1):  # standard competition ranking: 1, 1, 3
+        if r["n"] != previous:
+            place, previous = i, r["n"]
+        r["rank"] = place
+    return {
+        "metric": metric,
+        "product_id": product_id,
+        "by": by,
+        "total_ranked": len(ranking),
+        "ranking": ranking[:k],
+        "cypher": cypher,
+    }
+
+
+MISSING_KINDS = (
+    "resolved_without_fix",
+    "open_without_fix",
+    "issue_without_assignee",
+    "pr_without_review",
+    "area_single_expert",
+)
+
+
+def find_missing(kind: str, product_id: str, graph: str | None = None) -> dict:
+    """Tool 8 (R2): what has no path where one is expected (absence-of-path queries):
+    resolved issues no PR fixes, open issues with no fix in progress, issues nobody was
+    assigned, own PRs nobody reviewed, areas only one person holds (no backup)."""
+    if kind not in MISSING_KINDS:
+        raise ValueError(f"unknown kind {kind!r}")
+    rows = db.run(
+        "find_missing", {"product_id": product_id, "kind": kind, "limit": 200}, graph=graph
+    ).rows
+    return {
+        "kind": kind,
+        "product_id": product_id,
+        "count": len(rows),
+        "items": rows,
+        "cypher": ["find_missing.cypher"],
+    }
+
+
+def resolve_person(
+    text: str, product_id: str | None, graph: str | None = None
+) -> tuple[dict | None, list[dict]]:
+    """A person's id from an id or a name: (best match, namesakes). Namesakes are common in
+    HERB (98 names for 530 people), so the one most active in the product wins (D037)."""
+    t = text.strip()
+    if t.startswith("eid_"):
+        return {"id": t}, []
+    words = " ".join(re.findall(r"\w+", t))
+    if not words:
+        return None, []
+    rows = db.run(
+        "resolve_names", {"q": words, "product_id": product_id, "k": 10}, graph=graph
+    ).rows
+    people = [r for r in rows if "Person" in r["labels"]]
+    exact = [r for r in people if (r["name"] or "").casefold() == t.casefold()] or people
+    if not exact:
+        return None, []
+    keep = ("id", "name", "role", "activity")
+    return {k: exact[0][k] for k in keep}, [{k: r[k] for k in keep} for r in exact[1:5]]
+
+
+def connection_path(a: str, b: str, product_id: str | None, graph: str | None = None) -> dict:
+    """Tool 13 (R2, D065): the shortest chain of people who work together (COLLAB: shared
+    reviews, meetings and chats) between two people, at most 6 hops, with each tie."""
+    pa, alt_a = resolve_person(a, product_id, graph)
+    pb, alt_b = resolve_person(b, product_id, graph)
+    cypher = ["resolve_names.cypher", "connection_path.cypher"]
+    if not pa or not pb:
+        missing = [x for x, p in ((a, pa), (b, pb)) if not p]
+        return {"a": a, "b": b, "cypher": cypher, "note": f"no person found for {missing}"}
+    rows = db.run("connection_path", {"a": pa["id"], "b": pb["id"]}, graph=graph).rows
+    people = rows[0]["people"] if rows else []
+    ties = rows[0]["ties"] if rows else []
+    out: dict[str, Any] = {
+        "a": pa,
+        "b": pb,
+        "connected": bool(people),
+        "hops": len(people) - 1 if people else None,
+        "path": people,
+        "ties": ties,
+        "cypher": cypher,
+    }
+    if alt_a or alt_b:
+        out["namesakes"] = {"a": alt_a, "b": alt_b}
+    if not people:
+        out["note"] = "no chain of collaborators within 6 hops"
+    return out
+
+
+def person_profile(person: str, product_id: str | None, graph: str | None = None) -> dict:
+    """Tool 4 (R2): one person: role, team, manager, working group, PageRank / betweenness
+    rank, what they did per product, the areas they know, closest collaborators, open
+    issues assigned to them, and their latest artifacts in the product (to cite)."""
+    found, namesakes = resolve_person(person, product_id, graph)
+    cypher = ["resolve_names.cypher"]
+    if not found:
+        return {"person": person, "cypher": cypher, "note": "no person with that name or id"}
+    pid = found["id"]
+    head = db.run("person_profile", {"id": pid}, graph=graph).rows
+    if not head:
+        return {"person": person, "cypher": cypher, "note": f"no person {pid}"}
+    activity = db.run("person_activity", {"id": pid, "limit": 60}, graph=graph).rows
+    links = db.run("person_links", {"id": pid, "product_id": product_id}, graph=graph).rows
+    cypher += ["person_profile.cypher", "person_activity.cypher", "person_links.cypher"]
+    profile = {k: v for k, v in head[0].items() if v not in (None, [])}
+    profile["managers"] = [m for m in head[0]["managers"] if m["id"]]
+    by_product: dict[str, dict[str, int]] = {}
+    for r in activity:
+        key = f"{r['relation'].lower()}_{r['kind']}"
+        by_product.setdefault(r["product_id"], {})[key] = int(r["n"])
+    sections: dict[str, list[dict]] = {}
+    for r in links:
+        item = {k: v for k, v in r.items() if k != "section" and v is not None}
+        if r["section"] == "recent":
+            item.pop("n", None)
+            item["artifact_id"] = item.pop("id")
+            item["text"] = clip(item.get("text"), 200)
+        sections.setdefault(r["section"], []).append(item)
+    truck = db.run("person_truck", {"id": pid}, graph=graph).rows
+    cypher.append("person_truck.cypher")
+    out = {
+        **profile,
+        "activity_by_product": by_product,
+        "knows": sections.get("knows", []),
+        "collaborators": sections.get("collaborator", []),
+        "open_issues_assigned": sections.get("assigned_open", []),
+        "recent_artifacts": sections.get("recent", []),
+        "key_person_in": [t["product_id"] for t in truck],
+        "cypher": cypher,
+    }
+    if namesakes:
+        out["namesakes"] = namesakes
+    return out
+
+
 def agent_search(
     query: str,
     kinds: list[str] | None = None,
@@ -570,7 +1058,14 @@ KINDS = ["message", "meeting", "meeting_chat", "doc", "pr", "link"]
 PRODUCT = _nullable(
     {"type": "string", "description": "a product id; null uses the question's product"}
 )
-TOOL_SPECS = [
+AS_OF = _nullable(
+    {
+        "type": "string",
+        "description": "an ISO date (2027-01-15) for the state at the end of that day; null = "
+        "the question's as-of date, or now",
+    }
+)
+_SPECS = [
     _tool(
         "search_artifacts",
         "Keyword + semantic search over the text of Slack messages, meeting transcripts, "
@@ -636,7 +1131,7 @@ TOOL_SPECS = [
         "to be closed), on_hold, reverted, with action_reason (product_direction = a change "
         "in product direction, introduced_bugs = it introduced bugs), or to_merge (someone "
         "said they'd merge it; such PRs were usually merged since). 'said' lists those Slack "
-        "messages with quotes to cite.",
+        "messages with quotes to cite. as_of gives each PR's state on that date.",
         {
             "status": _nullable(
                 {
@@ -647,6 +1142,7 @@ TOOL_SPECS = [
             "action": _nullable(
                 {"type": "string", "enum": ["to_merge", "to_close", "on_hold", "reverted"]}
             ),
+            "as_of": AS_OF,
             "product_id": PRODUCT,
         },
     ),
@@ -660,7 +1156,7 @@ TOOL_SPECS = [
         "dismissed (found to need no fix), reopened (open again). 'unresolved' = reported "
         "or reopened. counts_by_status counts what was returned. Use it for bug counts, "
         "unresolved / resolved / reopened / dismissed issues, who resolved or dismissed "
-        "them, and the companies affected.",
+        "them, and the companies affected. as_of gives the status on that date.",
         {
             "status": _nullable(
                 {
@@ -671,6 +1167,7 @@ TOOL_SPECS = [
             "company": _nullable(
                 {"type": "string", "description": "only issues reported by this company"}
             ),
+            "as_of": AS_OF,
             "product_id": PRODUCT,
         },
     ),
@@ -698,4 +1195,203 @@ TOOL_SPECS = [
             "product_id": PRODUCT,
         },
     ),
+    _tool(
+        "decision_lineage",
+        "How an issue's or pull request's state changed over time, and why: every state in "
+        "order with its validity window (from / to; in_force marks the one that holds now, or "
+        "on the as_of date), who decided it, the verbatim evidence, what people said with "
+        "the authority policy's verdict, claims the policy refused, alerts the change raised, "
+        "the responses it caused and similar earlier cases. A PR has a status_chain (the "
+        "record) and an action_chain (what the team said to do). Use it for what happened to "
+        "X, when it changed, who reversed or reopened it, and the state on a past date.",
+        {
+            "subject": {
+                "type": "string",
+                "description": "an issue title, a PR number such as 'PR #12', or an id",
+            },
+            "as_of": AS_OF,
+            "product_id": PRODUCT,
+        },
+    ),
+    _tool(
+        "rank",
+        "A ranking counted by the graph, so you never count by hand: people by "
+        "prs_authored, prs_merged, prs_reviewed, prs_approved, changes_requested, bugs_fixed "
+        "(authored a PR that fixed an issue) or open_bugs_assigned; or companies (by "
+        "'customer': customers) by issues_reported, issues_unresolved, issues_resolved, "
+        "issues_dismissed or issues_reopened. Each row has n, its rank (ties share one) and "
+        "the PRs or issues counted, to cite. Use it for who did the most or which company "
+        "has the most.",
+        {
+            "metric": {
+                "type": "string",
+                "enum": [*PEOPLE_METRICS, *ISSUE_METRICS],
+            },
+            "by": _nullable({"type": "string", "enum": ["company", "customer"]}),
+            "k": _nullable({"type": "integer", "description": "rows wanted, at most 50"}),
+            "product_id": PRODUCT,
+        },
+    ),
+    _tool(
+        "find_missing",
+        "What is missing where something is expected: resolved_without_fix (issues marked "
+        "resolved that no PR fixes), open_without_fix (open issues with no fix yet), "
+        "issue_without_assignee, pr_without_review (the product's PRs nobody reviewed), "
+        "area_single_expert (components or work items only one person holds: no backup; "
+        "detail is their id). Each item has an "
+        "artifact to cite when there is one.",
+        {
+            "kind": {"type": "string", "enum": list(MISSING_KINDS)},
+            "product_id": PRODUCT,
+        },
+    ),
+    _tool(
+        "impact_of",
+        "What a change to an issue or pull request touches (its blast radius): the PRs that "
+        "fix it with their authors and reviewers, the customers who reported it and their "
+        "companies, assignees, other open issues on the same component, the evidence of the "
+        "state it replaced, the teams working on the product and decisions it caused. Use "
+        "it for what breaks or who is affected if X changes.",
+        {
+            "subject": {
+                "type": "string",
+                "description": "an issue title, a PR number such as 'PR #12', or a decision id",
+            },
+            "product_id": PRODUCT,
+        },
+    ),
+    _tool(
+        "open_alerts",
+        "The change sentinel's alerts: regression (a fixed bug reported again), reopened, "
+        "reversal, unauthorized (a change by someone without authority), outside_group (a "
+        "decision made outside the working group), key_person (one person holds an area), "
+        "bus_factor. Each with the change, the evidence quote and who it notifies.",
+        {
+            "status": _nullable({"type": "string", "enum": ["open", "approved", "dismissed"]}),
+            "kind": _nullable({"type": "string"}),
+            "product_id": PRODUCT,
+        },
+    ),
+    _tool(
+        "person_profile",
+        "One person: role, team, manager, working group, how central they are (PageRank and "
+        "betweenness rank over who works with whom), what they authored, reviewed and "
+        "attended per product, the areas they know, closest collaborators, open issues "
+        "assigned to them, products where they are a key person, and their latest artifacts "
+        "in the product to cite. Accepts a name (namesakes: the most active in the product "
+        "first) or an eid_ id.",
+        {"person": {"type": "string"}, "product_id": PRODUCT},
+    ),
+    _tool(
+        "connection_path",
+        "The shortest chain of people who work together (shared reviews, meetings, chats) "
+        "between two people, up to 6 hops, with each tie's strength. Use it for how two "
+        "people are connected or who can introduce one to the other.",
+        {"a": {"type": "string"}, "b": {"type": "string"}, "product_id": PRODUCT},
+    ),
 ]
+
+
+def _graph_query_spec() -> dict[str, Any]:
+    from app.agent.graph_query import MAX_LIMIT, schema_card
+
+    return _tool(
+        "graph_query",
+        "Last resort, only when no other tool fits: run one read-only Cypher query on the "
+        f"FalkorDB graph. Writes are refused; LIMIT at most {MAX_LIMIT}; 2 s timeout; a "
+        "failed query returns its error so you can fix it (3 tries per answer). The rows "
+        "have no text to quote unless you return artifact ids and text; cite with "
+        f"get_artifact. Schema:\n{schema_card()}",
+        {"cypher": {"type": "string"}},
+    )
+
+
+# --- the registry (R2): one entry per tool, used by the loop and the MCP server ------------
+class ToolInputError(ValueError):
+    """Arguments a tool can't use as given; the model sees the message and can retry."""
+
+
+@dataclass(frozen=True)
+class Scope:
+    """What a question fixes for every tool call: its product, as-of moment and graph."""
+
+    product_id: str | None = None
+    as_of_ms: int | None = None
+    graph: str | None = None
+
+
+@dataclass(frozen=True)
+class Tool:
+    spec: dict[str, Any]
+    run: Callable[[dict[str, Any], Scope], dict]
+    needs_product: bool = True
+
+
+def _as_of(args: dict[str, Any], scope: Scope) -> int | None:
+    try:
+        return parse_as_of(args.get("as_of")) if args.get("as_of") else scope.as_of_ms
+    except ValueError as e:
+        raise ToolInputError(str(e)) from e
+
+
+def _graph_query(args: dict[str, Any], scope: Scope) -> dict:
+    from app.agent.graph_query import Refused, graph_query
+
+    try:
+        return graph_query(args["cypher"], scope.graph)
+    except Refused as e:
+        raise ToolInputError(f"query refused: {e}") from e
+
+
+_HANDLERS: dict[str, tuple[Callable[[dict[str, Any], Scope], dict], bool]] = {
+    "search_artifacts": (
+        lambda a, s: agent_search(a["query"], a.get("kinds"), s.product_id, a.get("k"), s.graph),
+        False,
+    ),
+    "resolve_entity": (lambda a, s: resolve_entity(a["text"], s.product_id, s.graph), False),
+    "get_artifact": (lambda a, s: get_artifact(a["artifact_id"], s.graph), False),
+    "doc_discussion": (lambda a, s: doc_discussion(a["doc"], s.product_id, s.graph), True),
+    "issue_reports": (lambda a, s: issue_reports(s.product_id, s.graph), True),
+    "list_prs": (
+        lambda a, s: list_prs(
+            s.product_id, a.get("status"), s.graph, a.get("action"), _as_of(a, s)
+        ),
+        True,
+    ),
+    "list_issues": (
+        lambda a, s: list_issues(
+            s.product_id, a.get("status"), a.get("company"), s.graph, _as_of(a, s)
+        ),
+        True,
+    ),
+    "links_shared": (lambda a, s: links_shared(s.product_id, s.graph), True),
+    "who_knows": (lambda a, s: who_knows(a["topic"], s.product_id, s.graph), True),
+    "decision_lineage": (
+        lambda a, s: decision_lineage(a["subject"], s.product_id, _as_of(a, s), s.graph),
+        True,
+    ),
+    "rank": (
+        lambda a, s: rank(a["metric"], s.product_id, a.get("by"), a.get("k"), s.graph),
+        True,
+    ),
+    "find_missing": (lambda a, s: find_missing(a["kind"], s.product_id, s.graph), True),
+    "impact_of": (lambda a, s: impact_of(a["subject"], s.product_id, s.graph), True),
+    "open_alerts": (
+        lambda a, s: open_alerts(s.product_id, a.get("status"), a.get("kind"), s.graph),
+        False,
+    ),
+    "person_profile": (lambda a, s: person_profile(a["person"], s.product_id, s.graph), False),
+    "connection_path": (
+        lambda a, s: connection_path(a["a"], a["b"], s.product_id, s.graph),
+        False,
+    ),
+    "graph_query": (_graph_query, False),
+}
+
+REGISTRY: dict[str, Tool] = {
+    spec["name"]: Tool(spec, *_HANDLERS[spec["name"]]) for spec in [*_SPECS, _graph_query_spec()]
+}
+# The answer agent's tools, in a fixed order (part of every cached turn's key).
+TOOL_SPECS = [t.spec for t in REGISTRY.values()]
+# Lore − graph tools (9.8, R1-7): the same loop with search and reading only.
+SEARCH_ONLY = ("search_artifacts", "get_artifact")
