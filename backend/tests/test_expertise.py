@@ -1,0 +1,122 @@
+"""Phase 10 expertise (D059): areas, degree-of-authorship, truck factor. Pure functions first,
+checked against hand-computed values; then the derive step on the Sentinel's invented company."""
+
+import math
+from pathlib import Path
+
+import pytest
+
+from app import db
+from app.ingest import derive
+from app.ingest import expertise as ex
+
+DAY = ex.DAY_MS
+
+
+def test_doa_matches_the_published_formula_by_hand():
+    # first author with 2 of 3 deliveries: 3.293 + 1.098 + 2(0.164) - 0.321 ln(1 + 1)
+    assert ex.doa(True, 2, 1) == pytest.approx(4.719 - 0.321 * math.log(2))
+    assert ex.doa(False, 1, 2) == pytest.approx(3.457 - 0.321 * math.log(3))
+
+
+def test_knows_marks_authors_scores_recency_and_gives_reviewers_no_doa():
+    area = ex.Area("area:W:c:x", "X", "component", "W")
+    area.deliveries = [("a", 1 * DAY, "i1"), ("a", 2 * DAY, "i2"), ("b", 3 * DAY, "i3")]
+    area.talk = [("c", 3 * DAY), ("c", 3 * DAY), ("b", 3 * DAY)]
+    rows = {r["person_id"]: r for r in ex.knows(area, now_ms=92 * DAY)}
+    a, b, c = rows["a"], rows["b"], rows["c"]
+    assert a["author"] and a["first"] and a["deliveries"] == 2 and a["doa_norm"] == 1.0
+    assert b["doa_norm"] == pytest.approx(ex.doa(False, 1, 2) / ex.doa(True, 2, 1), abs=1e-4)
+    assert not b["author"]  # 0.69 of the top, under the 0.75 bar
+    assert a["score"] == pytest.approx(math.exp(-90 / 90), abs=1e-4)  # last delivery 90 days ago
+    assert c["doa_abs"] is None and c["score"] == pytest.approx(0.2) and not c["author"]
+    assert b["discussion"] == 0.5 and a["refs"] == ["i1", "i2"]
+
+
+def test_truck_factor_removes_top_authors_until_most_areas_are_orphaned():
+    assert ex.truck_factor({"x": {"a"}, "y": {"a"}, "z": {"b"}}) == (1, ["a"])
+    # removing a orphans exactly half (not more), so b goes too
+    assert ex.truck_factor({"x": {"a"}, "y": {"a"}, "z": {"b"}, "w": {"a", "b"}}) == (2, ["a", "b"])
+    assert ex.truck_factor({"x": set()}) == (0, [])
+
+
+def test_a_compound_component_splits_only_into_known_components():
+    known = {"backend server": "Backend Server", "visualization module": "Visualization Module"}
+    assert ex.component_areas("Backend Server & Visualization Module", known) == [
+        "backend server",
+        "visualization module",
+    ]
+    assert ex.component_areas("Database & User Interface", known) == ["database and user interface"]
+    assert ex.component_areas("AI suggestion engine", {}) == ["ai suggestion engine"]
+    assert ex.component_areas(None, known) == []
+
+
+def pr(id, title, ts, author, reverts=None, fixes=None, product="Widget"):
+    return {
+        "id": id,
+        "product_id": product,
+        "title": title,
+        "number": int(id[-1]),
+        "ts_ms": ts,
+        "author": author,
+        "reverts": reverts,
+        "fixes": fixes,
+    }
+
+
+def test_work_items_group_retries_and_reverts_and_bug_fixes_join_their_component():
+    issues = [{"id": "iss:1", "product_id": "Widget", "component": "Export", "reported_ms": 0}]
+    people = [{"issue_id": "iss:1", "person_id": "e", "how": "fix", "ref_id": "pr:5", "ts_ms": 9}]
+    prs = [
+        pr("pr:1", "Implement GraphQL Schema for Widget", 1, "a"),
+        pr("pr:2", "Implement GraphQL schema for Widget!", 2, "b"),
+        pr("pr:3", "Revert PR# 2: GraphQL changes", 3, "c", reverts="pr:2"),
+        pr("pr:4", "Add Caching", 4, "a"),
+        pr("pr:5", "Fix export", 5, "e", fixes="iss:1"),
+    ]
+    reviews = [{"person_id": "r", "pr_id": "pr:3", "ts_ms": 3}]
+    areas = ex.build_areas(issues, people, prs, reviews)
+    gql = areas["area:Widget:w:implement-graphql-schema-for"]
+    assert gql.name == "Implement GraphQL Schema for Widget" and gql.prs == {"pr:1", "pr:2", "pr:3"}
+    assert [d[0] for d in gql.deliveries] == ["a", "b", "c"] and gql.talk == [("r", 3)]
+    export = areas["area:Widget:c:export"]
+    assert export.deliveries == [("e", 9, "iss:1")] and export.prs == {"pr:5"}
+    assert {a.kind for a in areas.values()} == {"work_item", "component"} and len(areas) == 3
+
+
+FIXTURE = Path(__file__).parent / "fixtures" / "sentinel_company.cypher"
+
+
+@pytest.mark.db
+def test_derive_writes_areas_knows_and_the_truck_factor(empty_graph):
+    db.run_text(FIXTURE.read_text(encoding="utf-8"), label="f", graph=empty_graph, readonly=False)
+    out = derive.expertise(empty_graph)
+    assert out["truck"] == [
+        {
+            "product_id": "Widget",
+            "truck_factor": 1,
+            "truck_people": ["eid_c3"],
+            "areas_with_author": 1,
+            "areas_orphaned": 1,
+        }
+    ]
+    rows = db.run_text(
+        "MATCH (p:Person)-[k:KNOWS]->(a:Area {name: 'Export Module'}) "
+        "RETURN p.id AS id, k.author AS author, k.deliveries AS d, k.discussion AS disc "
+        "ORDER BY id LIMIT 10",
+        label="k",
+        graph=empty_graph,
+    ).rows
+    assert rows == [
+        {"id": "eid_b2", "author": False, "d": 0, "disc": 1.0},  # reviewed PR 1 twice
+        {"id": "eid_c3", "author": True, "d": 1, "disc": 0.0},  # fixed 'Slow export'
+        {"id": "eid_d4", "author": False, "d": 0, "disc": 0.5},
+    ]
+    issues = db.run_text(
+        "MATCH (i:Issue)-[:IN_AREA]->(a:Area {name: 'Export Module'}) RETURN count(i) AS n LIMIT 1",
+        label="n",
+        graph=empty_graph,
+    ).rows
+    assert issues == [{"n": 3}]
+    again = derive.expertise(empty_graph)  # idempotent: cleared and rewritten
+    assert again["report"]["upsert_areas"]["rows"] == out["report"]["upsert_areas"]["rows"]

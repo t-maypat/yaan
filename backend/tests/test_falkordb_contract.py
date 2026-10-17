@@ -420,3 +420,25 @@ def test_a20_optional_match_where_after_a_collect_drops_every_row(empty_graph):
     )
     assert read(empty_graph, broken) == [[[]]]
     assert read(empty_graph, fixed) == [[[1]]]
+
+
+def test_a21_two_computed_grouping_keys_give_every_aggregate_the_first_ones_value(empty_graph):
+    """Found 17 Oct (D059). On 6.0.1, when a projection groups by two or more computed keys
+    (properties, coalesce(...)), every aggregate in it returns the first aggregate's value:
+    count(*) and sum(x) both come back as the count. One computed key, or keys projected in a
+    WITH first, give the right numbers."""
+    writer(empty_graph).query(
+        "CREATE (:A {p: 'x', k: 'c', d: 4}), (:A {p: 'x', k: 'c', d: 5}), "
+        "(:A {p: 'y', k: 'w', d: 2})"
+    )
+    broken = (
+        "MATCH (a:A) RETURN a.p AS p, a.k AS k, count(*) AS n, sum(a.d) AS s ORDER BY p LIMIT 5"
+    )
+    fixed = (
+        "MATCH (a:A) WITH a.p AS p, a.k AS k, a "
+        "RETURN p, k, count(a) AS n, sum(a.d) AS s ORDER BY p LIMIT 5"
+    )
+    one_key = "MATCH (a:A) RETURN a.p AS p, count(*) AS n, sum(a.d) AS s ORDER BY p LIMIT 5"
+    assert [r[2:] for r in read(empty_graph, broken)] == [[2, 2], [1, 1]]  # s should be 9, 2
+    assert [r[2:] for r in read(empty_graph, fixed)] == [[2, 9], [1, 2]]
+    assert [r[1:] for r in read(empty_graph, one_key)] == [[2, 9], [1, 2]]
