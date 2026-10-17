@@ -67,6 +67,24 @@ def test_registry_holds_every_spec_and_the_search_only_prompt_drops_graph_lines(
     assert "search_artifacts" in lean and lean.endswith(full[full.index("Rules for") :])
 
 
+def test_strict_schemas_stay_inside_the_apis_shared_budget():
+    """The API refuses (400) a request whose strict schemas, tools and answer format together,
+    pass 20 strict tools, 24 optional or 16 union-typed parameters (D068)."""
+    import json
+
+    from app.agent.contract import SCHEMA
+
+    text = json.dumps([*tools.TOOL_SPECS, SCHEMA])
+    unions = text.count('"anyOf"') + text.count('"type": [')
+    optional = sum(
+        len(t["input_schema"]["properties"]) - len(t["input_schema"]["required"])
+        for t in tools.TOOL_SPECS
+    )
+    assert sum(t["strict"] for t in tools.TOOL_SPECS) <= 20
+    assert unions <= 16 and optional <= 24, (unions, optional)
+    assert "x-lore" not in text  # the optional marker never reaches the API
+
+
 def test_call_tool_refuses_tools_outside_the_toolset():
     scope = tools.Scope("Widget")
     with pytest.raises(loop.ToolError, match="unknown tool"):
@@ -128,7 +146,7 @@ def test_as_of_shows_the_state_in_force_at_that_moment(company):
 def test_rank_counts_in_the_graph_with_shared_ranks(company):
     authored = tools.rank("prs_authored", "Widget", graph=company)["ranking"]
     assert [(r["id"], r["n"], r["rank"]) for r in authored] == [("eid_b2", 1, 1)]
-    assert authored[0]["evidence"] == ["pr:w1"]  # the external PR doesn't count
+    assert authored[0]["evidence"] == [{"artifact_id": "pr:w1", "title": "Add export"}]
     fixed = tools.rank("bugs_fixed", "Widget", graph=company)["ranking"]
     assert [(r["id"], r["n"]) for r in fixed] == [("eid_b2", 1)]
     companies = tools.rank("issues_reported", "Widget", graph=company)["ranking"]

@@ -32,7 +32,8 @@ GUIDE = {
     "state on a past date: decision_lineage. list_issues and list_prs also take as_of for the "
     "state on a date.",
     "rank": "- Who did the most, or which company has the most (PRs, reviews, bugs fixed, "
-    "issues reported): rank. The graph counts; don't count by hand.",
+    "issues reported): rank. The graph counts; don't count by hand. State its number and "
+    "cite the counted items it lists (their artifact_id and title).",
     "find_missing": "- What is missing (resolved issues no PR fixed, open issues with no fix or "
     "no assignee, PRs nobody reviewed, areas with a single expert): find_missing.",
     "impact_of": "- What a change to an issue or PR affects, and who is affected: impact_of. "

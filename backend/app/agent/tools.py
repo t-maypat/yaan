@@ -1038,34 +1038,44 @@ def agent_search(
     return {key: out[key] for key in ("query", "keywords", "filters", "results", "cypher")}
 
 
-def _nullable(schema: dict[str, Any]) -> dict[str, Any]:
-    return {"anyOf": [schema, {"type": "null"}]}
+# Strict schemas share one budget per request (structured-outputs docs, read 17 Oct): at
+# most 20 strict tools, 24 optional parameters and 16 union-typed parameters (anyOf or
+# nullable) across all of them. 17 tools with nullable parameters came to 28 unions (a 400),
+# so optional parameters are left out of `required` instead of being nullable (D068).
+OPTIONAL = "x-lore-optional"
+
+
+def _optional(schema: dict[str, Any]) -> dict[str, Any]:
+    """A parameter the model may leave out (the handler reads it with .get())."""
+    return {**schema, OPTIONAL: True}
 
 
 def _tool(name: str, description: str, properties: dict[str, Any]) -> dict[str, Any]:
     """A strict tool spec: the API guarantees inputs match the schema exactly."""
+    props = {k: {x: y for x, y in v.items() if x != OPTIONAL} for k, v in properties.items()}
     return {
         "name": name,
         "description": description,
         "strict": True,
         "input_schema": {
             "type": "object",
-            "properties": properties,
-            "required": list(properties),
+            "properties": props,
+            "required": [k for k, v in properties.items() if not v.get(OPTIONAL)],
             "additionalProperties": False,
         },
     }
 
 
 KINDS = ["message", "meeting", "meeting_chat", "doc", "pr", "link"]
-PRODUCT = _nullable(
-    {"type": "string", "description": "a product id; null uses the question's product"}
-)
-AS_OF = _nullable(
+PRODUCT = {
+    "type": "string",
+    "description": "a product id; an empty string means the question's product",
+}
+AS_OF = _optional(
     {
         "type": "string",
-        "description": "an ISO date (2027-01-15) for the state at the end of that day; null = "
-        "the question's as-of date, or now",
+        "description": "an ISO date (2027-01-15) for the state at the end of that day; leave it "
+        "out for the question's as-of date, or now",
     }
 )
 _SPECS = [
@@ -1077,8 +1087,8 @@ _SPECS = [
         "content, and to find artifacts the other tools don't list.",
         {
             "query": {"type": "string", "description": "what to look for, in plain words"},
-            "kinds": _nullable({"type": "array", "items": {"type": "string", "enum": KINDS}}),
-            "k": _nullable({"type": "integer", "description": "results wanted, at most 20"}),
+            "kinds": _optional({"type": "array", "items": {"type": "string", "enum": KINDS}}),
+            "k": _optional({"type": "integer", "description": "results wanted, at most 20"}),
             "product_id": PRODUCT,
         },
     ),
@@ -1136,13 +1146,13 @@ _SPECS = [
         "said they'd merge it; such PRs were usually merged since). 'said' lists those Slack "
         "messages with quotes to cite. as_of gives each PR's state on that date.",
         {
-            "status": _nullable(
+            "status": _optional(
                 {
                     "type": "string",
                     "enum": ["open", "approved", "changes_requested", "merged", "closed"],
                 }
             ),
-            "action": _nullable(
+            "action": _optional(
                 {"type": "string", "enum": ["to_merge", "to_close", "on_hold", "reverted"]}
             ),
             "as_of": AS_OF,
@@ -1161,13 +1171,13 @@ _SPECS = [
         "unresolved / resolved / reopened / dismissed issues, who resolved or dismissed "
         "them, and the companies affected. as_of gives the status on that date.",
         {
-            "status": _nullable(
+            "status": _optional(
                 {
                     "type": "string",
                     "enum": ["reported", "resolved", "dismissed", "reopened", "unresolved"],
                 }
             ),
-            "company": _nullable(
+            "company": _optional(
                 {"type": "string", "description": "only issues reported by this company"}
             ),
             "as_of": AS_OF,
@@ -1230,8 +1240,8 @@ _SPECS = [
                 "type": "string",
                 "enum": [*PEOPLE_METRICS, *ISSUE_METRICS],
             },
-            "by": _nullable({"type": "string", "enum": ["company", "customer"]}),
-            "k": _nullable({"type": "integer", "description": "rows wanted, at most 50"}),
+            "by": _optional({"type": "string", "enum": ["company", "customer"]}),
+            "k": _optional({"type": "integer", "description": "rows wanted, at most 50"}),
             "product_id": PRODUCT,
         },
     ),
@@ -1270,8 +1280,8 @@ _SPECS = [
         "decision made outside the working group), key_person (one person holds an area), "
         "bus_factor. Each with the change, the evidence quote and who it notifies.",
         {
-            "status": _nullable({"type": "string", "enum": ["open", "approved", "dismissed"]}),
-            "kind": _nullable({"type": "string"}),
+            "status": _optional({"type": "string", "enum": ["open", "approved", "dismissed"]}),
+            "kind": _optional({"type": "string"}),
             "product_id": PRODUCT,
         },
     ),

@@ -5,7 +5,7 @@ OPTIONAL MATCH (i)-[:REPORTED_IN]->(m:Artifact)
 WITH CASE WHEN $entity = 'customer' OR co IS NULL THEN c.id ELSE co.id END AS key,
      CASE WHEN $entity = 'customer' OR co IS NULL THEN c.name ELSE co.name END AS name, i, m
 WITH key, name, i, collect(m.id)[0] AS report_id
-WITH key, name, collect({id: i.id, title: i.title, status: i.current_status, reopen_count: i.reopen_count,
-                         report_id: report_id}) AS issues
+WITH key, name, collect({issue_id: i.id, issue: i.title, status: i.current_status, reopen_count: i.reopen_count,
+                         artifact_id: report_id}) AS issues
 RETURN key AS id, name, issues
 LIMIT $limit
