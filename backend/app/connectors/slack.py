@@ -138,7 +138,10 @@ class SlackConnector:
         if target.startswith(prefix):
             cid, _, ts = target.removeprefix(prefix).partition("-")
             r = self._call(
-                "chat_postMessage", channel=cid, thread_ts=ts, text=action["draft"],
+                "chat_postMessage",
+                channel=cid,
+                thread_ts=ts,
+                text=action["draft"],
                 unfurl_links=False,
             )
             return self.permalink(cid, r["ts"])
@@ -290,9 +293,7 @@ class SlackBot:
                 note = f"{verdict.capitalize()} by <@{user}> (as {person}): {statement}"
             except Exception as e:
                 note = f"Couldn't record it: {e}"
-            alert = next(
-                (a for a in _alerts(self.graph) if a["id"] == alert_id), {"id": alert_id}
-            )
+            alert = next((a for a in _alerts(self.graph) if a["id"] == alert_id), {"id": alert_id})
             blocks = alert_blocks(alert, decided=note) if "summary" in alert else None
             client.chat_update(channel=channel, ts=ts, text=note, blocks=blocks)
             self.on_message()  # deliver the approved drafts now

@@ -67,12 +67,16 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
     return report
 
 
+EVERYWHERE = {"ticket_comment"}  # the same comment belongs on the ticket and on its fix PR
+
+
 def deliver(connectors: list[Connector], graph: str) -> tuple[list[dict], list[dict]]:
-    """Each approved, unsent Action to the first connector that takes it; record where."""
+    """Each approved, unsent Action to the first connector that takes it (a ticket comment to
+    every one that does); record where it went, so it is sent once."""
     sent, unsent = [], []
     pending = db.run("actions_to_send", {"limit": 100}, graph=graph).rows
     for action in pending:
-        errors = []
+        errors, refs, via = [], [], []
         for c in connectors:
             try:
                 ref = c.post(action)
@@ -80,10 +84,19 @@ def deliver(connectors: list[Connector], graph: str) -> tuple[list[dict], list[d
                 errors.append(f"{c.name}: {e}")
                 continue
             if ref:
-                row = {"id": action["id"], "ref": ref, "ms": int(time.time() * 1000), "via": c.name}
-                db.run("mark_action_sent", {"rows": [row]}, graph=graph, readonly=False)
-                sent.append(row)
-                break
+                refs.append(ref)
+                via.append(c.name)
+                if action["kind"] not in EVERYWHERE:
+                    break
+        if refs:
+            row = {
+                "id": action["id"],
+                "ref": " ".join(refs),
+                "ms": int(time.time() * 1000),
+                "via": ",".join(via),
+            }
+            db.run("mark_action_sent", {"rows": [row]}, graph=graph, readonly=False)
+            sent.append(row)
         else:
             why = "; ".join(errors) or "no connected tool holds its target"
             unsent.append({"id": action["id"], "kind": action["kind"], "why": why})
@@ -102,6 +115,10 @@ def configured(graph: str) -> list[Connector]:
         from app.connectors.slack import SlackConnector
 
         out.append(SlackConnector(WebClient(token=st.slack_bot_token), graph))
+    if st.github_token and st.github_repo:
+        from app.connectors.github import GitHubConnector
+
+        out.append(GitHubConnector(st.github_token, st.github_repo, graph))
     return out
 
 
