@@ -417,6 +417,30 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_connectors(args: argparse.Namespace) -> int:
+    import json
+
+    from app.connectors import base, runner
+    from app.sentinel import live
+
+    try:
+        graph = live.demo_graph(args.graph)
+        if args.action == "run":
+            runner.run_forever(graph, every_s=args.every)
+            return 0
+        connectors = runner.configured(graph)
+        if args.action == "status":
+            print(f"maps: {base.CONFIG.name}, product {base.maps().product}")
+            print(f"configured: {[c.name for c in connectors] or 'none (see docs/connectors.md)'}")
+            print(json.dumps(runner.load_state(graph), indent=1)[:2000])
+            return 0
+        print(json.dumps(runner.sync(connectors, graph), indent=1, default=str))
+        return 0
+    except (base.ConnectorError, live.LiveError) as e:
+        print(f"lore connectors: {e}", file=sys.stderr)
+        return 1
+
+
 # command -> (help text, handler)
 COMMANDS = {
     "schema": ("create and verify the indexes for a graph (queries/00_schema.cypher)", cmd_schema),
@@ -439,6 +463,10 @@ COMMANDS = {
     ),
     "demo": ("reset the demo graph, or inject a synthetic message live (11.6)", cmd_demo),
     "mcp": ("serve Lore's read-only tools (and ask) over MCP on stdio (17.1)", cmd_mcp),
+    "connectors": (
+        "company tools in, approved actions out: sync once, run, or status (17.2)",
+        cmd_connectors,
+    ),
 }
 
 # command -> [(flag, argparse options)]
@@ -480,6 +508,11 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--baseline", {"action": "store_true", "help": "hybrid RAG, no graph tools"}),
         ("--product", {"help": "product id, e.g. VizForce"}),
         ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
+    ],
+    "connectors": [
+        ("action", {"choices": ("sync", "run", "status"), "help": "one round, run, or show"}),
+        ("--graph", {"help": "the demo graph (default: LORE_DEMO_GRAPH)"}),
+        ("--every", {"type": float, "default": 30, "help": "run: seconds between polls"}),
     ],
     "eval": [
         ("--system", {"choices": ("baseline", "lore", "lore-search"), "default": "baseline"}),

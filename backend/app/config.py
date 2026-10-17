@@ -29,6 +29,17 @@ class Settings(BaseSettings):
     # extra Host values `/mcp` accepts beyond localhost (DNS-rebinding guard), as a JSON list
     lore_mcp_ask: bool = True
     lore_mcp_hosts: list[str] = []
+    # Connectors (Phase 17, docs/connectors.md): a connector runs when its settings are set
+    slack_bot_token: str | None = None
+    slack_app_token: str | None = None
+    github_token: str | None = None
+    github_repo: str | None = None
+    jira_base_url: str | None = None
+    jira_email: str | None = None
+    jira_api_token: str | None = None
+    jira_project: str | None = None
+    notion_token: str | None = None
+    notion_page_id: str | None = None
     query_timeout_ms: int = 2000  # default timeout for reads (agent tools); writes can't take one
     # Redis ACL users (Phase 1.4, D018), created by docker-compose.yml from the same .env.
     falkordb_writer_user: str = "lore_writer"
