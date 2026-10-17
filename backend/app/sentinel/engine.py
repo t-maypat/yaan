@@ -56,6 +56,8 @@ def judge(change: dict[str, Any]) -> tuple[str, str] | None:
     """The alert kind and severity for one change, or None for normal progress."""
     if change["change"] == "conflict":
         return CONFLICT
+    if change["change"] == "outside_group":  # dismissed outside the area's working group (D064)
+        return ("outside_group", "medium")
     return RULES.get((change["kind"], change["from_value"], change["to_value"]))
 
 
@@ -83,6 +85,11 @@ def summary(kind: str, c: dict[str, Any]) -> str:
         )
     who = c["actor_name"] or "an unknown speaker"
     role = f" ({c['actor_role']})" if c["actor_role"] else ""
+    if kind == "outside_group":
+        return (
+            f"'{title}' was dismissed by {who}{role}, who is outside the working group "
+            "that does the work in its area."
+        )
     return (
         f"Conflict: {who}{role} says '{title}' is {c['to_value']}, but may not change it; "
         f"it stays {c['from_value']}."
@@ -94,6 +101,8 @@ def run(graph: str | None = None, *, now_ms: int | None = None) -> dict[str, Any
     now_ms = now_ms or int(time.time() * 1000)
     now_iso = datetime.fromtimestamp(now_ms / 1000, UTC).isoformat().replace("+00:00", "Z")
     changes = db.run("sentinel_changes", {"limit": 10_000}, graph=graph).rows
+    # dismissals by someone outside the area's working group (CDLP, D064); none before derive
+    changes += db.run("outside_decisions", {"limit": 1_000}, graph=graph, timeout_ms=30_000).rows
     rows: dict[str, list[dict[str, Any]]] = {name: [] for name in LOAD_ORDER}
     seen: set[str] = set()
     progress = 0

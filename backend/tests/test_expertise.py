@@ -189,3 +189,28 @@ def test_who_knows_names_the_expert_the_owner_and_the_evidence(empty_graph):
     assert {o["id"] for o in area["listed_owners"]} == {"eid_c3"} and area["single_expert"]
     assert out["truck_factor"]["value"] == 1 and "connectors" not in out
     assert tools.who_knows("quantum billing", "Widget", graph=empty_graph)["areas"] == []
+
+
+@pytest.mark.db
+def test_communities_and_betweenness_on_the_invented_company(empty_graph):
+    db.run_text(FIXTURE.read_text(encoding="utf-8"), label="f", graph=empty_graph, readonly=False)
+    derive.collab(empty_graph, min_w=0.5)  # Bo-Cy and Di-Cy: a chain of three
+    bridges = derive.communities(empty_graph)["bridges"]
+    assert bridges[0]["id"] == "eid_c3"  # the only path between Bo and Di runs through Cy
+    # close the triangle (Bo and Di also work together): one working group of three
+    db.run_text(
+        "MATCH (b:Person {id: 'eid_b2'}), (d:Person {id: 'eid_d4'}) "
+        "CREATE (b)-[:COLLAB {w: 1.0}]->(d), (d)-[:COLLAB {w: 1.0}]->(b)",
+        label="tri",
+        graph=empty_graph,
+        readonly=False,
+    )
+    out = derive.communities(empty_graph)
+    assert out["communities"] == [3]
+    rows = db.run_text(
+        "MATCH (p:Person)-[:IN_COMMUNITY]->(c:Community) "
+        "RETURN c.size AS size, c.team_count AS teams, collect(p.id) AS ids LIMIT 5",
+        label="c",
+        graph=empty_graph,
+    ).rows
+    assert rows[0]["size"] == 3 and sorted(rows[0]["ids"]) == ["eid_b2", "eid_c3", "eid_d4"]

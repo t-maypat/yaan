@@ -403,3 +403,35 @@ def test_a_sole_expert_whose_product_has_truck_factor_1_raises_a_bus_factor_aler
     # approving a person-level alert writes the decision without an issue or a cause
     out = approve.respond("alert:bus_factor:eid_c3", "approved", "eid_c3", graph=company)
     assert trace(company, out["decision"]["id"])["subject"] is None
+
+
+def test_a_dismissal_by_someone_outside_the_areas_working_group_raises_an_alert(company):
+    db.run_text(
+        "MATCH (cy:Person {id: 'eid_c3'}), (ed:Person {id: 'eid_e5'}), "
+        "(m:Artifact {id: 'msg:r4'}), "
+        "(w:Product {id: 'Widget'}) "
+        "CREATE (a:Area:Entity {id: 'area:W:c:auth', name: 'Auth Module', product_id: 'Widget'}), "
+        "(i:Issue:Entity {id: 'iss:Widget:z9', title: 'Login loop', product_id: 'Widget'}), "
+        "(d:Decision {id: 'dec:iss:Widget:z9/status:6000', topic: 'iss:Widget:z9/status', "
+        "kind: 'issue_status', value: 'dismissed', status: 'active', origin: 'extracted', "
+        "valid_from_ms: 6000}), "
+        "(i)-[:IN_AREA]->(a), (i)-[:IN_PRODUCT]->(w), (d)-[:AFFECTS]->(i), "
+        "(d)-[:DECIDED_BY]->(ed), "
+        "(d)-[:EVIDENCED_BY {quote: 'Let us just close'}]->(m), "
+        "(cy)-[:KNOWS {deliveries: 2}]->(a), "
+        "(cy)-[:IN_COMMUNITY]->(:Community {id: 'comm:a', label: 'Working group of 3, mostly X'}), "
+        "(ed)-[:IN_COMMUNITY]->(:Community {id: 'comm:b', label: 'Working group of 4, mostly Y'})",
+        label="outside",
+        graph=company,
+        readonly=False,
+    )
+    out = engine.run(company, now_ms=NOW)
+    assert out["by_kind"]["outside_group"] == 1
+    alert = alerts_by_id(company)["alert:outside:dec:iss:Widget:z9/status:6000"]
+    assert alert["summary"] == (
+        "'Login loop' was dismissed by Ed Moss (Marketing Manager), who is outside the working "
+        "group that does the work in its area."
+    )
+    assert alert["reason"].startswith("Auth Module work was done by Cy Diaz;")
+    kinds = {a["kind"] for a in engine.alert_actions(alert["id"], graph=company)}
+    assert "doc_fix" not in kinds and "ticket_comment" in kinds

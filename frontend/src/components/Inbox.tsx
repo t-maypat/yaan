@@ -32,6 +32,7 @@ const ALERT_WORDS: Record<Alert["kind"], string> = {
   conflict: "Unauthorized change",
   key_person: "Single point of failure",
   bus_factor: "Bus factor of one",
+  outside_group: "Decided outside the working group",
 };
 // Alerts about a person rather than a change: computed from the expertise layer (11.5, D062).
 const isPersonAlert = (a: Alert) => a.kind === "key_person" || a.kind === "bus_factor";

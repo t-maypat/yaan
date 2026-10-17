@@ -161,3 +161,60 @@ def collab(graph: str | None = None, min_w: float = COLLAB_MIN_W) -> dict:
     result = db.run("set_person_pagerank", {"rows": scores}, graph=graph, readonly=False)
     report["set_person_pagerank"] = {"rows": len(scores), **result.stats}
     return {"report": report, "pairs": len(rows) // 2, "top": scores[:5]}
+
+
+MIN_COMMUNITY = 3  # CDLP leaves people with no strong tie in a group of their own
+
+
+def communities(graph: str | None = None) -> dict:
+    """10.4 (D064): FalkorDB's label propagation over COLLAB gives working groups; each group
+    of >= MIN_COMMUNITY people becomes a Community node with its org-chart team mix, so the
+    graph shows where real collaboration crosses team lines. Betweenness scores are stored on
+    Person (the bridges between groups). Run after `collab`."""
+    from collections import Counter, defaultdict
+
+    def read(name: str) -> list[dict]:
+        return db.run(name, {"limit": READ_LIMIT}, graph=graph, timeout_ms=60_000).rows
+
+    groups: dict[int, list[str]] = defaultdict(list)
+    for r in read("person_communities"):
+        groups[r["community"]].append(r["id"])
+    team = {r["person_id"]: r["team"] for r in read("person_teams")}
+    rows, links = [], []
+    for members in groups.values():
+        if len(members) < MIN_COMMUNITY:
+            continue
+        members.sort()
+        teams = Counter(team.get(p) or "no team" for p in members)
+        top, n = min(teams.items(), key=lambda kv: (-kv[1], kv[0]))
+        cid = f"comm:{members[0]}"
+        rows.append(
+            {
+                "id": cid,
+                "size": len(members),
+                "teams": [f"{t} ({k})" for t, k in teams.most_common()],
+                "team_count": len(teams),
+                "top_team": top,
+                "top_team_share": round(n / len(members), 3),
+                "label": f"Working group of {len(members)}, mostly {top}",
+            }
+        )
+        links += [{"person_id": p, "community_id": cid} for p in members]
+    report = {
+        "clear_communities": {
+            "rows": 0,
+            **db.run("clear_communities", {}, graph=graph, readonly=False).stats,
+        }
+    }
+    for name, data in (("upsert_communities", rows), ("link_in_community", links)):
+        if data:
+            result = db.run(name, {"rows": data}, graph=graph, readonly=False)
+            report[name] = {"rows": len(data), **result.stats}
+    bc = read("person_betweenness")
+    scores = [
+        {"id": r["id"], "score": round(r["score"], 4), "rank": n} for n, r in enumerate(bc, 1)
+    ]
+    result = db.run("set_person_betweenness", {"rows": scores}, graph=graph, readonly=False)
+    report["set_person_betweenness"] = {"rows": len(scores), **result.stats}
+    sizes = sorted((r["size"] for r in rows), reverse=True)
+    return {"report": report, "communities": sizes, "bridges": scores[:3]}

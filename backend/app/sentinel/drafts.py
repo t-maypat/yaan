@@ -49,6 +49,10 @@ def drafts_for(alert: dict[str, Any], radius: dict[str, Any]) -> list[dict[str, 
         lines.append(
             f"The status stays '{said(alert['from_value'])}' until someone authorized confirms."
         )
+    elif alert["change"] == "outside_group":
+        who = alert["actor_name"] or "someone"
+        lines.append(f"Dismissed on {when} by {who}: {new}.")
+        lines.append(f"Check it with the people who did the work: {alert['reason']}.")
     else:
         lines.append(f"Now '{said(alert['to_value'])}' since {when}: {new}.")
         if old:
@@ -85,7 +89,7 @@ def drafts_for(alert: dict[str, Any], radius: dict[str, Any]) -> list[dict[str, 
             "draft": "\n".join(lines),
         }
     ]
-    if alert["change"] != "conflict" and old:
+    if alert["change"] not in ("conflict", "outside_group") and old:
         out.append(
             {
                 **base,
@@ -103,11 +107,10 @@ def drafts_for(alert: dict[str, Any], radius: dict[str, Any]) -> list[dict[str, 
         why = [REASON_TEXT[r] for r in p["reasons"] if r in REASON_TEXT]
         if not why:
             continue
-        ask = (
-            "Please confirm or reject the change."
-            if alert["change"] == "conflict"
-            else "Please take a look."
-        )
+        ask = {
+            "conflict": "Please confirm or reject the change.",
+            "outside_group": "Please confirm the dismissal or reopen it.",
+        }.get(alert["change"], "Please take a look.")
         out.append(
             {
                 **base,

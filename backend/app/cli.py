@@ -147,6 +147,9 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         out = derive.collab(graph)
         report |= out["report"]
         print(f"collab: {out['pairs']} pairs; PageRank top {out['top']}", file=sys.stderr)
+        out = derive.communities(graph)
+        report |= out["report"]
+        print(f"communities: {out['communities']}; bridges {out['bridges']}", file=sys.stderr)
         out = derive.expertise(graph)
         report |= out["report"]
         print(f"expertise: {out['areas']} areas; truck factor {out['truck']}", file=sys.stderr)

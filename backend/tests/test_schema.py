@@ -14,7 +14,7 @@ def test_the_schema_file_declares_the_expected_indexes():
     specs = schema.declared()
     kinds = [s.kind for s in specs]
     assert (
-        kinds.count("RANGE") == 19 and kinds.count("FULLTEXT") == 2 and kinds.count("VECTOR") == 1
+        kinds.count("RANGE") == 20 and kinds.count("FULLTEXT") == 2 and kinds.count("VECTOR") == 1
     )
     assert len({(s.label, s.prop, s.kind) for s in specs}) == len(specs), "duplicate index lines"
 

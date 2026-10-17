@@ -102,7 +102,7 @@ function getJson<T>(path: string): Promise<T> {
 export type Notified = { id: string; name: string; role: string | null; reasons: string[] };
 export type Alert = {
   id: string;
-  kind: "regression" | "reopened" | "reversal" | "conflict" | "key_person" | "bus_factor";
+  kind: "regression" | "reopened" | "reversal" | "conflict" | "key_person" | "bus_factor" | "outside_group";
   severity: "high" | "medium";
   status: "open" | "approved" | "dismissed" | "withdrawn";
   summary: string;
