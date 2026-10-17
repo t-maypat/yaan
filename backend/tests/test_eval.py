@@ -164,6 +164,16 @@ def test_a_partial_run_keeps_its_results_out_of_the_table(fake_run, monkeypatch)
     assert not report.results_dir().exists()
 
 
+def test_a_check_run_answers_only_the_given_ids(fake_run):
+    ids = [ROWS[2]["id"], ROWS[0]["id"]]
+    check = run_herb.run("baseline", "dev", ids=ids, run_id="20261013T0002Z_baseline_dev")
+    rows = run_herb.read_jsonl(check / "answers.jsonl")
+    assert [r["id"] for r in rows] == [ROWS[0]["id"], ROWS[2]["id"]]  # split order
+    assert json.loads((check / "meta.json").read_text("utf-8"))["partial"] is True
+    with pytest.raises(ValueError, match="aren't in the dev split"):
+        run_herb.run("baseline", "dev", ids=["Nope:ans:0"], run_id="20261013T0003Z_baseline_dev")
+
+
 def test_spend_cap_stops_the_whole_run(fake_run, monkeypatch):
     def broke(question, context):
         raise llm.SpendCapReached("cap")

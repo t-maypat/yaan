@@ -413,6 +413,18 @@ def list_issues(
     return out
 
 
+_PRODUCT_IDS: dict[str | None, frozenset[str]] = {}
+
+
+def product_ids(graph: str | None = None, refresh: bool = False) -> frozenset[str]:
+    """Every Product id in the graph, cached per graph; `loop.call_tool` refuses ids outside
+    it, after one re-read so a product added since is still found (D070)."""
+    if refresh or graph not in _PRODUCT_IDS:
+        rows = db.run("list_products", {"limit": 100}, graph=graph).rows
+        _PRODUCT_IDS[graph] = frozenset(r["id"] for r in rows)
+    return _PRODUCT_IDS[graph]
+
+
 def links_shared(product_id: str, graph: str | None = None) -> dict:
     """Tool 9: links shared in the product's messages, who shared them and where."""
     rows = db.run("links_shared", {"product_id": product_id, "limit": 150}, graph=graph).rows

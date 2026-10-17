@@ -7,7 +7,7 @@ OPTIONAL MATCH (rv:Person)-[r:REVIEWED]->(pr)
 WITH pr, collect(DISTINCT au.id) AS authors, collect(DISTINCT {id: rv.id, state: r.state}) AS reviews
 OPTIONAL MATCH (undo:PR)-[:REVERTS]->(pr)
 WITH pr, authors, reviews,
-     collect(DISTINCT {number: undo.number, url: undo.url, title: undo.title, reason: undo.text, ts_ms: undo.ts_ms}) AS reverted_by
+     collect(DISTINCT {id: undo.id, number: undo.number, url: undo.url, title: undo.title, reason: undo.text, ts_ms: undo.ts_ms}) AS reverted_by
 OPTIONAL MATCH (pr)-[:REVERTS]->(orig:PR)
 WITH pr, authors, reviews, reverted_by, collect(DISTINCT orig.number) AS reverts
 OPTIONAL MATCH (d:Decision)-[:AFFECTS]->(pr)

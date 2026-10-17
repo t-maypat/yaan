@@ -22,7 +22,9 @@ GUIDE = {
     "resolve_entity": "- resolve_entity maps product names, codenames, people's names and roles "
     '(such as "Engineering Lead") to ids.',
     "doc_discussion": "- Who wrote or reviewed a document, and the changes people suggested: "
-    "doc_discussion, then get_artifact to read a meeting where the document was discussed.",
+    "doc_discussion, then get_artifact to read a meeting where the document was discussed. "
+    "One message often makes several suggestions, or backs someone else's idea and adds to "
+    'it ("I like the idea of …"): list each suggestion as its own item.',
     "list_issues": "- Customer issues (bugs) and their status (unresolved, resolved, reopened, "
     "dismissed), who resolved or dismissed them, affected companies, counts: list_issues. "
     "issue_reports gives the raw report messages.",
@@ -38,7 +40,10 @@ GUIDE = {
     "no assignee, PRs nobody reviewed, areas with a single expert): find_missing.",
     "impact_of": "- What a change to an issue or PR affects, and who is affected: impact_of. "
     "Alerts raised by changes: open_alerts.",
-    "links_shared": "- Shared links such as demos: links_shared.",
+    "links_shared": "- Shared links such as demos: links_shared. It also names competitor "
+    "products (other companies' products whose demos were shared). For what a competitor "
+    "offers, its strengths or weaknesses, or who discussed it: search_artifacts with each "
+    "competitor's name on its own, then read the threads about it.",
     "who_knows": "- Who knows a component or piece of work, who to ask, and who is a single "
     "point of failure: who_knows (experts with evidence, compared with the listed owners).",
     "person_profile": "- A person's role, team, work, areas and collaborators: person_profile. "

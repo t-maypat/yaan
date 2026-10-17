@@ -132,3 +132,28 @@ def test_autocite_works_per_sentence_when_another_sentence_on_the_line_is_cited(
     out, added = autocite(answer, {url: "pr:w12"})
     assert added == [2]
     assert out["answer_markdown"] == f"  - PR #12: {url} [2]. Its revert says it broke the API [1]."
+
+
+def test_reattribute_moves_a_quote_to_the_one_related_artifact_that_holds_it():
+    """D070: a revert PR's words cited on the PR it reverted."""
+    texts = {
+        "pr:3": ["Add AES-256 encryption at rest"],
+        "pr:5": ["Revert PR# 3. This revert is necessary due to a change in product direction."],
+        "pr:14": ["Revert PR# 12. This revert is necessary due to a change in product direction."],
+    }
+    related = {"pr:3": {"pr:5"}, "pr:5": {"pr:3"}, "pr:12": {"pr:14"}, "pr:14": {"pr:12"}}
+    a = answer(
+        "- PR #3 was reverted for the product direction [1].",
+        [(1, "pr:3", "This revert is necessary due to a change in product direction.")],
+    )
+    out, moved = validator.reattribute(a, related, texts)
+    assert moved == [1] and out["citations"][0]["artifact_id"] == "pr:5"
+    assert validator.check(out, {"pr:3", "pr:5", "pr:14"}, texts).ok
+    # two related artifacts hold the quote: no guess, the citation keeps failing
+    both = {"pr:3": {"pr:5", "pr:14"}}
+    assert validator.reattribute(a, both, texts) == (a, [])
+    # a quote already in its artifact, an unrelated holder, an abstention: untouched
+    ok = answer("PR #3 adds encryption [1].", [(1, "pr:3", "AES-256 encryption")])
+    assert validator.reattribute(ok, related, texts) == (ok, [])
+    assert validator.reattribute(a, {}, texts) == (a, [])
+    assert validator.reattribute({**a, "abstain": True}, related, texts)[1] == []

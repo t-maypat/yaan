@@ -124,11 +124,19 @@ def run(
     workers: int = 4,
     run_id: str | None = None,
     progress: Callable[[str], None] = lambda _: None,
+    ids: list[str] | None = None,
 ) -> Path:
-    """Answer every question and write the run folder. Returns its path."""
+    """Answer every question and write the run folder. Returns its path. `ids` limits it to
+    those questions (a targeted check after a fix, 9.8); an unknown id is an error."""
     sys_ = get_system(system)
-    rows = questions(split, products)[:limit] if limit else questions(split, products)
-    partial = bool(limit or products)  # a smoke or subset run: never a headline number
+    rows = questions(split, products)
+    if ids is not None:
+        unknown = set(ids) - {r["id"] for r in rows}
+        if unknown:
+            raise ValueError(f"{len(unknown)} ids aren't in the {split} split, e.g. {min(unknown)}")
+        rows = [r for r in rows if r["id"] in set(ids)]
+    rows = rows[:limit] if limit else rows
+    partial = bool(limit or products or ids)  # a smoke or subset run: never a headline number
     products = sorted({r["product"] for r in rows})
     s = get_settings()
     run_id = run_id or f"{datetime.now(UTC):%Y%m%dT%H%MZ}_{system}_{split}"

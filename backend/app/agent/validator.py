@@ -11,6 +11,11 @@ whatever still fails, and an answer with nothing left becomes an abstention.
 `autocite` runs first: a line with no marker that names the exact url of an artifact a tool
 returned gets a citation to that artifact, quoting the url (D051). The quote is still
 checked word for word like any other; the model just forgot to put the marker on that line.
+
+`reattribute` runs next (D070): a quote that isn't in the artifact it cites, but is word for
+word in exactly one artifact nested in the same tool row (a PR and the PR that reverted it),
+is pointed at that artifact. Every bad quote of the 17 Oct dev run was a revert PR's words
+cited on the PR it reverted. Two or more candidates leave the citation failing.
 """
 
 import re
@@ -68,7 +73,7 @@ def check(answer: dict[str, Any], seen: set[str], texts: dict[str, list[str]]) -
             report.problems.append(
                 f"[{c['n']}] cites {c['artifact_id']}, which no tool returned in this answer"
             )
-        elif not any(llm.quote_in(c["quote"], t) for t in texts.get(c["artifact_id"], [])):
+        elif not quoted(c["quote"], texts.get(c["artifact_id"], [])):
             report.bad.add(c["n"])
             report.problems.append(
                 f"[{c['n']}] quote is not word for word in {c['artifact_id']}: {c['quote'][:120]!r}"
@@ -117,6 +122,32 @@ def autocite(answer: dict[str, Any], urls: dict[str, str]) -> tuple[dict[str, An
             parts.append(unit)
         lines.append(lead + " ".join(parts))
     return {**answer, "answer_markdown": "\n".join(lines), "citations": citations}, added
+
+
+def quoted(quote: str, texts: list[str]) -> bool:
+    return any(llm.quote_in(quote, t) for t in texts)
+
+
+def reattribute(
+    answer: dict[str, Any], related: dict[str, set[str]], texts: dict[str, list[str]]
+) -> tuple[dict[str, Any], list[int]]:
+    """Point a citation whose quote isn't in its artifact at the one related artifact that
+    holds the quote word for word (`related`: artifacts nested in one tool row, loop.collect).
+    Returns the answer and the citation numbers moved."""
+    if answer["abstain"]:
+        return answer, []
+    citations, moved = [], []
+    for c in answer["citations"]:
+        aid = c["artifact_id"]
+        if aid in texts and not quoted(c["quote"], texts[aid]):
+            holders = [
+                r for r in sorted(related.get(aid, ())) if quoted(c["quote"], texts.get(r, []))
+            ]
+            if len(holders) == 1:
+                c = {**c, "artifact_id": holders[0]}
+                moved.append(c["n"])
+        citations.append(c)
+    return {**answer, "citations": citations}, moved
 
 
 def indent(line: str) -> int:

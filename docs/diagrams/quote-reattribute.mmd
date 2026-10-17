@@ -1,0 +1,8 @@
+%% Re-pointing a mis-attributed quote (9.8, D070): the quote was real, but cited on the wrong PR of the same tool row.
+flowchart LR
+  ROW["list_prs row<br/>PR #3 'AES-256 encryption at rest'<br/>reverted_by: PR #5"]:::store --> REL["collect() notes<br/>PR #3 and PR #5 are related<br/>(nested in one row)"]:::code
+  ANS["Model's answer<br/>'PR #3 was reverted for the<br/>product direction [1]'<br/>[1] = PR #3, quote 'This revert is<br/>necessary due to a change in<br/>product direction.'"]:::ext --> C1{"Quote word for word<br/>in PR #3?"}:::guard
+  C1 -->|no| C2{"How many related<br/>artifacts hold it?"}:::guard
+  REL -.->|"PR #3's related set"| C2
+  C2 -->|"exactly one: PR #5"| OK["[1] now cites PR #5<br/>rule 2 passes, the line stays"]:::file
+  C2 -->|"none, or two or more"| BAD["Citation fails:<br/>one repair turn, then the line is dropped"]:::file

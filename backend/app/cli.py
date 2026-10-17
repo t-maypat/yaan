@@ -301,8 +301,15 @@ def cmd_eval(args: argparse.Namespace) -> int:
         if args.score_only:
             run = Path(args.score_only)
         else:
+            ids = Path(args.ids).read_text(encoding="utf-8").split() if args.ids else None
             run = run_herb.run(
-                args.system, args.split, args.products, args.limit, args.workers, progress=say
+                args.system,
+                args.split,
+                args.products,
+                args.limit,
+                args.workers,
+                progress=say,
+                ids=ids,
             )
             print(f"\nanswers: {run}", file=sys.stderr)
         results = report.score_run(run, workers=args.workers, variant=args.variant)
@@ -467,6 +474,10 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--split", {"choices": ("dev", "drift"), "default": "dev"}),
         ("--products", {"nargs": "+", "help": "a subset of the split's products"}),
         ("--limit", {"type": int, "help": "only the first N questions (a cheap smoke run)"}),
+        (
+            "--ids",
+            {"metavar": "FILE", "help": "only the question ids in FILE, one per line (a check)"},
+        ),
         ("--workers", {"type": int, "default": 4, "help": "parallel LLM calls"}),
         ("--score-only", {"metavar": "RUN_DIR", "help": "re-judge an existing eval/runs/ folder"}),
         (

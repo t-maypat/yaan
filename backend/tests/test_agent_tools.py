@@ -80,6 +80,7 @@ def test_list_prs_leaves_out_external_prs_and_shows_the_chain(company):
     assert pr["reviews"] == [{"id": "eid_c3", "state": "APPROVED"}]
     [undo] = pr["reverted_by"]  # "Revert PR# 1" names the original (D047)
     assert undo["number"] == 3 and "product direction" in undo["reason"]
+    assert undo["id"] == "pr:w3"  # citable on its own, and related to pr:w1 (D070)
     assert prs["pr:w3"]["reverts"] == [1] and prs["pr:w3"]["reverted_by"] == []
     merged = tools.list_prs("Widget", status="merged", graph=company)["prs"]
     assert [p["id"] for p in merged] == ["pr:w3"]
@@ -125,6 +126,21 @@ def test_collect_records_what_tools_returned_for_the_validator(company):
     )
     assert {"doc:wdai_vision", "doc:final_wdai_vision", "msg:m2", "mtg:wd_1"} <= seen
     assert "Add numbers to the summary." in texts["msg:m2"]
+
+
+def test_collect_relates_a_pr_to_the_pr_that_reverted_it(company):
+    seen, texts, related = set(), {}, {}
+    loop.collect(tools.list_prs("Widget", graph=company), seen, texts, None, related)
+    assert "pr:w3" in related["pr:w1"] and "pr:w1" in related["pr:w3"]
+    assert "pr:w3" not in related.get("pr:w2", set())  # rows aren't related to each other
+
+
+def test_call_tool_refuses_a_product_id_the_graph_lacks(company):
+    scope = tools.Scope("Widget", None, company)
+    with pytest.raises(loop.ToolError, match="unknown product_id.*Gadget, Widget"):
+        loop.call_tool("list_prs", {"product_id": '">'}, scope)
+    assert loop.call_tool("list_prs", {"product_id": "Widget"}, scope)["prs"]
+    assert loop.call_tool("list_prs", {"product_id": ""}, scope)["prs"]  # "" = the question's
 
 
 def test_list_products_gives_codenames_and_counts_for_the_picker(company):

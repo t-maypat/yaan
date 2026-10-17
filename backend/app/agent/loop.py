@@ -47,11 +47,21 @@ def call_tool(
     name: str, args: dict[str, Any], scope: tools.Scope, allowed: frozenset[str] | None = None
 ) -> dict:
     """Run one tool from the registry (R2). The question's product and as-of moment fill in
-    when the model passes null; a tool outside this answer's toolset is refused."""
+    when the model passes null; a tool outside this answer's toolset is refused, and so is
+    a product id the graph doesn't have, which would otherwise quietly return nothing (the
+    model once sent '">' there, D070)."""
     tool = tools.REGISTRY.get(name)
     if tool is None or (allowed is not None and name not in allowed):
         raise ToolError(f"unknown tool {name!r}")
-    product = args.get("product_id") or scope.product_id
+    given = args.get("product_id")
+    if given and given not in tools.product_ids(scope.graph):
+        known = tools.product_ids(scope.graph, refresh=True)
+        if given not in known:
+            raise ToolError(
+                f"unknown product_id {given!r}: pass \"\" for the question's product, or one "
+                f"of: {', '.join(sorted(known))}"
+            )
+    product = given or scope.product_id
     if tool.needs_product and not product:
         raise ToolError(f"{name} needs a product: resolve the product's name first")
     try:
@@ -65,13 +75,25 @@ def collect(
     seen: set[str],
     texts: dict[str, list[str]],
     urls: dict[str, str] | None = None,
+    related: dict[str, set[str]] | None = None,
+    parent: str | None = None,
 ) -> None:
-    """Record every artifact a tool returned, with its texts (what citations may quote) and,
-    in `urls`, each artifact's own url (for validator.autocite)."""
+    """Record every artifact a tool returned, with its texts (what citations may quote), in
+    `urls` each artifact's own url (for validator.autocite), and in `related` the artifacts
+    nested in one another's rows, both ways: a PR and the PR that reverted it (for
+    validator.reattribute, D070)."""
+
+    def link(aid: str) -> None:
+        if related is not None and parent and parent != aid:
+            related.setdefault(parent, set()).add(aid)
+            related.setdefault(aid, set()).add(parent)
+
     if isinstance(value, dict):
         aid = value.get("artifact_id") or value.get("id")
         if isinstance(aid, str) and ARTIFACT_ID.match(aid):
             seen.add(aid)
+            link(aid)
+            parent = aid
             if urls is not None and isinstance(value.get("url"), str):
                 urls.setdefault(value["url"], aid)
             texts.setdefault(aid, []).extend(
@@ -80,12 +102,13 @@ def collect(
             for f in value.get("fields") or []:
                 texts[aid].append(f.get("text") or "")
         for v in value.values():
-            collect(v, seen, texts, urls)
+            collect(v, seen, texts, urls, related, parent)
     elif isinstance(value, list):
         for v in value:
-            collect(v, seen, texts, urls)
+            collect(v, seen, texts, urls, related, parent)
     elif isinstance(value, str) and ARTIFACT_ID.match(value):
         seen.add(value)  # e.g. ids of the messages a link was shared in
+        link(value)
 
 
 def fence(value: Any) -> Any:
@@ -119,7 +142,7 @@ def run_tools(
             state["calls"] += 1
             try:
                 out = call_tool(use["name"], use["input"], scope, allowed)
-                collect(out, state["seen"], state["texts"], state["urls"])
+                collect(out, state["seen"], state["texts"], state["urls"], state["related"])
                 entry["cypher"] = out.get("cypher", [])
                 if "cypher_run" in out:  # graph_query: the generated statement, as run
                     entry["cypher_text"] = out["cypher_run"]
@@ -181,6 +204,7 @@ def answer(
         "seen": set(),
         "texts": {},
         "urls": {},
+        "related": {},
         "trace": [],
         "graph_query_errors": 0,
     }
@@ -213,16 +237,31 @@ def answer(
     if final is None:
         raise llm.LLMError(f"no final answer after {MAX_TURNS} turns")
 
-    def check(candidate: dict[str, Any]) -> validator.Report:
-        cited = sorted({c["artifact_id"] for c in candidate["citations"]} & state["seen"])
+    def check(candidate: dict[str, Any]) -> tuple[dict[str, Any], validator.Report, list[int]]:
+        """Re-point quotes that sit in a related artifact (D070), then validate, both against
+        the tool rows plus the full graph text of each artifact involved."""
         texts = {**state["texts"]}
-        for aid, more in graph_texts(cited, graph).items():
-            texts[aid] = texts.get(aid, []) + more
-        return validator.check(candidate, state["seen"], texts)
+
+        def load(ids: set[str]) -> None:
+            for aid, more in graph_texts(sorted(ids), graph).items():
+                texts[aid] = texts.get(aid, []) + more
+
+        cited = {c["artifact_id"] for c in candidate["citations"]} & state["seen"]
+        load(cited)
+        stray = {
+            aid
+            for c in candidate["citations"]
+            if (aid := c["artifact_id"]) in cited
+            and not validator.quoted(c["quote"], texts.get(aid, []))
+        }
+        near = set().union(*(state["related"].get(a, set()) for a in stray)) & state["seen"]
+        load(near - cited)
+        candidate, moved = validator.reattribute(candidate, state["related"], texts)
+        return candidate, validator.check(candidate, state["seen"], texts), moved
 
     unvalidated = {"answer_markdown": final["answer_markdown"], "abstain": final["abstain"]}
     final, autocited = validator.autocite(final, state["urls"])
-    report = check(final)
+    final, report, reattributed = check(final)
     first_problems = list(report.problems)
     repaired = False
     if not report.ok:
@@ -231,7 +270,7 @@ def answer(
         if not turn.tool_uses:  # a repair that calls tools is ignored; the first answer stands
             final, autocited = validator.autocite(parse(turn), state["urls"])
             repaired = True
-            report = check(final)
+            final, report, reattributed = check(final)
     cleaned, dropped = validator.clean(final, report)
     if cleaned["abstain"]:
         searched = ", ".join(sorted({e["tool"] for e in state["trace"]})) or "no tools"
@@ -261,6 +300,7 @@ def answer(
             "first_problems": first_problems,
             "repaired": repaired,
             "autocited": autocited,
+            "reattributed": reattributed,
             "final_problems": report.problems,
             "dropped": dropped,
             "model_abstained": final["abstain"],
