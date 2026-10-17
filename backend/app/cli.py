@@ -153,6 +153,12 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         out = derive.expertise(graph)
         report |= out["report"]
         print(f"expertise: {out['areas']} areas; truck factor {out['truck']}", file=sys.stderr)
+        report |= derive.uses(graph)
+        out = derive.precedents(graph)
+        report |= out["report"]
+        print(
+            f"precedents: {out['links']} links over {out['decisions']} decisions", file=sys.stderr
+        )
     if "sentinel" in args.stages:  # after fold and derive: the radius reads WORKS_ON
         from app.sentinel import engine
 

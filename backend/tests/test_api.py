@@ -101,6 +101,7 @@ def test_alerts_and_detail_read_the_api_graph(monkeypatch):
     monkeypatch.setattr(engine, "list_alerts", fake_list)
     monkeypatch.setattr(engine, "alert_actions", lambda i, graph=None: [{"id": "a1"}])
     monkeypatch.setattr(blast_radius, "impact_of", lambda d, graph=None: {"decision_id": d})
+    monkeypatch.setattr(main.db, "run", lambda name, params, **k: type("R", (), {"rows": []}))
     client = TestClient(main.app)
     assert client.get("/alerts").json()["alerts"] == [ALERT]
     got = client.get("/alerts/detail", params={"id": "alert:dec:x"}).json()

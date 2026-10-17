@@ -218,3 +218,56 @@ def communities(graph: str | None = None) -> dict:
     report["set_person_betweenness"] = {"rows": len(scores), **result.stats}
     sizes = sorted((r["size"] for r in rows), reverse=True)
     return {"report": report, "communities": sizes, "bridges": scores[:3]}
+
+
+PRECEDENT_MIN_SIM = 0.80  # bge-small cosine; ~the top tenth of same-kind pairs on dev (D066)
+PRECEDENTS_PER_DECISION = 3
+
+
+def precedents(graph: str | None = None, min_sim: float = PRECEDENT_MIN_SIM) -> dict:
+    """10.6 (D066): for each extracted decision (reports excluded), up to 3 earlier decisions of
+    the same kind and value in the same product, about a different issue or PR whose title and
+    description are similar (local embeddings, cosine >= min_sim), become
+    (earlier)-[:PRECEDENT_FOR {basis: 'similar_subject', similarity}]->(later)."""
+    from app.ingest import chunk_embed
+
+    rows = db.run(
+        "precedent_candidates", {"limit": READ_LIMIT}, graph=graph, timeout_ms=60_000
+    ).rows
+    vecs = chunk_embed.embed_passages([r["text"][:800] for r in rows]) if rows else []
+    links = []
+    for i, d in enumerate(rows):
+        scored = []
+        for j, p in enumerate(rows):
+            if (
+                (p["kind"], p["value"], p["product_id"]) == (d["kind"], d["value"], d["product_id"])
+                and p["subject_id"] != d["subject_id"]
+                and (p["ts_ms"] or 0) < (d["ts_ms"] or 0)
+            ):
+                sim = sum(a * b for a, b in zip(vecs[i], vecs[j], strict=True))
+                if sim >= min_sim:
+                    scored.append((sim, p["id"]))
+        for sim, pid in sorted(scored, reverse=True)[:PRECEDENTS_PER_DECISION]:
+            links.append({"precedent_id": pid, "decision_id": d["id"], "similarity": round(sim, 4)})
+    report = {
+        "clear_similar_precedents": {
+            "rows": 0,
+            **db.run("clear_similar_precedents", {}, graph=graph, readonly=False).stats,
+        }
+    }
+    if links:
+        result = db.run("link_similar_precedent", {"rows": links}, graph=graph, readonly=False)
+        report["link_similar_precedent"] = {"rows": len(links), **result.stats}
+    return {"report": report, "decisions": len(rows), "links": len(links)}
+
+
+def uses(graph: str | None = None) -> dict:
+    """10.6 (D066): Company-USES-Product from the issues their customers reported, rebuilt."""
+    report = {
+        "clear_uses": {"rows": 0, **db.run("clear_uses", {}, graph=graph, readonly=False).stats}
+    }
+    report["derive_uses"] = {
+        "rows": 0,
+        **db.run("derive_uses", {}, graph=graph, readonly=False).stats,
+    }
+    return report

@@ -140,6 +140,16 @@ def ingest(msg: dict[str, Any], graph: str | None = None) -> dict[str, Any]:
     fold.load(fold_rows, graph)
     stages["s7_s8_resolve_fold"] = _ms(t)
 
+    # S9: the fold recreated the issues and decisions, so re-derive what hangs off them
+    # (areas, KNOWS, truck factor, similarity precedents); COLLAB and communities are unchanged
+    from app.ingest import derive
+
+    t = time.perf_counter()
+    derive.expertise(graph)
+    derive.precedents(graph)
+    derive.uses(graph)
+    stages["s9_derive"] = _ms(t)
+
     t = time.perf_counter()
     sentinel = engine.run(graph)
     sentinel.pop("report")

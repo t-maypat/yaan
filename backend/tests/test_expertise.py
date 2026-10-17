@@ -225,3 +225,42 @@ def test_collab_paths_find_the_shortest_chain_and_report_no_tie(empty_graph):
     assert paths[("eid_b2", "eid_d4")] == ["Bo Chen", "Cy Diaz", "Di Park"]
     assert paths[("eid_b2", "eid_e5")] == []  # Ed never worked with anyone
     assert tools.collab_paths([], graph=empty_graph) == {}
+
+
+@pytest.mark.db
+def test_uses_and_similarity_precedents_on_the_invented_company(empty_graph):
+    db.run_text(FIXTURE.read_text(encoding="utf-8"), label="f", graph=empty_graph, readonly=False)
+    derive.uses(empty_graph)
+    derive.uses(empty_graph)  # rebuilt, not doubled
+    rows = db.run_text(
+        "MATCH (c:Company)-[u:USES]->(p:Product) "
+        "RETURN c.id AS c, p.id AS p, u.issues AS n LIMIT 5",
+        label="u",
+        graph=empty_graph,
+    ).rows
+    assert rows == [{"c": "co:blue-wave", "p": "Widget", "n": 1}]
+    # two dismissals of near-identical issues: the earlier one is a precedent for the later one
+    db.run_text(
+        "MATCH (w:Product {id: 'Widget'}) "
+        "CREATE (i1:Issue:Entity {id: 'iss:Widget:p1', title: 'Export button freezes', "
+        "description: 'Clicking export freezes the page.', product_id: 'Widget'}), "
+        "(i2:Issue:Entity {id: 'iss:Widget:p2', title: 'Export button freezes the page', "
+        "description: 'The page freezes after clicking export.', product_id: 'Widget'}), "
+        "(:Decision {id: 'dec:p1', kind: 'issue_status', value: 'dismissed', "
+        "origin: 'extracted', valid_from_ms: 100})-[:AFFECTS]->(i1), "
+        "(:Decision {id: 'dec:p2', kind: 'issue_status', value: 'dismissed', "
+        "origin: 'extracted', valid_from_ms: 200})-[:AFFECTS]->(i2)",
+        label="p",
+        graph=empty_graph,
+        readonly=False,
+    )
+    out = derive.precedents(empty_graph)
+    got = db.run(
+        "decision_precedents", {"decision_id": "dec:p2", "limit": 5}, graph=empty_graph
+    ).rows
+    assert [r["id"] for r in got] == ["dec:p1"] and got[0]["similarity"] >= 0.8
+    assert (
+        db.run("decision_precedents", {"decision_id": "dec:p1", "limit": 5}, graph=empty_graph).rows
+        == []
+    )
+    assert out["links"] >= 1

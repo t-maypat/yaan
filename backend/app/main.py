@@ -171,9 +171,17 @@ def alert_detail(id: str) -> dict:
         if alert["kind"] in ("key_person", "bus_factor")
         else blast_radius.impact_of(alert["decision_id"], graph=graph())
     )
+    precedents = (
+        db.run(
+            "decision_precedents", {"decision_id": alert["decision_id"], "limit": 5}, graph=graph()
+        ).rows
+        if alert["decision_id"]
+        else []
+    )
     return {
         "alert": alert,
         "radius": radius,
+        "precedents": precedents,
         "actions": engine.alert_actions(id, graph=graph()),
         "cypher": ["list_alerts.cypher", "impact_of.cypher", "alert_actions.cypher"],
     }

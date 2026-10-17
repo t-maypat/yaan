@@ -147,7 +147,17 @@ export type Action = {
   target_name: string;
   draft: string;
 };
-export type AlertDetail = { alert: Alert; radius: Radius; actions: Action[] };
+export type Precedent = {
+  id: string;
+  value: string;
+  ts_ms: number;
+  subject: string;
+  similarity: number;
+  decided_by: string | null;
+  artifact_id: string | null;
+  quote: string | null;
+};
+export type AlertDetail = { alert: Alert; radius: Radius; actions: Action[]; precedents: Precedent[] };
 export type Injection = {
   name: string;
   id: string;

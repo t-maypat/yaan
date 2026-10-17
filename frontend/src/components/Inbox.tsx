@@ -348,6 +348,8 @@ function AlertView({ id, onAnswered }: { id: string; onAnswered: () => void }) {
         <RadiusList detail={detail} />
       </section>
 
+      {detail.precedents.length > 0 && <Precedents detail={detail} />}
+
       <Respond detail={detail} actions={actions} onDone={() => (load(), onAnswered())} />
     </article>
   );
@@ -418,6 +420,41 @@ function radiusGraph(alert: Alert, rows: RadiusRow[]): Subgraph {
     edges.set(key, { source, target: r.id, rel: had ? `${had.rel}; ${rel}` : rel });
   }
   return { nodes: [...nodes.values()], edges: [...edges.values()] };
+}
+
+// Earlier decisions of the same kind on similar issues or PRs (PRECEDENT_FOR by similarity, D066).
+function Precedents({ detail }: { detail: AlertDetail }) {
+  return (
+    <section aria-labelledby="h-precedents" className="mt-10">
+      <h3 id="h-precedents" className="font-semibold">
+        Similar past cases
+      </h3>
+      <p className="text-sm text-muted mt-0.5 mb-3 max-w-[68ch]">
+        The same kind of decision, taken earlier in {detail.alert.product_id} on a similar issue or pull request, matched
+        by meaning, not by keywords.
+      </p>
+      <ul className="space-y-3 max-w-[72ch]">
+        {detail.precedents.map((p) => (
+          <li key={p.id} className="border-l-2 border-rule pl-3">
+            <p>
+              <span className="font-serif text-[1.05rem]">{p.subject}</span>
+              <span className="text-muted">
+                {" "}
+                was {values(p.value)}
+                {p.decided_by ? ` by ${p.decided_by}` : ""}, {when(new Date(p.ts_ms).toISOString()).split(",")[0]}. Similarity{" "}
+                {p.similarity.toFixed(2)}.
+              </span>
+            </p>
+            {p.quote && (
+              <p className="font-serif text-[0.98rem] mt-1">
+                <mark className="verbatim">{p.quote}</mark>
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function RadiusList({ detail }: { detail: AlertDetail }) {
