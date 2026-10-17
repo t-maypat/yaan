@@ -133,8 +133,12 @@ def respond(
                 "decision_id": decision_id,
                 ("issue_id" if subject.startswith("iss:") else "artifact_id"): subject,
             }
-        ],
-        "link_caused": [{"cause_id": alert["decision_id"], "decision_id": decision_id}],
+        ]
+        if subject.startswith(("iss:", "pr:"))  # a key_person alert is about a person
+        else [],
+        "link_caused": [{"cause_id": alert["decision_id"], "decision_id": decision_id}]
+        if alert["decision_id"]
+        else [],
         "link_precedent_for": [
             {"precedent_id": p["id"], "decision_id": decision_id} for p in precedents
         ],

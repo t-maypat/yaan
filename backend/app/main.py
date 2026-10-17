@@ -165,9 +165,15 @@ def alert_detail(id: str) -> dict:
     found = [a for a in engine.list_alerts(graph=graph()) if a["id"] == id]
     if not found:
         raise HTTPException(404, f"no alert {id!r}")
+    alert = found[0]
+    radius = (
+        blast_radius.person_radius(alert["subject_id"], graph=graph())
+        if alert["kind"] in ("key_person", "bus_factor")
+        else blast_radius.impact_of(alert["decision_id"], graph=graph())
+    )
     return {
-        "alert": found[0],
-        "radius": blast_radius.impact_of(found[0]["decision_id"], graph=graph()),
+        "alert": alert,
+        "radius": radius,
         "actions": engine.alert_actions(id, graph=graph()),
         "cypher": ["list_alerts.cypher", "impact_of.cypher", "alert_actions.cypher"],
     }

@@ -30,6 +30,7 @@ export const NODE_WORDS: Record<string, string> = {
   issue: "Issue",
   decision: "Decision",
   team: "Team",
+  area: "Area (component or work item)",
   ...KIND_WORDS,
 };
 

@@ -55,3 +55,35 @@ def impact_of(decision_id: str, *, graph: str | None = None, limit: int = 25) ->
         "rows": rows,  # one per item with `via`: the Inbox draws the radius from them
         "cypher": ["impact_of.cypher"],
     }
+
+
+def person_radius(person_id: str, *, graph: str | None = None, limit: int = 50) -> dict[str, Any]:
+    """What depends on one person (11.5, D062): the areas they are the only author of, the
+    people who also know those areas (possible backups, best first) and their manager. Same
+    shape as impact_of, so the Inbox draws it the same way."""
+    rows = db.run("person_radius", {"person_id": person_id, "limit": limit}, graph=graph).rows
+    people: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        if r["kind"] == "person":
+            p = people.setdefault(
+                r["id"], {"id": r["id"], "name": r["name"], "role": r["role"], "reasons": []}
+            )
+            if r["why"] not in p["reasons"]:
+                p["reasons"].append(r["why"])
+    backups: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        if r["why"] == "could_back_up":
+            backups.setdefault(r["via"], []).append(r)
+    for area_backups in backups.values():
+        area_backups.sort(key=lambda r: -float(r["detail"] or 0))
+    return {
+        "person_id": person_id,
+        "areas": [r for r in rows if r["why"] == "only_expert"],
+        "backups": backups,
+        "manager": [r for r in rows if r["why"] == "manager"],
+        "people": list(people.values()),
+        "open_issues_same_component": [],
+        "size": len({(r["kind"], r["id"]) for r in rows}),
+        "rows": rows,
+        "cypher": ["person_radius.cypher"],
+    }

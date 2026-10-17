@@ -102,7 +102,7 @@ function getJson<T>(path: string): Promise<T> {
 export type Notified = { id: string; name: string; role: string | null; reasons: string[] };
 export type Alert = {
   id: string;
-  kind: "regression" | "reopened" | "reversal" | "conflict";
+  kind: "regression" | "reopened" | "reversal" | "conflict" | "key_person" | "bus_factor";
   severity: "high" | "medium";
   status: "open" | "approved" | "dismissed" | "withdrawn";
   summary: string;
@@ -113,8 +113,8 @@ export type Alert = {
   from_value: string;
   to_value: string;
   ts_iso: string;
-  artifact_id: string;
-  quote: string;
+  artifact_id: string | null;
+  quote: string | null;
   actor_name: string | null;
   actor_role: string | null;
   reason: string | null;

@@ -124,3 +124,55 @@ def drafts_for(alert: dict[str, Any], radius: dict[str, Any]) -> list[dict[str, 
     for a in out:
         a["id"] = f"action:{alert['id']}:{a['kind']}:{a['target_id']}"
     return out
+
+
+def key_person_drafts(alert: dict[str, Any], radius: dict[str, Any]) -> list[dict[str, Any]]:
+    """Drafts for a key_person alert (11.5, D062): a note to the person's manager naming the
+    areas only they know and the best backup for each, and a note to the person."""
+    areas = radius["areas"]
+    names = "; ".join(f"{a['name']} ({a['detail']})" for a in areas[:8])
+    more = f" and {len(areas) - 8} more" if len(areas) > 8 else ""
+    pairs = []
+    for a in areas[:5]:
+        best = (radius["backups"].get(a["id"]) or [None])[0]
+        if best:
+            pairs.append(f"{a['name']}: {best['name']}")
+    suggestion = (
+        f" Possible backups, by who else knows each area: {'; '.join(pairs)}." if pairs else ""
+    )
+    base = {"alert_id": alert["id"], "quote": None, "artifact_id": None}
+    person = alert["subject_title"]
+    out = []
+    for m in radius["manager"][:1]:
+        out.append(
+            {
+                **base,
+                "kind": "notify_owner",
+                "target_kind": "person",
+                "target_id": m["id"],
+                "target_name": m["name"],
+                "draft": (
+                    f"{m['name']}, {person} is the only expert on {len(areas)} areas: "
+                    f"{names}{more}. If they left, nobody would have a record of work on "
+                    f"those areas ({alert['reason']}).{suggestion} Consider pairing someone "
+                    "with them on the busiest ones."
+                ),
+            }
+        )
+    out.append(
+        {
+            **base,
+            "kind": "notify_owner",
+            "target_kind": "person",
+            "target_id": alert["subject_id"],
+            "target_name": person,
+            "draft": (
+                f"{person}, you're the only person with a record of work on {len(areas)} areas: "
+                f"{names}{more}. Could you walk someone through the ones that matter most?"
+                f"{suggestion}"
+            ),
+        }
+    )
+    for a in out:
+        a["id"] = f"action:{alert['id']}:{a['kind']}:{a['target_id']}"
+    return out

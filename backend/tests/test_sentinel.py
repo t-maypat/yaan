@@ -381,3 +381,25 @@ def test_a_rebuild_relinks_caused_to_the_response(company):
 )
 def test_response_reads_run_on_an_empty_graph(empty_graph, name, params):
     assert db.run(name, params, graph=empty_graph).rows == []
+
+
+def test_a_sole_expert_whose_product_has_truck_factor_1_raises_a_bus_factor_alert(
+    company, monkeypatch
+):
+    from app.ingest import derive
+
+    derive.expertise(company)  # Cy is the only author of the Export Module: TF 1
+    monkeypatch.setattr(engine, "MIN_SOLE_AREAS", 1)
+    out = engine.run(company, now_ms=NOW)
+    assert out["by_kind"]["bus_factor"] == 1
+    alert = alerts_by_id(company)["alert:bus_factor:eid_c3"]
+    assert alert["severity"] == "high" and alert["summary"] == (
+        "Cy Diaz (Software Engineer) is the only expert on 1 area in Widget, "
+        "and the first person the truck factor removes there."
+    )
+    assert {p["id"] for p in alert["notifies"]} == {"eid_c3"}  # no manager on record
+    [note] = engine.alert_actions("alert:bus_factor:eid_c3", graph=company)
+    assert note["target_id"] == "eid_c3" and "Export Module (Widget)" in note["draft"]
+    # approving a person-level alert writes the decision without an issue or a cause
+    out = approve.respond("alert:bus_factor:eid_c3", "approved", "eid_c3", graph=company)
+    assert trace(company, out["decision"]["id"])["subject"] is None

@@ -143,6 +143,20 @@ def run(graph: str | None = None, *, now_ms: int | None = None) -> dict[str, Any
             {"alert_id": alert_id, "person_id": p["id"], "reasons": p["reasons"]}
             for p in radius["people"]
         ]
+    for alert, radius in key_person_alerts(graph, now_ms, now_iso):
+        seen.add(alert["id"])
+        rows["upsert_alerts"].append(alert)
+        for action in drafts.key_person_drafts(alert, radius):
+            rows["upsert_actions"].append({**action, "observed_ms": now_ms})
+            rows["link_action_for"].append({"id": action["id"], "alert_id": alert["id"]})
+            rows[TARGET_QUERY[action["target_kind"]]].append(
+                {"id": action["id"], "target_id": action["target_id"]}
+            )
+        rows["link_notifies"] += [
+            {"alert_id": alert["id"], "person_id": p["id"], "reasons": p["reasons"]}
+            for p in radius["people"]
+            if "manager" in p["reasons"]
+        ] + [{"alert_id": alert["id"], "person_id": alert["subject_id"], "reasons": ["key_person"]}]
     report: dict[str, dict[str, Any]] = {}
     for name in LOAD_ORDER:
         if rows[name]:
@@ -165,6 +179,84 @@ def run(graph: str | None = None, *, now_ms: int | None = None) -> dict[str, Any
         "actions": len(rows["upsert_actions"]),
         "report": report,
     }
+
+
+MIN_SOLE_AREAS = 3  # a key person is the only author of at least this many areas
+
+
+def key_person_alerts(graph: str | None, now_ms: int, now_iso: str) -> list[tuple[dict, dict]]:
+    """11.5 (D062): one `key_person` alert per person who is first in a product's truck-factor
+    order and the only author of >= MIN_SOLE_AREAS areas; `bus_factor` (high) when that
+    product's truck factor is 1. Dated on HERB's clock (the products' last artifact)."""
+    rows = db.run("key_people", {"limit": 5000}, graph=graph).rows
+    clock = {
+        r["product_id"]: r["last_ms"]
+        for r in db.run("product_clock", {"limit": 100}, graph=graph, timeout_ms=30_000).rows
+    }
+    people: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        p = people.setdefault(
+            r["person_id"],
+            {"name": r["name"], "role": r["role"], "flagged": {}, "areas": {}},
+        )
+        p["flagged"][r["flagged_in"]] = r["tf"]
+        p["areas"][r["area_id"]] = r["area_product"]
+    out = []
+    for pid, p in sorted(people.items()):
+        if len(p["areas"]) < MIN_SOLE_AREAS:
+            continue
+        flagged = sorted(p["flagged"])
+        products = sorted(set(p["areas"].values()))
+        tf1 = any(tf == 1 for tf in p["flagged"].values())
+        kind = "bus_factor" if tf1 else "key_person"
+        where = " and ".join(products)
+        place = (
+            ("in both" if len(flagged) == 2 else "in each")
+            if flagged == products and len(flagged) > 1
+            else "there"
+            if flagged == products
+            else f"in {' and '.join(flagged)}"
+        )
+        first_in = f"the first person the truck factor removes {place}"
+        summary = (
+            f"{p['name']} ({p['role']}) is the only expert on {len(p['areas'])} "
+            f"area{'s' if len(p['areas']) != 1 else ''} in "
+            f"{where}, and {first_in}."
+        )
+        radius = blast_radius.person_radius(pid, graph=graph)
+        ts = max((clock.get(x) or 0) for x in flagged)
+        alert = {
+            "id": f"alert:{kind}:{pid}",
+            "kind": kind,
+            "severity": "high" if tf1 else "medium",
+            "change": "derived",
+            "summary": summary,
+            "decision_id": None,
+            "trigger_id": pid,
+            "topic": f"person:{pid}/areas",
+            "subject_id": pid,
+            "subject_title": p["name"],
+            "product_id": flagged[0],
+            "from_value": None,
+            "to_value": None,
+            "from_ms": None,
+            "ts_ms": ts,
+            "ts_iso": datetime.fromtimestamp(ts / 1000, UTC).isoformat().replace("+00:00", "Z"),
+            "artifact_id": None,
+            "quote": None,
+            "actor_id": pid,
+            "actor_name": p["name"],
+            "actor_role": p["role"],
+            "reason": "truck factor "
+            + ", ".join(f"{k} {v}" for k, v in sorted(p["flagged"].items())),
+            "radius_size": radius["size"],
+            "radius_people": len(radius["people"]),
+            "radius_companies": [],
+            "observed_ms": now_ms,
+            "observed_iso": now_iso,
+        }
+        out.append((alert, radius))
+    return out
 
 
 def list_alerts(

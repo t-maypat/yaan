@@ -30,7 +30,11 @@ const ALERT_WORDS: Record<Alert["kind"], string> = {
   reopened: "Reopened after dismissal",
   reversal: "Decision reversed",
   conflict: "Unauthorized change",
+  key_person: "Single point of failure",
+  bus_factor: "Bus factor of one",
 };
+// Alerts about a person rather than a change: computed from the expertise layer (11.5, D062).
+const isPersonAlert = (a: Alert) => a.kind === "key_person" || a.kind === "bus_factor";
 const STATUS_WORDS: Record<Alert["status"], string> = {
   open: "Needs a response",
   approved: "Approved",
@@ -54,6 +58,9 @@ const WHY_WORDS: Record<string, string> = {
   evidenced_this_state: "the new message",
   works_on_product: "works on the product",
   caused: "led to",
+  only_expert: "only expert on",
+  could_back_up: "could back up",
+  manager: "reports to",
 };
 const REASON_WORDS: Record<string, string> = {
   authored_fix: "wrote the fix",
@@ -62,13 +69,15 @@ const REASON_WORDS: Record<string, string> = {
   decided_old_state: "stated the earlier status",
   authored_pr: "authored the PR",
   reviewed_pr: "reviewed the PR",
+  could_back_up: "could back up one of the areas",
+  manager: "their manager",
 };
 const ACTION_WORDS: Record<Action["kind"], (a: Action) => string> = {
   ticket_comment: (a) => `Comment on ${a.target_kind === "issue" ? "the issue" : "the pull request"}`,
   doc_fix: () => "Correction under the earlier message",
   notify_owner: (a) => `Note to ${a.target_name}`,
 };
-const synthetic = (id: string) => id.startsWith("msg:synthetic-");
+const synthetic = (id: string | null) => !!id?.startsWith("msg:synthetic-");
 const short = (s: string, n = 44) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const values = (v: string | null) => (v ?? "").replaceAll("_", " ");
 
@@ -312,22 +321,27 @@ function AlertView({ id, onAnswered }: { id: string; onAnswered: () => void }) {
         </span>
       </p>
       <h2 className="font-serif text-[1.6rem] leading-[1.2] tracking-[-0.01em] mt-1 max-w-[40ch]">{alert.summary}</h2>
-      <Trigger alert={alert} />
+      {isPersonAlert(alert) ? <Computed alert={alert} /> : <Trigger alert={alert} />}
 
       <section aria-labelledby="h-radius" className="mt-10">
         <h3 id="h-radius" className="font-semibold">
-          What this change touches
+          {isPersonAlert(alert) ? "What depends on them" : "What this change touches"}
         </h3>
         <p className="text-sm text-muted mt-0.5 mb-3 max-w-[68ch]">
-          {plural(radius.size, "item")} within a few hops of the change, each for a stated reason: the fix and who made it,
-          who reported it, the message that said otherwise, and other issues in the same component.
+          {isPersonAlert(alert)
+            ? `${plural(radius.size, "item")}: the areas only ${alert.subject_title} has a record of work on, who else knows each one, and their manager.`
+            : `${plural(radius.size, "item")} within a few hops of the change, each for a stated reason: the fix and who made it, who reported it, the message that said otherwise, and other issues in the same component.`}
         </p>
         <EvidenceGraph
           graph={graph ?? { nodes: [], edges: [] }}
           root={alert.subject_id}
           citations={[]}
           active={null}
-          hint="Point at a node to read it and see why it is linked. The changed issue is in the middle; the yellow node is the new message."
+          hint={
+            isPersonAlert(alert)
+              ? "Point at a node to read it and see why it is linked. The person is in the middle, ringed by the areas only they know."
+              : "Point at a node to read it and see why it is linked. The changed issue is in the middle; the yellow node is the new message."
+          }
           label={`Blast radius: ${radius.size} items around ${alert.subject_title}`}
         />
         <RadiusList detail={detail} />
@@ -338,8 +352,22 @@ function AlertView({ id, onAnswered }: { id: string; onAnswered: () => void }) {
   );
 }
 
+// A person-level alert has no trigger message: say how it was computed instead.
+function Computed({ alert }: { alert: Alert }) {
+  return (
+    <div className="mt-5 border-l-2 border-link pl-4 max-w-[68ch] text-[0.95rem]">
+      <p>
+        No message raised this. Lore computed it from the graph: who made the deliveries in each area (degree of
+        authorship over bug fixes and pull requests), then the truck factor, which removes the person holding the most
+        areas until more than half of a product's areas have no author left.
+      </p>
+      {alert.reason && <p className="text-sm text-muted mt-1">Current {alert.reason}.</p>}
+    </div>
+  );
+}
+
 function Trigger({ alert }: { alert: Alert }) {
-  const { artifact } = useArtifact(alert.artifact_id);
+  const { artifact } = useArtifact(alert.artifact_id ?? "", !!alert.artifact_id);
   return (
     <figure className="mt-5 border-l-2 border-mark pl-4 max-w-[68ch]">
       <blockquote className="font-serif text-[1.12rem] leading-snug">
@@ -371,7 +399,8 @@ function Trigger({ alert }: { alert: Alert }) {
 function radiusGraph(alert: Alert, rows: RadiusRow[]): Subgraph {
   const nodes = new Map<string, GraphNode>();
   const subject = alert.subject_id;
-  nodes.set(subject, { id: subject, label: subject.startsWith("iss:") ? "issue" : "pr", name: alert.subject_title, cited: false });
+  const subjectLabel = isPersonAlert(alert) ? "person" : subject.startsWith("iss:") ? "issue" : "pr";
+  nodes.set(subject, { id: subject, label: subjectLabel, name: alert.subject_title, cited: false });
   const label = (r: RadiusRow) => (r.kind === "artifact" ? (r.id.startsWith("pr:") ? "pr" : "message") : r.kind);
   const name = (r: RadiusRow) =>
     r.kind === "artifact" && r.quote ? `"${short(r.quote, 60)}"` : r.kind === "issue" ? `${r.name} (${values(r.detail)})` : (r.name ?? r.id);
@@ -396,6 +425,44 @@ function RadiusList({ detail }: { detail: AlertDetail }) {
   const customers = radius.rows.filter((r) => r.why === "reported_issue");
   const company = (cid: string) => radius.rows.find((r) => r.why === "reporter_works_at" && r.via === cid)?.name;
   const open = radius.open_issues_same_component;
+  if (isPersonAlert(detail.alert)) {
+    const areas = radius.rows.filter((r) => r.why === "only_expert");
+    const backup = (aid: string) => radius.rows.find((r) => r.why === "could_back_up" && r.via === aid)?.name;
+    return (
+      <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 mt-5 text-[0.92rem]">
+        <div>
+          <dt className="text-muted text-sm">Only they know, and who else comes closest</dt>
+          <dd>
+            <ul>
+              {areas.map((a) => (
+                <li key={a.id}>
+                  {a.name}
+                  <span className="text-muted">, {backup(a.id) ? `next: ${backup(a.id)}` : "nobody else on record"}</span>
+                </li>
+              ))}
+            </ul>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted text-sm">People to tell</dt>
+          <dd>
+            {people
+              .filter((p) => p.reasons.includes("manager"))
+              .map((p) => (
+                <span key={p.id} className="block">
+                  {p.name}
+                  <span className="text-muted">, {p.role}, their manager</span>
+                </span>
+              ))}
+            <span className="block">
+              {detail.alert.subject_title}
+              <span className="text-muted">, the key person</span>
+            </span>
+          </dd>
+        </div>
+      </dl>
+    );
+  }
   return (
     <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-3 mt-5 text-[0.92rem]">
       <div>

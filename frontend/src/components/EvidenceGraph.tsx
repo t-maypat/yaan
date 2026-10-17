@@ -23,6 +23,7 @@ const SHAPE: Record<string, cytoscape.Css.NodeShape> = {
   issue: "triangle",
   decision: "star",
   team: "octagon",
+  area: "tag",
 };
 const GROUP = (label: string) =>
   ARTIFACT_KINDS.has(label)
@@ -217,6 +218,7 @@ function Swatch({ kind }: { kind: string }) {
     diamond: <polygon points="7,1.5 12.5,7 7,12.5 1.5,7" />,
     triangle: <polygon points="7,1.5 12.5,12 1.5,12" />,
     star: <polygon points="7,1 8.6,5.2 13,5.4 9.5,8.1 10.7,12.5 7,10 3.3,12.5 4.5,8.1 1,5.4 5.4,5.2" />,
+    tag: <polygon points="1.5,3 9.5,3 12.5,7 9.5,11 1.5,11" />,
     octagon: <polygon points="4.7,1.5 9.3,1.5 12.5,4.7 12.5,9.3 9.3,12.5 4.7,12.5 1.5,9.3 1.5,4.7" />,
   };
   return (
