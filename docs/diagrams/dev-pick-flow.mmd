@@ -1,0 +1,10 @@
+%% How the 3 dev products are picked without anyone reading a question (Phase 2.1, H6, D017).
+flowchart LR
+  HUB["Hugging Face Hub<br/>Salesforce/HERB<br/>pinned revision a00bca08"]:::ext --> FILES["data/herb/products<br/>30 product files<br/>(gitignored)"]:::file
+  FILES --> LOAD["read_artifacts()<br/>parse one file"]:::code
+  LOAD -- "dropped on load" --> DROP["questions, answers,<br/>team, customers<br/>never seen"]:::guard
+  LOAD -- "kept" --> ART["Slack messages and PRs<br/>(+ docs, meetings, links)"]:::code
+  ART --> SIG["Count 4 change signals<br/>closed unmerged PRs<br/>changes requested<br/>revert PRs<br/>change words in Slack"]:::code
+  SIG --> RANK["Scale each 0–1, add up<br/>rank all 30 products<br/>eval/dev_ranking.json"]:::store
+  RANK -- "top 3" --> DEV["Dev products<br/>we read everything"]:::human
+  RANK -- "other 27" --> REST["Random seeded draw<br/>of ≥ 7 test products<br/>(task 2.3)"]:::guard

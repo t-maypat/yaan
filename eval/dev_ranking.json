@@ -1,0 +1,294 @@
+{
+  "herb_revision": "a00bca08f9118e482e6de9951fdcb654fbed5343",
+  "rule": "D017: drop questions/team/customers on load; count pr_closed_unmerged (state=closed, merged=False), pr_changes_requested (review state CHANGES_REQUESTED), pr_revert ('revert' in PR title or summary), slack_change (message contains any CHANGE_WORDS); scale each signal by its max over all products, sum, take the top 3 (ties by name).",
+  "change_words": [
+    "revert",
+    "roll back",
+    "rollback",
+    "rolled back",
+    "on hold",
+    "reopen",
+    "re-open",
+    "postpone",
+    "delay",
+    "dismiss"
+  ],
+  "dev": [
+    "ExplainabilityForce",
+    "CollaborateForce",
+    "VizForce"
+  ],
+  "created": "2026-10-07T05:07:48+00:00",
+  "products": [
+    {
+      "product": "ExplainabilityForce",
+      "pr_closed_unmerged": 8,
+      "pr_changes_requested": 11,
+      "pr_revert": 9,
+      "slack_change": 74,
+      "score": 3.7167,
+      "rank": 1
+    },
+    {
+      "product": "CollaborateForce",
+      "pr_closed_unmerged": 10,
+      "pr_changes_requested": 12,
+      "pr_revert": 5,
+      "slack_change": 54,
+      "score": 3.2853,
+      "rank": 2
+    },
+    {
+      "product": "VizForce",
+      "pr_closed_unmerged": 6,
+      "pr_changes_requested": 11,
+      "pr_revert": 7,
+      "slack_change": 52,
+      "score": 2.9971,
+      "rank": 3
+    },
+    {
+      "product": "SearchFlow",
+      "pr_closed_unmerged": 7,
+      "pr_changes_requested": 10,
+      "pr_revert": 5,
+      "slack_change": 63,
+      "score": 2.9402,
+      "rank": 4
+    },
+    {
+      "product": "LeadForce",
+      "pr_closed_unmerged": 4,
+      "pr_changes_requested": 9,
+      "pr_revert": 8,
+      "slack_change": 54,
+      "score": 2.7686,
+      "rank": 5
+    },
+    {
+      "product": "PitchForce",
+      "pr_closed_unmerged": 2,
+      "pr_changes_requested": 9,
+      "pr_revert": 7,
+      "slack_change": 57,
+      "score": 2.498,
+      "rank": 6
+    },
+    {
+      "product": "ProposalForce",
+      "pr_closed_unmerged": 5,
+      "pr_changes_requested": 9,
+      "pr_revert": 3,
+      "slack_change": 57,
+      "score": 2.3536,
+      "rank": 7
+    },
+    {
+      "product": "InsightForce",
+      "pr_closed_unmerged": 4,
+      "pr_changes_requested": 8,
+      "pr_revert": 4,
+      "slack_change": 58,
+      "score": 2.2949,
+      "rank": 8
+    },
+    {
+      "product": "AutoTuneForce",
+      "pr_closed_unmerged": 2,
+      "pr_changes_requested": 6,
+      "pr_revert": 7,
+      "slack_change": 56,
+      "score": 2.2345,
+      "rank": 9
+    },
+    {
+      "product": "KnowledgeForce",
+      "pr_closed_unmerged": 4,
+      "pr_changes_requested": 9,
+      "pr_revert": 5,
+      "slack_change": 34,
+      "score": 2.165,
+      "rank": 10
+    },
+    {
+      "product": "EdgeForce",
+      "pr_closed_unmerged": 4,
+      "pr_changes_requested": 5,
+      "pr_revert": 5,
+      "slack_change": 46,
+      "score": 1.9938,
+      "rank": 11
+    },
+    {
+      "product": "ActionGenie",
+      "pr_closed_unmerged": 2,
+      "pr_changes_requested": 7,
+      "pr_revert": 5,
+      "slack_change": 45,
+      "score": 1.947,
+      "rank": 12
+    },
+    {
+      "product": "WorkFlowGenie",
+      "pr_closed_unmerged": 1,
+      "pr_changes_requested": 6,
+      "pr_revert": 4,
+      "slack_change": 64,
+      "score": 1.9093,
+      "rank": 13
+    },
+    {
+      "product": "SupportForce",
+      "pr_closed_unmerged": 6,
+      "pr_changes_requested": 8,
+      "pr_revert": 3,
+      "slack_change": 21,
+      "score": 1.8838,
+      "rank": 14
+    },
+    {
+      "product": "SentimentForce",
+      "pr_closed_unmerged": 6,
+      "pr_changes_requested": 11,
+      "pr_revert": 0,
+      "slack_change": 21,
+      "score": 1.8005,
+      "rank": 15
+    },
+    {
+      "product": "CoachForce",
+      "pr_closed_unmerged": 4,
+      "pr_changes_requested": 10,
+      "pr_revert": 2,
+      "slack_change": 25,
+      "score": 1.7934,
+      "rank": 16
+    },
+    {
+      "product": "ContentForce",
+      "pr_closed_unmerged": 3,
+      "pr_changes_requested": 6,
+      "pr_revert": 4,
+      "slack_change": 37,
+      "score": 1.7444,
+      "rank": 17
+    },
+    {
+      "product": "SearchForce",
+      "pr_closed_unmerged": 4,
+      "pr_changes_requested": 8,
+      "pr_revert": 0,
+      "slack_change": 50,
+      "score": 1.7423,
+      "rank": 18
+    },
+    {
+      "product": "SummarizeForce",
+      "pr_closed_unmerged": 2,
+      "pr_changes_requested": 9,
+      "pr_revert": 2,
+      "slack_change": 25,
+      "score": 1.5101,
+      "rank": 19
+    },
+    {
+      "product": "FeedbackForce",
+      "pr_closed_unmerged": 2,
+      "pr_changes_requested": 6,
+      "pr_revert": 3,
+      "slack_change": 29,
+      "score": 1.4252,
+      "rank": 20
+    },
+    {
+      "product": "FlowForce",
+      "pr_closed_unmerged": 3,
+      "pr_changes_requested": 7,
+      "pr_revert": 2,
+      "slack_change": 21,
+      "score": 1.3893,
+      "rank": 21
+    },
+    {
+      "product": "ContextForce",
+      "pr_closed_unmerged": 5,
+      "pr_changes_requested": 8,
+      "pr_revert": 0,
+      "slack_change": 16,
+      "score": 1.3829,
+      "rank": 22
+    },
+    {
+      "product": "ForecastForce",
+      "pr_closed_unmerged": 5,
+      "pr_changes_requested": 7,
+      "pr_revert": 0,
+      "slack_change": 14,
+      "score": 1.2725,
+      "rank": 23
+    },
+    {
+      "product": "AnomalyForce",
+      "pr_closed_unmerged": 4,
+      "pr_changes_requested": 8,
+      "pr_revert": 0,
+      "slack_change": 14,
+      "score": 1.2559,
+      "rank": 24
+    },
+    {
+      "product": "ConnectForce",
+      "pr_closed_unmerged": 2,
+      "pr_changes_requested": 6,
+      "pr_revert": 2,
+      "slack_change": 23,
+      "score": 1.233,
+      "rank": 25
+    },
+    {
+      "product": "TrendForce",
+      "pr_closed_unmerged": 2,
+      "pr_changes_requested": 3,
+      "pr_revert": 0,
+      "slack_change": 37,
+      "score": 0.95,
+      "rank": 26
+    },
+    {
+      "product": "SecurityForce",
+      "pr_closed_unmerged": 2,
+      "pr_changes_requested": 4,
+      "pr_revert": 0,
+      "slack_change": 25,
+      "score": 0.8712,
+      "rank": 27
+    },
+    {
+      "product": "MonitorForce",
+      "pr_closed_unmerged": 1,
+      "pr_changes_requested": 4,
+      "pr_revert": 1,
+      "slack_change": 18,
+      "score": 0.7877,
+      "rank": 28
+    },
+    {
+      "product": "PersonalizeForce",
+      "pr_closed_unmerged": 2,
+      "pr_changes_requested": 4,
+      "pr_revert": 0,
+      "slack_change": 18,
+      "score": 0.7766,
+      "rank": 29
+    },
+    {
+      "product": "CollaborationForce",
+      "pr_closed_unmerged": 0,
+      "pr_changes_requested": 2,
+      "pr_revert": 0,
+      "slack_change": 9,
+      "score": 0.2883,
+      "rank": 30
+    }
+  ]
+}
