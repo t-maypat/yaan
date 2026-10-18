@@ -175,6 +175,8 @@ def answer_text(out: dict[str, Any], permalink: Callable[[str], str | None]) -> 
     """Lore's answer in Slack mrkdwn: the text, then each citation with its verbatim quote and,
     for a Slack message, a link back to it."""
     text = re.sub(r"\*\*(.+?)\*\*", r"*\1*", out["answer_markdown"])
+    if out.get("hidden_sources"):
+        text += f"\n_{out['hidden_sources']} sources hidden: you can't see them in Lore._"
     if out["abstain"] or not out["citations"]:
         return text
     lines = [text, "", "_Sources (each quote checked word for word):_"]
@@ -272,7 +274,10 @@ class SlackBot:
             say(text=hint, thread_ts=thread)
             return
         try:
-            out = loop.answer(question, self.connector.maps.product, graph=self.graph)
+            viewer = self.connector.maps.person("slack", event.get("user"))  # W7
+            out = loop.answer(
+                question, self.connector.maps.product, graph=self.graph, viewer_id=viewer
+            )
         except Exception as e:  # shown in the thread, never a made-up answer
             say(text=f"I couldn't answer: {type(e).__name__}: {e}", thread_ts=thread)
             return

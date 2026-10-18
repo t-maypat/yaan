@@ -51,12 +51,13 @@ def test_the_tools_are_the_agents_minus_raw_cypher_plus_ask(monkeypatch):
 
 
 def test_ask_returns_the_checked_answer_compact(monkeypatch):
-    def answer(question, product_id=None, graph=None, as_of_ms=None):
-        assert (question, product_id, graph) == ("Who fixed it?", None, "g")
+    def answer(question, product_id=None, graph=None, as_of_ms=None, viewer_id=None):
+        assert (question, product_id, graph, viewer_id) == ("Who fixed it?", None, "g", None)
         assert tools.iso(as_of_ms) == "2027-01-15T23:59:59Z"
         return {
             "answer_markdown": "Ann fixed it [1].",
             "abstain": False,
+            "hidden_sources": 0,
             "citations": [{"n": 1, "artifact_id": "pr:1", "quote": "fix", "quote_ok": True}],
             "trace": [{"tool": "list_prs", "cypher": ["product_prs.cypher"], "ms": 3}],
         }
@@ -68,6 +69,8 @@ def test_ask_returns_the_checked_answer_compact(monkeypatch):
     assert out["tools_used"] == [{"tool": "list_prs", "cypher": ["product_prs.cypher"]}]
     with pytest.raises(loop.ToolError, match="a minute"):  # the limiter
         mcp_server.run("ask", {"question": "Who fixed it?"}, "g")
+    with pytest.raises(loop.ToolError, match="viewer_id must be"):
+        mcp_server.run("ask", {"question": "Who fixed it?", "viewer_id": "boss"}, "g")
     with pytest.raises(loop.ToolError, match="3-500"):
         mcp_server.run("ask", {"question": "?"}, "g")
 

@@ -237,7 +237,9 @@ def cmd_ask(args: argparse.Namespace) -> int:
         if args.baseline:
             out = baseline_rag.answer(question, product_id=args.product, graph=args.graph)
         else:
-            out = loop.answer(question, product_id=args.product, graph=args.graph)
+            out = loop.answer(
+                question, product_id=args.product, graph=args.graph, viewer_id=args.viewer
+            )
     except llm.LLMError as e:
         print(f"lore ask: {e}", file=sys.stderr)
         return 1
@@ -248,6 +250,8 @@ def cmd_ask(args: argparse.Namespace) -> int:
     for step in out.get("trace", []):
         status = f"ERROR {step['error']}" if "error" in step else ", ".join(step.get("cypher", []))
         print(f"  tool {step['tool']}({json.dumps(step['input'])}) {step['ms']} ms: {status}")
+    if out.get("hidden_sources"):
+        print(f"  {out['hidden_sources']} sources hidden from viewer {out['viewer_id']}")
     if out.get("validator", {}).get("dropped"):
         print(f"  validator dropped: {out['validator']['dropped']}")
     if out["llm"]:
@@ -567,6 +571,7 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--baseline", {"action": "store_true", "help": "hybrid RAG, no graph tools"}),
         ("--product", {"help": "product id, e.g. VizForce"}),
         ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
+        ("--viewer", {"help": "answer as this employee (eid_...): hidden sources left out"}),
     ],
     "snapshot": [("--graphs", {"nargs": "+", "help": "graphs to save (default: LORE_GRAPH)"})],
     "seed": [

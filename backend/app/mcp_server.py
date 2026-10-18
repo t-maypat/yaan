@@ -12,6 +12,7 @@ started in the API's lifespan). Everything reads `LORE_API_GRAPH`, like the API.
 """
 
 import json
+import re
 import threading
 import time
 from collections import deque
@@ -64,6 +65,11 @@ ASK = types.Tool(
             "as_of": {
                 "type": "string",
                 "description": "answer for the state at this moment, ISO date or datetime (UTC)",
+            },
+            "viewer_id": {
+                "type": "string",
+                "description": "answer as this employee (eid_...): sources they may not see are "
+                "hidden, and the result says how many",
             },
         },
         "required": ["question"],
@@ -125,16 +131,19 @@ def ask(args: dict[str, Any], graph_name: str) -> dict:
     question = str(args.get("question") or "").strip()
     if not 3 <= len(question) <= 500:
         raise loop.ToolError("question must be 3-500 characters")
-    if not ask_limiter.allow():
-        raise loop.ToolError(f"at most {ASK_PER_MINUTE} questions a minute: try again shortly")
     try:
         as_of_ms = tools.parse_as_of(args.get("as_of")) if args.get("as_of") else None
     except ValueError as e:
         raise loop.ToolError(str(e)) from e
+    viewer = args.get("viewer_id") or None
+    if viewer and not re.fullmatch(r"eid_[0-9a-f]{8}", viewer):
+        raise loop.ToolError(f"viewer_id must be an employee id like eid_1a2b3c4d, not {viewer!r}")
     product = args.get("product_id") or None
     if product and product not in tools.product_ids(graph_name, refresh=True):
         raise loop.ToolError(f"unknown product_id {product!r}: resolve_entity finds the id")
-    out = loop.answer(question, product, graph=graph_name, as_of_ms=as_of_ms)
+    if not ask_limiter.allow():  # last: a malformed request doesn't use up a slot
+        raise loop.ToolError(f"at most {ASK_PER_MINUTE} questions a minute: try again shortly")
+    out = loop.answer(question, product, graph=graph_name, as_of_ms=as_of_ms, viewer_id=viewer)
     return {
         "answer_markdown": out["answer_markdown"],
         "abstain": out["abstain"],
@@ -143,9 +152,9 @@ def ask(args: dict[str, Any], graph_name: str) -> dict:
             for c in out["citations"]
         ],
         "as_of": tools.iso(as_of_ms),
-        "tools_used": [
-            {"tool": t["tool"], "cypher": t.get("cypher", [])} for t in out["trace"]
-        ],
+        "viewer_id": viewer,
+        "hidden_sources": out["hidden_sources"],
+        "tools_used": [{"tool": t["tool"], "cypher": t.get("cypher", [])} for t in out["trace"]],
     }
 
 

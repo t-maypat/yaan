@@ -11,6 +11,7 @@ from app.config import Settings
 from app.sentinel import approve, blast_radius, engine, live
 
 ASKED: list = []  # the as_of_ms each faked answer got
+VIEWERS: list = []  # and the viewer_id (W7)
 
 
 def events(text: str) -> list[tuple[str, dict]]:
@@ -21,8 +22,11 @@ def events(text: str) -> list[tuple[str, dict]]:
     return out
 
 
-def fake_answer(question, product_id=None, graph=None, on_event=loop._quiet, as_of_ms=None):
+def fake_answer(
+    question, product_id=None, graph=None, on_event=loop._quiet, as_of_ms=None, viewer_id=None
+):
     ASKED.append(as_of_ms)
+    VIEWERS.append(viewer_id)
     on_event("tool_call", {"tool": "list_issues", "input": {"status": "unresolved"}})
     on_event("tool_result", {"tool": "list_issues", "ms": 3.0, "cypher": ["product_issues.cypher"]})
     on_event("answer", {"answer_markdown": f"{question} [1]", "abstain": False})
@@ -185,6 +189,10 @@ def test_ask_passes_the_timelines_as_of_moment(monkeypatch):
     client.post("/ask", json=body)
     assert ASKED[-1] == 1_800_000_000_000
     assert client.post("/ask", json={"question": "Status?", "as_of_ms": -1}).status_code == 422
+    client.post("/ask", json={"question": "Status?", "viewer_id": "eid_1a2b3c4d"})
+    assert VIEWERS[-1] == "eid_1a2b3c4d"  # W7: answered as that person
+    bad = client.post("/ask", json={"question": "Status?", "viewer_id": "Robert'); DROP"})
+    assert bad.status_code == 422
 
 
 def fake_db(tables):

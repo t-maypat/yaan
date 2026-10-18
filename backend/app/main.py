@@ -106,6 +106,8 @@ class AskRequest(BaseModel):
     product_id: str | None = Field(default=None, max_length=100)
     # the Timeline's as-of slider (12.4): answer for the state at this moment (UTC epoch ms)
     as_of_ms: int | None = Field(default=None, ge=0, le=MAX_MS)
+    # W7: answer as this person (an employee id); sources they can't see are hidden
+    viewer_id: str | None = Field(default=None, pattern=r"^eid_[0-9a-f]{8}$")
 
 
 def sse(name: str, data: Any) -> str:
@@ -129,6 +131,7 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
                 graph=graph(),
                 on_event=lambda n, d: events.put((n, d)),
                 as_of_ms=body.as_of_ms,
+                viewer_id=body.viewer_id,
             )
         except Exception as e:  # shown to the viewer as an error event, never a fake answer
             events.put(("error", {"error": type(e).__name__, "message": str(e)[:500]}))

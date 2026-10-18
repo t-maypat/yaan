@@ -20,7 +20,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from app import db, llm
-from app.agent import tools, validator
+from app.agent import access, tools, validator
 from app.agent.contract import SCHEMA, Answer
 from app.agent.graph_query import MAX_ATTEMPTS as GRAPH_QUERY_ATTEMPTS
 from app.agent.prompts import repair_message, system_prompt, user_message
@@ -58,7 +58,7 @@ def call_tool(
         known = tools.product_ids(scope.graph, refresh=True)
         if given not in known:
             raise ToolError(
-                f"unknown product_id {given!r}: pass \"\" for the question's product, or one "
+                f'unknown product_id {given!r}: pass "" for the question\'s product, or one '
                 f"of: {', '.join(sorted(known))}"
             )
     product = given or scope.product_id
@@ -142,6 +142,9 @@ def run_tools(
             state["calls"] += 1
             try:
                 out = call_tool(use["name"], use["input"], scope, allowed)
+                if state.get("access"):  # W7: what the viewer can't see never reaches the model
+                    out, hidden = state["access"].redact(out)
+                    state["hidden"] |= hidden
                 collect(out, state["seen"], state["texts"], state["urls"], state["related"])
                 entry["cypher"] = out.get("cypher", [])
                 if "cypher_run" in out:  # graph_query: the generated statement, as run
@@ -187,14 +190,21 @@ def answer(
     on_event: Listener = _quiet,
     as_of_ms: int | None = None,
     toolset: tuple[str, ...] | None = None,
+    viewer_id: str | None = None,
 ) -> dict:
     """Answer one question with the tools, validated citations, or an abstention.
+
+    `viewer_id` (W7, D077) answers as that person: every tool result is redacted to what they
+    may see, `graph_query` is left out (its free-form rows can't be redacted by id), and the
+    result says how many sources were hidden. None = no filtering.
 
     `as_of_ms` answers for the state at that moment (the Timeline's slider, 12.4): the
     status tools use it unless the model names another date. `toolset` limits the tools,
     for the Lore − graph tools ablation (`tools.SEARCH_ONLY`, 9.8); the prompt follows it.
     """
     names = list(toolset) if toolset else [t["name"] for t in tools.TOOL_SPECS]
+    if viewer_id:
+        names = [n for n in names if n != "graph_query"]
     specs = [tools.REGISTRY[n].spec for n in names]
     system = system_prompt(names)
     allowed = frozenset(names)
@@ -205,6 +215,8 @@ def answer(
         "texts": {},
         "urls": {},
         "related": {},
+        "access": access.Access(viewer_id, graph) if viewer_id else None,
+        "hidden": set(),
         "trace": [],
         "graph_query_errors": 0,
     }
@@ -292,6 +304,8 @@ def answer(
             for c in cleaned["citations"]
         ],
         "retrieved": sorted(state["seen"]),
+        "viewer_id": viewer_id,
+        "hidden_sources": len(state["hidden"]),
         "trace": state["trace"],
         # the model's first final answer, before autocite, repair and dropping: scoring it
         # gives the Lore − citation validator ablation from the same run (R2, W2)
@@ -316,7 +330,8 @@ def answer(
             "cached": all(t.cached for t in turns),
         },
     }
-    on_event("answer", {k: out[k] for k in ("answer_markdown", "abstain", "validator", "llm")})
+    keys = ("answer_markdown", "abstain", "validator", "llm", "viewer_id", "hidden_sources")
+    on_event("answer", {k: out[k] for k in keys})
     on_event("citations", {"citations": out["citations"]})
     if on_event is not _quiet:
         ids = sorted({c["artifact_id"] for c in out["citations"]})

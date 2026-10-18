@@ -1,0 +1,6 @@
+# Viewer-scoped answers (W7, D077). HERB has no access rules, so this policy is SYNTHETIC: an
+# example of what a company would set, applied to HERB's real channel membership (a person
+# belongs to a channel they posted in). Slack's own channel membership supplies real rules (17.8).
+private_channels:          # name patterns (fnmatch): only the channel's members see its messages
+  - "planning-*-PM"        # the product managers' planning channels
+meetings: attendees        # a transcript is visible to the people who attended or spoke in it
