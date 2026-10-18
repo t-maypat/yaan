@@ -1,0 +1,10 @@
+%% S1 Normalize: one HERB product file becomes clean, uniform rows (Phase 2.5-2.6, D022-D024).
+flowchart LR
+  FILE["data/herb/products<br/>Product.json"]:::file --> READ["read_artifacts()<br/>parse the file"]:::code
+  READ -- "dropped on load" --> DROP["questions, team,<br/>customers"]:::guard
+  READ -- "6 artifact lists" --> TYPE{"load_product()<br/>does every record<br/>match the model?"}:::guard
+  TYPE -- "unknown or missing key" --> FAIL["Stop with an error<br/>HERB changed shape"]:::guard
+  TYPE -- "yes" --> NORM["normalize_product()<br/>ids: msg: mtg: chat: doc: pr: url:<br/>times: UTC ms + ISO<br/>flags: external, system<br/>meta: PR reviews, doc version"]:::code
+  NORM --> SORT["Sort by time,<br/>then kind,<br/>then file order"]:::code
+  SORT --> OUT["data/normalized/Product/<br/>artifacts.jsonl<br/>one row per artifact"]:::store
+  OUT --> NEXT["Phase 3<br/>structural graph load"]:::human

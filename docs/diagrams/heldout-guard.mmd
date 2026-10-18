@@ -1,0 +1,9 @@
+%% The held-out guard: who may read which product's questions (Phase 2.3-2.4, D025).
+flowchart LR
+  CALL["load_questions(product)"]:::code --> SPLIT{"Which group is it in<br/>eval/split.json?"}:::guard
+  SPLIT -- "dev (3)" --> OK["Questions returned<br/>build and tune freely"]:::store
+  SPLIT -- "rest (20)" --> NO2["HeldOutError<br/>never opened"]:::guard
+  SPLIT -- "test (7)" --> ACTIVE{"Inside heldout_run()?"}:::guard
+  ACTIVE -- "no" --> NO1["HeldOutError<br/>sealed until the final run"]:::guard
+  ACTIVE -- "yes" --> LOG["heldout_runs.log<br/>a line written first"]:::file
+  LOG --> OK2["Questions returned<br/>for the one final score"]:::human
