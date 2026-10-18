@@ -1,0 +1,25 @@
+%% The `graph` test fixture: Lore's data model in miniature (Phase 1.6; CONTEXT §9.2). Invented data.
+flowchart TB
+  ADA["Person · Ada<br/>engineer"]:::human
+  GRACE["Person · Grace<br/>engineer"]:::human
+  LINUS["Person · Linus<br/>product manager"]:::human
+  TEAM["Team · Core"]:::human
+  ACME[("Product · Acme")]:::store
+  PR["PR 42 · Faster login<br/>merged 9 Oct"]:::file
+  MSG["Message 7<br/>'Reverting PR 42<br/>until it is fixed.'"]:::file
+  D1["Decision: merged<br/>9 Oct → 10 Oct<br/>superseded"]:::guard
+  D2["Decision: reverted<br/>from 10 Oct · active<br/>= what's true now"]:::code
+  ADA -- MEMBER_OF --> TEAM
+  GRACE -- MEMBER_OF --> TEAM
+  TEAM -- WORKS_ON --> ACME
+  ADA -- AUTHORED --> PR
+  GRACE -- "REVIEWED<br/>APPROVED" --> PR
+  LINUS -- AUTHORED --> MSG
+  PR -- IN_PRODUCT --> ACME
+  MSG -- IN_PRODUCT --> ACME
+  MSG -- MENTIONS --> ADA
+  D1 -- AFFECTS --> PR
+  D2 -- AFFECTS --> PR
+  D2 -- SUPERSEDES --> D1
+  D2 -- DECIDED_BY --> LINUS
+  D2 -- "EVIDENCED_BY<br/>verbatim quote" --> MSG

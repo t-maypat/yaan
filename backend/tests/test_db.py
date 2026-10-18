@@ -9,6 +9,7 @@ from redis.exceptions import ResponseError
 
 from app import db
 from app.config import Settings
+from tests.conftest import require_falkordb
 
 
 class FakeResult:
@@ -175,3 +176,15 @@ def test_client_fails_loudly_without_a_password(monkeypatch, readonly, key):
 def test_explain_returns_plan_lines_through_the_reader(fake):
     assert db.explain("get_people", {"k": 1}) == FakePlan.plan
     assert fake[True].calls[0]["kind"] == "explain"
+
+
+def test_require_falkordb_errors_instead_of_skipping(monkeypatch):
+    class Down:
+        class connection:  # noqa: N801 (mimics the client attribute)
+            @staticmethod
+            def ping():
+                raise ConnectionError("connection refused")
+
+    monkeypatch.setattr(db, "client", lambda readonly: Down())
+    with pytest.raises(pytest.fail.Exception, match="docker compose up -d --wait"):
+        require_falkordb()

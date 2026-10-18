@@ -1,0 +1,20 @@
+// tiny_company.cypher — the `graph` test fixture: Lore's idea in miniature (a PR merged, then reverted, with the evidence). Invented data, not HERB.
+CREATE
+  (ada:Person:Entity {id: 'eid_ada', name: 'Ada', role: 'Engineer'}),
+  (grace:Person:Entity {id: 'eid_grace', name: 'Grace', role: 'Engineer'}),
+  (linus:Person:Entity {id: 'eid_linus', name: 'Linus', role: 'Product Manager'}),
+  (team:Team:Entity {id: 'team_core', name: 'Core'}),
+  (acme:Product:Entity {id: 'prod_acme', name: 'Acme'}),
+  (pr:PR:Artifact {id: 'pr:42', kind: 'pr', number: 42, title: 'Faster login', state: 'closed', merged: true,
+                   ts_ms: 1760000000000, ts_iso: '2025-10-09T08:53:20Z'}),
+  (msg:Message:Artifact {id: 'msg:7', kind: 'message', text: 'Login broke for SSO users. Reverting PR 42 until it is fixed.',
+                         ts_ms: 1760086400000, ts_iso: '2025-10-10T09:06:40Z'}),
+  (merged:Decision {id: 'dec:pr:42/status:1760000000000', topic: 'pr:42/status', kind: 'pr_status', value: 'merged',
+                    valid_from_ms: 1760000000000, valid_to_ms: 1760086400000, status: 'superseded', origin: 'structural'}),
+  (reverted:Decision {id: 'dec:pr:42/status:1760086400000', topic: 'pr:42/status', kind: 'pr_status', value: 'reverted',
+                      valid_from_ms: 1760086400000, valid_to_ms: null, status: 'active', origin: 'extracted'}),
+  (ada)-[:MEMBER_OF]->(team), (grace)-[:MEMBER_OF]->(team), (team)-[:WORKS_ON {from_ms: 1750000000000, stage: 'dev'}]->(acme),
+  (ada)-[:AUTHORED]->(pr), (grace)-[:REVIEWED {state: 'APPROVED', ts_ms: 1759990000000}]->(pr), (linus)-[:AUTHORED]->(msg),
+  (pr)-[:IN_PRODUCT]->(acme), (msg)-[:IN_PRODUCT]->(acme), (msg)-[:MENTIONS]->(ada),
+  (merged)-[:AFFECTS]->(pr), (reverted)-[:AFFECTS]->(pr), (reverted)-[:SUPERSEDES]->(merged),
+  (reverted)-[:DECIDED_BY]->(linus), (reverted)-[:EVIDENCED_BY {quote: 'Reverting PR 42 until it is fixed.'}]->(msg)

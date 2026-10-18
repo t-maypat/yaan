@@ -188,10 +188,16 @@ def explain(
 
     An indexed lookup shows as `Node By Index Scan`; a full scan as `Node By Label Scan`.
     """
-    text = load_query(name)
+    return explain_text(load_query(name), params, label=name, graph=graph)
+
+
+def explain_text(
+    text: str, params: dict[str, Any] | None = None, *, label: str, graph: str | None = None
+) -> list[str]:
+    """`explain` for a statement that isn't a query file (see `run_text`)."""
     graph = graph or get_settings().lore_graph
     g = client(readonly=True).select_graph(graph)
-    plan = _execute(name, graph, None, lambda: g.explain(text, params or {}))
+    plan = _execute(label, graph, None, lambda: g.explain(text, params or {}))
     return list(plan.plan)
 
 
