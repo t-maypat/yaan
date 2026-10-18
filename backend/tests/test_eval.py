@@ -212,3 +212,14 @@ def test_summary_scales_and_never_credits_errors(fake_run, monkeypatch):
     table = report.table()
     assert "| baseline (dev, 2+2 q) | 70.00 | 50.00 | — | — | 60.00 | 50.00 |" in table
     assert "43.41" in table
+
+
+def test_the_test_split_loads_only_inside_the_logged_heldout_run(capsys):
+    from app import cli
+    from app.eval.split import HeldOutError
+
+    with pytest.raises(HeldOutError, match="held-out"):
+        run_herb.questions("test")  # outside split.heldout_run(): refused (rule 3)
+    assert cli.main(["eval", "--split", "test", "--system", "baseline"]) == 2  # no --heldout
+    assert "single held-out run" in capsys.readouterr().err
+    assert cli.main(["eval", "--split", "test", "--heldout", "--limit", "3"]) == 2  # no samples

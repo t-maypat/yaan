@@ -82,10 +82,12 @@ def questions(split: str = "dev", products: list[str] | None = None) -> list[dic
             for q in items["questions"]
             if not products or q["product"] in products
         ]
-    if split != "dev":
-        raise ValueError("only the dev split runs here; the held-out run is Phase 13")
+    if split not in ("dev", "test"):
+        raise ValueError(f"unknown split {split!r}: dev, drift or test")
+    # test: the held-out products, readable only inside split.heldout_run() (the logged final
+    # run, 13.3); load_questions refuses them anywhere else (rule 3)
     rows = []
-    for product in products or read_split()["dev"]:
+    for product in products or read_split()[split]:
         q = load_questions(product)
         for i, a in enumerate(q["answerable_questions"]):
             rows.append(

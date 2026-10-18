@@ -302,6 +302,18 @@ def cmd_eval(args: argparse.Namespace) -> int:
     try:
         if args.score_only:
             run = Path(args.score_only)
+        elif args.split == "test":
+            from app.eval import split as split_guard
+
+            if not args.heldout or args.limit or args.products or args.ids:
+                print(
+                    "lore eval: --split test is the single held-out run (13.3): pass --heldout, "
+                    "and no --limit, --products or --ids",
+                    file=sys.stderr,
+                )
+                return 2
+            with split_guard.heldout_run(args.system, note="lore eval --split test (13.3)"):
+                run = run_herb.run(args.system, "test", workers=args.workers, progress=say)
         else:
             ids = Path(args.ids).read_text(encoding="utf-8").split() if args.ids else None
             run = run_herb.run(
@@ -586,7 +598,14 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
     ],
     "eval": [
         ("--system", {"choices": ("baseline", "lore", "lore-search"), "default": "baseline"}),
-        ("--split", {"choices": ("dev", "drift"), "default": "dev"}),
+        ("--split", {"choices": ("dev", "drift", "test"), "default": "dev"}),
+        (
+            "--heldout",
+            {
+                "action": "store_true",
+                "help": "with --split test: confirm this is the single logged held-out run (13.3)",
+            },
+        ),
         ("--products", {"nargs": "+", "help": "a subset of the split's products"}),
         ("--limit", {"type": int, "help": "only the first N questions (a cheap smoke run)"}),
         (
