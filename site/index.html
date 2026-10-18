@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lore · the company brain that knows what's still true</title>
+<meta name="description" content="Lore turns your team's Slack, meetings, pull requests, tickets and docs into a time-aware FalkorDB graph of people, work and decisions, with a word-for-word source for every sentence.">
+<meta name="theme-color" content="#f1f3f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e141b" media="(prefers-color-scheme: dark)">
+<meta property="og:title" content="Lore: the company brain that knows what's still true">
+<meta property="og:description" content="A time-aware graph of people, work and decisions. Every sentence cites a verbatim source. Built on FalkorDB.">
+<meta property="og:image" content="assets/img/inbox-radius.png">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=Schibsted+Grotesk:wght@400..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script>
+  // Theme before first paint: a saved choice wins, else the system setting.
+  try { var t = new URLSearchParams(location.search).get('theme') || localStorage.getItem('lore-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav" id="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top" aria-label="Lore, back to top">
+      <svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true">
+        <path class="bm-edge" d="M7 20 L14 8 L21 18 Z" />
+        <circle class="bm-node" cx="7" cy="20" r="3.2" />
+        <circle class="bm-node" cx="21" cy="18" r="3.2" />
+        <rect class="bm-cite" x="10.6" y="4.6" width="6.8" height="6.8" rx="1.6" />
+      </svg>
+      <span>Lore</span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#results">Results</a>
+      <a href="#graph">Why a graph</a>
+    </nav>
+    <div class="nav-actions">
+      <button class="icon-btn" id="themeToggle" type="button" aria-label="Switch to dark theme">
+        <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.3 8.3 0 0 1 9.4 4a8.3 8.3 0 1 0 10.6 10.6Z"/></svg>
+      </button>
+      <a class="icon-btn" href="{REPO_URL}" aria-label="Lore on GitHub"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span></a>
+      <a class="btn btn-ink btn-sm" href="{VIDEO_URL}">Watch the demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ============ 1. HERO ============ -->
+<section class="hero" id="top">
+  <canvas class="hero-graph" id="heroGraph" aria-hidden="true"></canvas>
+  <div class="hero-fade" aria-hidden="true"></div>
+
+  <div class="hero-copy">
+    <h1 class="hero-title">The company brain that knows what’s still true.</h1>
+    <p class="hero-sub">Lore turns your team’s Slack, meetings, pull requests, tickets and docs into a time-aware graph of people, work and decisions. Ask what’s true now, what was true then, why, and who knows, with a word-for-word source for every sentence.</p>
+    <div class="hero-ctas">
+      <a class="btn btn-ink" href="{VIDEO_URL}">
+        <svg class="play" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9.2"/><path d="M8.2 6.6v6.8l5.4-3.4z"/></svg>
+        Watch the 3-minute demo
+      </a>
+      <a class="btn btn-line" href="{REPO_URL}"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span>View on GitHub</a>
+    </div>
+    <p class="hero-built">Built on FalkorDB <span aria-hidden="true">/</span> Graph Hacks 2026 <span aria-hidden="true">/</span> Track 03 Company Brain + Track 01</p>
+  </div>
+
+  <!-- The console replays three real questions against Lore's graph (HERB, ExplainabilityForce). -->
+  <div class="console" id="console" role="region" aria-label="Lore answering questions, replayed from its graph">
+    <div class="c-top">
+      <div class="c-scope">
+        <span class="scope"><span class="scope-k">product</span> ExplainabilityForce</span>
+        <span class="scope"><span class="scope-k">as of</span> <span id="cAsOf">now</span></span>
+        <span class="scope scope-hide-sm"><span class="scope-k">graph</span> 38,535 nodes · 96,047 edges</span>
+      </div>
+      <button class="c-pause" id="cPause" type="button" aria-pressed="false">
+        <svg viewBox="0 0 12 12" aria-hidden="true"><rect class="pz" x="2.5" y="2" width="2.4" height="8" rx=".6"/><rect class="pz" x="7.1" y="2" width="2.4" height="8" rx=".6"/><path class="pl" d="M3 1.8v8.4l7-4.2z"/></svg>
+        <span>Pause</span>
+      </button>
+    </div>
+
+    <div class="c-query">
+      <svg class="q-glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4 21 21"/></svg>
+      <div class="q-field" aria-live="off">
+        <span class="q-typed" id="qTyped"></span><span class="q-caret" aria-hidden="true"></span>
+      </div>
+      <span class="q-ask" id="qAsk"><kbd>Enter</kbd> Ask</span>
+      <div class="q-entities" id="qEntities" aria-hidden="true"></div>
+      <span class="q-progress" id="qProgress" aria-hidden="true"></span>
+    </div>
+
+    <div class="c-suggest" role="tablist" aria-label="Questions to replay">
+      <button role="tab" class="sugg" data-q="0" aria-selected="true">Is the caching bug fixed?</button>
+      <button role="tab" class="sugg" data-q="1" aria-selected="false">Which company has the most unresolved bugs?</button>
+      <button role="tab" class="sugg" data-q="2" aria-selected="false">Who knows the backend engine?</button>
+    </div>
+
+    <div class="c-body">
+      <div class="c-trace">
+        <p class="c-h">How Lore found it</p>
+        <ol class="trace" id="cTrace"></ol>
+      </div>
+      <div class="c-answer">
+        <p class="c-h">Answer</p>
+        <div class="answer" id="cAnswer" aria-live="polite"></div>
+      </div>
+      <div class="c-sources">
+        <p class="c-h">Sources, checked word for word</p>
+        <ol class="sources" id="cSources"></ol>
+      </div>
+    </div>
+
+    <div class="c-foot">
+      <div class="meter"><span class="m-k">Quotes verified</span><span class="m-v" id="mVerified">0 / 0</span><span class="m-bar"><i id="mVerBar"></i></span></div>
+      <div class="meter"><span class="m-k">Time in FalkorDB</span><span class="m-v" id="mMs">0 ms</span></div>
+      <div class="meter meter-hide-sm"><span class="m-k">Graph tool calls</span><span class="m-v" id="mCalls">0</span></div>
+      <div class="meter meter-hide-sm"><span class="m-k">State</span><span class="m-v" id="mState">idle</span></div>
+    </div>
+  </div>
+  <p class="console-note">Replayed from Lore’s tool output on HERB’s synthetic ExplainabilityForce data. Tool times are the measured p50 per tool.</p>
+</section>
+
+<!-- ============ 2. PROBLEM ============ -->
+<section class="section problem" id="problem">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Search finds the message that said “fixed”. It doesn’t know the bug came back.</h2>
+      <p class="sec-lede">Company knowledge goes stale. Statuses change, decisions get reversed, owners move on. A search-and-summarize assistant quotes whatever matched, even if it was overturned last week.</p>
+    </div>
+
+    <div class="drift" id="drift">
+      <div class="drift-top">
+        <p class="drift-q"><span class="dq-k">Same question to both</span> Is the ‘Inefficient Caching Strategy’ bug resolved?</p>
+        <p class="drift-asof">Asked as of <strong id="driftDate">6 Mar 2027</strong></p>
+      </div>
+
+      <div class="dtl" aria-hidden="true">
+        <div class="dtl-track">
+          <span class="dtl-win w-rep" style="--a:15.2%;--b:69.7%"><b>reported</b></span>
+          <span class="dtl-win w-res" style="--a:69.7%;--b:75.8%"><b>resolved</b></span>
+          <span class="dtl-win w-reo" style="--a:75.8%;--b:100%"><b>reopened</b></span>
+          <span class="dtl-msg" style="--x:15.2%" title="msg:20270206-1-47b0c"></span>
+          <span class="dtl-msg" style="--x:69.7%" title="msg:20270224-0-ca81d"></span>
+          <span class="dtl-msg" style="--x:75.8%" title="msg:20270226-0-1bc7a"></span>
+          <span class="dtl-now" id="dtlNow"></span>
+        </div>
+        <div class="dtl-axis"><span style="--x:0%">1 Feb</span><span style="--x:15.2%">6 Feb</span><span style="--x:69.7%">24 Feb</span><span class="ax-r" style="--x:75.8%">26 Feb</span><span class="ax-end" style="--x:100%">6 Mar</span></div>
+      </div>
+      <label class="dtl-range">
+        <span class="sr-only">Move the date the question is asked</span>
+        <input type="range" id="driftRange" min="0" max="33" value="33" step="1" aria-valuetext="6 Mar 2027">
+      </label>
+      <p class="dtl-hint">Drag to ask on another day. Search has no clock, so its answer never moves.</p>
+
+      <div class="duel">
+        <article class="ans ans-rag" id="ansRag">
+          <header class="ans-h">
+            <span class="ans-who">Search and summarize</span>
+            <span class="stamp" id="ragStamp">Stale</span>
+          </header>
+          <p class="ans-text">“Yes, it has been resolved.”</p>
+          <div class="ans-ev">
+            <p class="ev-k">Top match it trusted</p>
+            <blockquote class="q q-plain">
+              <p>the bug titled ‘Inefficient Caching Strategy’ has been resolved.</p>
+              <footer><code>msg:20270224-0-ca81d</code> Hannah Johnson, 24 Feb 2027</footer>
+            </blockquote>
+          </div>
+          <p class="ans-note" id="ragNote">Right only between 24 and 26 Feb. On every other day it is wrong.</p>
+        </article>
+
+        <article class="ans ans-lore" id="ansLore">
+          <header class="ans-h">
+            <span class="ans-who"><svg class="mini-mark" viewBox="0 0 28 28" aria-hidden="true"><path class="bm-edge" d="M7 20 L14 8 L21 18 Z"/><circle class="bm-node" cx="7" cy="20" r="3.2"/><circle class="bm-node" cx="21" cy="18" r="3.2"/><rect class="bm-cite" x="10.6" y="4.6" width="6.8" height="6.8" rx="1.6"/></svg>Lore</span>
+            <span class="stamp stamp-ok">Current</span>
+          </header>
+          <p class="ans-text" id="loreText"></p>
+          <div class="ans-ev" id="loreEv"></div>
+          <p class="ans-note" id="loreNote"></p>
+        </article>
+      </div>
+
+      <div class="drift-stat">
+        <p class="ds-cap">Stale answers on our drift test (HERB dev products)</p>
+        <div class="ds-row">
+          <div class="ds"><span class="ds-n">8.7%</span><span class="ds-l">Search only: the same agent without its graph tools</span></div>
+          <div class="ds ds-lore"><span class="ds-n">0%</span><span class="ds-l">Lore, reading the decision in force</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3. HOW IT WORKS ============ -->
+<section class="section how" id="how">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>From scattered talk to facts with dates on them</h2>
+      <p class="sec-lede">Three steps, one pipeline. Every source goes through the same path, so an answer about a Slack thread and an answer about a pull request rest on the same graph.</p>
+    </div>
+
+    <div class="how-grid">
+      <ol class="steps" id="steps">
+        <li class="step is-active" data-step="0">
+          <span class="step-n">1</span>
+          <h3>Connect</h3>
+          <p>Slack, GitHub, Jira and Notion stream in. Every message, PR, ticket and page goes through the same pipeline.</p>
+          <div class="stage-inline" data-inline="0"></div>
+        </li>
+        <li class="step" data-step="1">
+          <span class="step-n">2</span>
+          <h3>Remember</h3>
+          <p>Each change becomes a decision with a start and end date, who made it and the quote that proves it. Nothing is deleted: old facts get an end date.</p>
+          <div class="stage-inline" data-inline="1"></div>
+        </li>
+        <li class="step" data-step="2">
+          <span class="step-n">3</span>
+          <h3>Act</h3>
+          <p>Ask in Slack, the web app or any AI agent over MCP. When new talk contradicts a decision, Lore raises an alert with its blast radius and a drafted fix. One click on <strong>Approve</strong> posts it back to Jira and GitHub.</p>
+          <div class="stage-inline" data-inline="2"></div>
+        </li>
+      </ol>
+
+      <div class="stage" id="stage">
+        <!-- Scene 1: connect -->
+        <div class="scene scene-connect is-active" data-scene="0">
+          <div class="lanes">
+            <div class="lane"><span class="lane-src"><span class="glyph" style="--icon:url(assets/icons/slack.svg)"></span>Slack</span><span class="lane-line"><i class="pk" style="--d:0s">msg:20270226-0-1bc7a</i><i class="pk" style="--d:2.1s">msg:20270224-0-ca81d</i></span></div>
+            <div class="lane"><span class="lane-src"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span>GitHub</span><span class="lane-line"><i class="pk" style="--d:.7s">pr:…ExplainabilityForce_pull_53</i><i class="pk" style="--d:2.9s">pr:…pull_55</i></span></div>
+            <div class="lane"><span class="lane-src"><span class="glyph" style="--icon:url(assets/icons/jira.svg)"></span>Jira</span><span class="lane-line"><i class="pk" style="--d:1.4s">ticket reopened</i></span></div>
+            <div class="lane"><span class="lane-src"><span class="glyph" style="--icon:url(assets/icons/notion.svg)"></span>Notion</span><span class="lane-line"><i class="pk" style="--d:2.4s">doc: design review</i></span></div>
+          </div>
+          <div class="pipe">
+            <span class="pipe-k">One pipeline</span>
+            <ol class="pipe-stages">
+              <li>Normalize</li>
+              <li>Structural graph</li>
+              <li>Chunks + vectors</li>
+              <li>Link ids, URLs, names</li>
+              <li>Extract events <em>quotes verified</em></li>
+              <li>Fold decisions <em>who may change what</em></li>
+              <li>Expertise, communities, PageRank</li>
+            </ol>
+          </div>
+          <div class="graphcount"><span class="gc-n">38,535</span> nodes <span class="gc-n">96,047</span> edges in FalkorDB</div>
+        </div>
+
+        <!-- Scene 2: remember -->
+        <div class="scene scene-remember" data-scene="1">
+          <p class="sc-title">Issue <strong>Inefficient Caching Strategy</strong></p>
+          <ol class="chain">
+            <li class="dec">
+              <div class="dec-win"><span class="win-bar" style="--w:118px"></span><span class="win-t">6 Feb 20:40 <span class="to">until</span> 24 Feb 15:31</span></div>
+              <p class="dec-v">reported <span>by Bob Davis, Engineering Lead</span></p>
+              <blockquote class="q"><p><mark>This is impacting customer CUST-0011.</mark></p><footer><code>msg:20270206-1-47b0c</code></footer></blockquote>
+            </li>
+            <li class="sup" aria-hidden="true">SUPERSEDES</li>
+            <li class="dec">
+              <div class="dec-win"><span class="win-bar" style="--w:14px"></span><span class="win-t">24 Feb 15:31 <span class="to">until</span> 26 Feb 20:17</span></div>
+              <p class="dec-v">resolved <span>by Hannah Johnson, assignee</span></p>
+              <blockquote class="q"><p><mark>the bug titled ‘Inefficient Caching Strategy’ has been resolved.</mark></p><footer><code>msg:20270224-0-ca81d</code></footer></blockquote>
+            </li>
+            <li class="sup" aria-hidden="true">SUPERSEDES</li>
+            <li class="dec dec-now">
+              <div class="dec-win"><span class="win-bar" style="--w:96px"></span><span class="win-t">26 Feb 20:17 <span class="to">until</span> <b>still in force</b></span></div>
+              <p class="dec-v">reopened <span>by Bob Davis, Engineering Lead</span></p>
+              <blockquote class="q"><p><mark>the customer has reopened the bug titled ‘Inefficient Caching Strategy’</mark></p><footer><code>msg:20270226-0-1bc7a</code></footer></blockquote>
+            </li>
+          </ol>
+        </div>
+
+        <!-- Scene 3: act -->
+        <div class="scene scene-act" data-scene="2">
+          <article class="alert">
+            <p class="alert-k"><span class="dot-warn"></span>Regression in ExplainabilityForce</p>
+            <h4>‘Inefficient Caching Strategy’ was marked resolved on 24 Feb 2027 and reopened on 26 Feb 2027.</h4>
+            <div class="radius">
+              <p class="radius-k">Blast radius</p>
+              <ul>
+                <li><span class="shape s-pr"></span>PR #53 <em>the fix</em></li>
+                <li><span class="shape s-person"></span>Hannah Johnson <em>wrote the fix</em></li>
+                <li><span class="shape s-cust"></span>CUST-0011 <em>reported it</em></li>
+                <li><span class="shape s-co"></span>DataSolutions <em>their company</em></li>
+                <li><span class="shape s-area"></span>Backend Processing Engine <em>component</em></li>
+              </ul>
+            </div>
+            <div class="draft">
+              <p class="radius-k">Drafted follow-up</p>
+              <p class="draft-t">The customer reopened ‘Inefficient Caching Strategy’ two days after PR #53 resolved it. Quoting Bob Davis: “the customer has reopened the bug titled ‘Inefficient Caching Strategy’”.</p>
+            </div>
+            <div class="alert-actions">
+              <button class="btn btn-ink btn-sm" data-approve type="button">Approve</button>
+              <button class="btn btn-line btn-sm" data-dismiss type="button">Dismiss</button>
+              <span class="replay-note">A replay: nothing is sent from this page.</span>
+            </div>
+            <ol class="delivery" aria-live="polite">
+              <li><span class="glyph" style="--icon:url(assets/icons/jira.svg)"></span>Comment posted on the Jira ticket</li>
+              <li><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span>Comment posted on PR #53</li>
+              <li><span class="shape s-dec"></span>Your approval recorded as a Decision, so next time Lore can say what you did</li>
+            </ol>
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <button class="link-btn" type="button" data-open="dlgArch">See the full architecture</button>
+  </div>
+</section>
+
+<!-- ============ 4. FEATURES ============ -->
+<section class="section features" id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>What it does, in the product as it runs today</h2>
+      <p class="sec-lede">Screens from Lore’s web app on HERB data. Pick one to look closer.</p>
+    </div>
+
+    <div class="tour" id="tour">
+      <div class="tour-list" role="tablist" aria-label="Features" aria-orientation="vertical">
+        <button role="tab" class="tour-tab" id="tt0" aria-controls="tp" aria-selected="true" data-i="0">
+          <span class="tt-title">Answers with proof</span>
+          <span class="tt-line">Every sentence carries a verbatim quote, checked in code before you see it. No proof, no sentence.</span>
+          <span class="tt-progress"><i></i></span>
+        </button>
+        <button role="tab" class="tour-tab" id="tt1" aria-controls="tp" aria-selected="false" data-i="1">
+          <span class="tt-title">What changed, and when</span>
+          <span class="tt-line">A decision timeline with an as-of slider: ask the same question as of last Tuesday.</span>
+          <span class="tt-progress"><i></i></span>
+        </button>
+        <button role="tab" class="tour-tab" id="tt2" aria-controls="tp" aria-selected="false" data-i="2">
+          <span class="tt-title">Who actually knows</span>
+          <span class="tt-line">Experts ranked by what they built and reviewed, not their title, with key-person and bus-factor alerts.</span>
+          <span class="tt-progress"><i></i></span>
+        </button>
+        <button role="tab" class="tour-tab" id="tt3" aria-controls="tp" aria-selected="false" data-i="3">
+          <span class="tt-title">Catches contradictions</span>
+          <span class="tt-line">A customer re-reports a “fixed” bug and Lore flags the regression, who it affects and what to do, in about 2 seconds.</span>
+          <span class="tt-progress"><i></i></span>
+        </button>
+        <button role="tab" class="tour-tab" id="tt4" aria-controls="tp" aria-selected="false" data-i="4">
+          <span class="tt-title">Shows its work</span>
+          <span class="tt-line">See every graph query the agent ran, as the exact Cypher, and the evidence graph behind the answer.</span>
+          <span class="tt-progress"><i></i></span>
+        </button>
+        <button role="tab" class="tour-tab" id="tt5" aria-controls="tp" aria-selected="false" data-i="5">
+          <span class="tt-title">Respects who’s asking</span>
+          <span class="tt-line">Answers are scoped to what the viewer may see, and say how many sources were hidden.</span>
+          <span class="tt-progress"><i></i></span>
+        </button>
+      </div>
+
+      <figure class="tour-frame" id="tp" role="tabpanel" aria-labelledby="tt0">
+        <div class="frame-bar" aria-hidden="true"><span class="fb-path" id="tourPath">lore / ask</span></div>
+        <div class="frame-view">
+          <img class="tour-img is-on" src="assets/img/ask-pane-hover.png" alt="The Ask pane: an answer whose sentences each carry a numbered citation; pointing at one shows its highlighted source quote" width="1440" height="1000" loading="lazy" data-i="0" data-path="lore / ask">
+          <img class="tour-img" src="assets/img/timeline-asof.png" alt="A decision timeline for the 'Feature Attribution Mismatch' issue, reported, dismissed, then reopened, with an as-of slider" width="1440" height="1943" loading="lazy" data-i="1" data-path="lore / ask / timeline">
+          <img class="tour-img" src="assets/img/inbox-key-person.png" alt="An Inbox alert naming a key person whose departure would leave components with no expert" width="1020" height="1160" loading="lazy" data-i="2" data-path="lore / inbox / key person">
+          <img class="tour-img" src="assets/img/inbox-radius.png" alt="A regression alert with its blast radius drawn as a graph around the reopened issue" width="1020" height="1040" loading="lazy" data-i="3" data-path="lore / inbox / regression">
+          <img class="tour-img" src="assets/img/ask-pane-cypher.png" alt="The trace of an answer showing the exact Cypher each graph tool ran, with timings" width="1440" height="900" loading="lazy" data-i="4" data-path="lore / ask / cypher">
+          <img class="tour-img" src="assets/img/viewer-hidden.png" alt="An answer viewed as a specific person, noting how many sources were hidden from that viewer" width="1440" height="900" loading="lazy" data-i="5" data-path="lore / ask / view as">
+        </div>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5. RESULTS ============ -->
+<section class="section results" id="results">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Measured, not claimed</h2>
+      <p class="sec-lede">On HERB, Salesforce’s public enterprise benchmark (synthetic company data), on 7 held-out products we never looked at while building: 399 questions, run once. Same model, same judge prompts and same search for every system.</p>
+    </div>
+
+    <div class="ablate" id="ablate">
+      <div class="ab-ctl">
+        <p class="ab-k">Lore, with its FalkorDB graph tools</p>
+        <button class="switch" id="graphSwitch" type="button" role="switch" aria-checked="true">
+          <span class="sw-track"><span class="sw-thumb"></span></span>
+          <span class="sw-label" id="swLabel">Graph tools on</span>
+        </button>
+        <p class="ab-hint">Turn them off. Everything else stays the same: model, prompts, search.</p>
+      </div>
+      <div class="ab-figs">
+        <div class="ab-fig ab-main">
+          <span class="ab-n" id="abAvg">63.6</span>
+          <span class="ab-l">average judged score out of 100, held-out products</span>
+          <span class="ab-bar"><i id="abAvgBar" style="--v:63.6"></i></span>
+        </div>
+        <div class="ab-fig">
+          <span class="ab-n" id="abCust">54.2</span>
+          <span class="ab-l">on customer questions, held-out</span>
+          <span class="ab-bar"><i id="abCustBar" style="--v:54.2"></i></span>
+        </div>
+        <div class="ab-fig">
+          <span class="ab-n" id="abStale">0%</span>
+          <span class="ab-l">stale answers on the drift test</span>
+          <span class="ab-bar ab-bar-warn"><i id="abStaleBar" style="--v:0"></i></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="rt">
+        <caption class="sr-only">Results on HERB: held-out products, with the dev products for comparison</caption>
+        <thead>
+          <tr><th scope="col">System</th><th scope="col">Avg score, held-out</th><th scope="col">Customer questions</th><th scope="col">Quotes verified</th><th scope="col">Avg on the 3 dev products we built on</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Plain RAG</th><td><span class="cell-bar" style="--v:9.6"></span>9.6</td><td>0.0</td><td>98.5%</td><td class="dev">14.7</td></tr>
+          <tr><th scope="row">Lore without its graph tools</th><td><span class="cell-bar" style="--v:24.2"></span>24.2</td><td>0.0</td><td>100%</td><td class="dev">25.0</td></tr>
+          <tr class="rt-lore"><th scope="row">Lore</th><td><span class="cell-bar" style="--v:63.6"></span>63.6</td><td>54.2</td><td>100%</td><td class="dev">83.2</td></tr>
+          <tr class="rt-ref"><th scope="row">HERB paper’s best agent <span>GPT-4o, different setup</span></th><td><span class="cell-bar" style="--v:43.4"></span>43.4</td><td></td><td></td><td class="dev"></td></tr>
+        </tbody>
+      </table>
+      <p class="table-note"><strong>Lore scores lower on products it has never seen (63.6) than on the ones it was built on (83.2). We report both.</strong> Scores are judged answers out of 100, not accuracy. Stale answers, on 24 hand-labeled questions about status now and on a past date: plain RAG 6.7%, search only 8.7%, Lore 0%. Method and footnotes in <a href="{REPO_URL}/blob/main/eval/report.md">eval/report.md</a>.</p>
+    </div>
+
+    <div class="figs3">
+      <div class="f3"><span class="f3-n">3–28 ms</span><span class="f3-l">per graph query, p50. The seconds in an answer are the model’s turns.</span></div>
+      <div class="f3"><span class="f3-n">~$0.003</span><span class="f3-l">per answer, about 1.7k tokens.</span></div>
+      <div class="f3"><span class="f3-n">64 → 24</span><span class="f3-l">when the graph tools are removed, on products it never saw.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6. WHY A GRAPH ============ -->
+<section class="section graphwhy" id="graph">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Why it has to be a graph</h2>
+      <p class="sec-lede">The answers above come from structure no pile of text chunks holds: time windows, links between ids, and who works with whom. FalkorDB runs all three natively.</p>
+    </div>
+
+    <div class="gw" id="gw">
+      <div class="gw-list" role="tablist" aria-label="Reasons" aria-orientation="vertical">
+        <button role="tab" class="gw-tab" aria-selected="true" aria-controls="gwPanel" data-i="0">
+          <span class="gw-t">Facts change, and the graph remembers how.</span>
+          <span class="gw-d">Statuses are Decision nodes with validity windows, linked by SUPERSEDES. “Was it fixed on 25 Feb?” is one comparison.</span>
+        </button>
+        <button role="tab" class="gw-tab" aria-selected="false" aria-controls="gwPanel" data-i="1">
+          <span class="gw-t">The answer lives in the links.</span>
+          <span class="gw-d">“Which company has the most unresolved bugs?” is a <code>count()</code> over the graph, not a guess from ten text chunks. A bug report only names CUST-0011; the graph knows they work at DataSolutions.</span>
+        </button>
+        <button role="tab" class="gw-tab" aria-selected="false" aria-controls="gwPanel" data-i="2">
+          <span class="gw-t">Expertise is a graph algorithm.</span>
+          <span class="gw-d">PageRank, betweenness, communities and <code>shortestPath</code>, running natively in FalkorDB. The listed owner is one hop from the real expert.</span>
+        </button>
+      </div>
+
+      <div class="gw-panel" id="gwPanel" role="tabpanel">
+        <div class="gw-viz">
+          <!-- Scene A: decision windows -->
+          <svg class="gw-svg is-on" data-i="0" viewBox="0 0 560 330" role="img" aria-label="Three Decision nodes for one issue, each with a validity window on a time axis; an as-of line falls inside the 'resolved' window">
+            <g class="axis">
+              <line x1="30" y1="282" x2="530" y2="282"/>
+              <g class="ticks"><line x1="60" y1="276" x2="60" y2="288"/><line x1="330" y1="276" x2="330" y2="288"/><line x1="380" y1="276" x2="380" y2="288"/></g>
+              <text x="60" y="306" text-anchor="middle">6 Feb</text><text x="330" y="306" text-anchor="middle">24 Feb</text><text x="384" y="306" text-anchor="start">26 Feb</text><text x="530" y="306" text-anchor="end">now</text>
+            </g>
+            <g class="win"><rect x="60" y="232" width="270" height="10" rx="5" class="w0"/><rect x="330" y="232" width="50" height="10" rx="5" class="w1"/><rect x="380" y="232" width="150" height="10" rx="5" class="w2 open"/></g>
+            <g class="e"><path d="M110 150 C 150 100, 230 70, 270 62"/><path d="M290 150 Q 285 100 280 72"/><path d="M450 150 C 420 100, 330 70, 292 62"/></g>
+            <g class="sup"><path d="M420 168 C 390 200, 330 200, 310 172" marker-end="url(#arr)"/><path d="M270 168 C 230 205, 160 205, 125 172" marker-end="url(#arr)"/></g>
+            <text class="rel" x="365" y="214" text-anchor="middle">SUPERSEDES</text><text class="rel" x="198" y="214" text-anchor="middle">SUPERSEDES</text>
+            <polygon class="n-issue" points="280,34 298,64 262,64"/>
+            <text class="lbl" x="306" y="56">Issue</text>
+            <g class="dec"><circle cx="100" cy="158" r="11"/><text class="lbl" x="100" y="136" text-anchor="middle">reported</text></g>
+            <g class="dec in"><circle cx="290" cy="158" r="11"/><text class="lbl" x="290" y="136" text-anchor="middle">resolved</text></g>
+            <g class="dec"><circle cx="440" cy="158" r="11"/><text class="lbl" x="440" y="136" text-anchor="middle">reopened</text></g>
+            <g class="asof"><line x1="356" y1="20" x2="356" y2="290"/><rect x="318" y="6" width="76" height="20" rx="4"/><text x="356" y="20" text-anchor="middle">as of 25 Feb</text></g>
+            <defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" class="arrhead"/></marker></defs>
+          </svg>
+
+          <!-- Scene B: links and counts -->
+          <svg class="gw-svg" data-i="1" viewBox="0 0 560 330" role="img" aria-label="Five unresolved issues reported by customers who work at DataSolutions, counted to 5; SmartData has 3">
+            <g class="e">
+              <path d="M120 40 L270 80"/><path d="M120 92 L270 80"/><path d="M120 144 L270 150"/><path d="M120 196 L270 150"/><path d="M120 248 L270 150"/>
+              <path d="M286 80 L430 120"/><path d="M286 150 L430 120"/>
+              <path d="M120 290 L270 270"/><path d="M286 270 L430 270"/>
+            </g>
+            <g class="e-lit"><path d="M120 40 L270 80"/><path d="M286 80 L430 120"/></g>
+            <g class="issues">
+              <polygon points="104,30 116,50 92,50"/><polygon points="104,82 116,102 92,102"/><polygon points="104,134 116,154 92,154"/><polygon points="104,186 116,206 92,206"/><polygon points="104,238 116,258 92,258"/><polygon class="dim" points="104,280 116,300 92,300"/>
+            </g>
+            <g class="tlbl"><text x="84" y="46" text-anchor="end">Inefficient Caching Strategy</text><text x="84" y="98" text-anchor="end">Improper Auth Token Validation</text><text x="84" y="150" text-anchor="end">Incorrect Output in Edge Cases</text><text x="84" y="202" text-anchor="end">Suboptimal Query Optimization</text><text x="84" y="254" text-anchor="end">Faulty Partial Dependence Plots</text></g>
+            <g class="cust"><polygon points="278,70 288,77 284,89 272,89 268,77"/><polygon points="278,140 288,147 284,159 272,159 268,147"/><polygon class="dim" points="278,260 288,267 284,279 272,279 268,267"/></g>
+            <text class="lbl" x="278" y="62" text-anchor="middle">CUST-0011</text><text class="lbl" x="278" y="176" text-anchor="middle">other customers</text>
+            <rect class="co" x="430" y="106" width="28" height="28" rx="4"/><rect class="co dim" x="430" y="256" width="28" height="28" rx="4"/>
+            <text class="lbl strong" x="444" y="96" text-anchor="middle">DataSolutions</text><text class="lbl" x="444" y="246" text-anchor="middle">SmartData</text>
+            <g class="count"><rect x="470" y="105" width="56" height="30" rx="15"/><text x="498" y="125" text-anchor="middle">5</text></g>
+            <g class="count dim"><rect x="470" y="255" width="56" height="30" rx="15"/><text x="498" y="275" text-anchor="middle">3</text></g>
+            <text class="rel" x="190" y="58" text-anchor="middle">REPORTED_BY</text><text class="rel" x="360" y="90" text-anchor="middle">WORKS_AT</text>
+          </svg>
+
+          <!-- Scene C: expertise -->
+          <svg class="gw-svg" data-i="2" viewBox="0 0 560 330" role="img" aria-label="People around the Backend Processing Engine area; Hannah Johnson is the top expert by authorship, and the shortest path from listed owner Fiona Smith to her is one hop">
+            <g class="e">
+              <path d="M280 165 L150 90"/><path d="M280 165 L420 92"/><path d="M280 165 L436 236"/><path d="M280 165 L160 250"/>
+              <path d="M150 90 L60 170"/><path d="M160 250 L60 170"/><path d="M420 92 L510 160"/><path d="M436 236 L510 160"/><path d="M150 90 L160 250"/>
+            </g>
+            <path class="sp" d="M60 170 L150 90"/>
+            <g class="knows"><path d="M280 165 L150 90" style="--w:5"/><path d="M280 165 L420 92" style="--w:3.4"/><path d="M280 165 L436 236" style="--w:2"/></g>
+            <circle class="area" cx="280" cy="165" r="18"/>
+            <text class="lbl strong" x="280" y="206" text-anchor="middle">Backend Processing Engine</text>
+            <circle class="pp top" cx="150" cy="90" r="17"/><text class="lbl strong" x="150" y="46" text-anchor="middle">Hannah Johnson</text><text class="lbl sub" x="150" y="62" text-anchor="middle">PR #53, PR #46 · key person</text>
+            <circle class="pp" cx="420" cy="92" r="12"/><text class="lbl" x="420" y="68" text-anchor="middle">Charlie Williams</text>
+            <circle class="pp" cx="436" cy="236" r="9"/><text class="lbl" x="436" y="262" text-anchor="middle">Julia Miller</text>
+            <circle class="pp" cx="160" cy="250" r="10"/><text class="lbl" x="160" y="278" text-anchor="middle">Bob Davis</text>
+            <circle class="pp owner" cx="60" cy="170" r="10"/><text class="lbl" x="60" y="200" text-anchor="middle">Fiona Smith</text><text class="lbl sub" x="60" y="214" text-anchor="middle">listed owner</text>
+            <circle class="pp" cx="510" cy="160" r="8"/><text class="lbl" x="510" y="186" text-anchor="middle">Ian Davis</text>
+            <text class="rel" x="116" y="152" text-anchor="start">shortestPath</text>
+          </svg>
+        </div>
+
+        <pre class="cy" aria-label="Cypher"><code class="cy-code is-on" data-i="0"><span class="c">// states_at.cypher: the decisions in force at one moment</span>
+<span class="k">MATCH</span> (:<span class="l">Product</span> {id: <span class="p">$product_id</span>})<span class="r">&lt;-[:IN_PRODUCT]-</span>(i:<span class="l">Issue</span>)<span class="r">&lt;-[:AFFECTS]-</span>(d:<span class="l">Decision</span>)
+<span class="k">WHERE</span> d.kind = <span class="s">'issue_status'</span> <span class="k">AND</span> d.valid_from_ms &lt;= <span class="p">$as_of_ms</span>
+  <span class="k">AND</span> (d.valid_to_ms <span class="k">IS NULL OR</span> d.valid_to_ms &gt; <span class="p">$as_of_ms</span>)
+<span class="k">RETURN</span> i.id <span class="k">AS</span> subject_id, d.value <span class="k">AS</span> value, d.id <span class="k">AS</span> decision_id
+<span class="k">LIMIT</span> <span class="p">$limit</span></code><code class="cy-code" data-i="1"><span class="c">// rank_companies.cypher: companies by the issues their customers reported</span>
+<span class="k">MATCH</span> (:<span class="l">Product</span> {id: <span class="p">$product_id</span>})<span class="r">&lt;-[:IN_PRODUCT]-</span>(i:<span class="l">Issue</span>)<span class="r">-[:REPORTED_BY]-&gt;</span>(c:<span class="l">Customer</span>)
+<span class="k">OPTIONAL MATCH</span> (c)<span class="r">-[:WORKS_AT]-&gt;</span>(co:<span class="l">Company</span>)
+<span class="k">OPTIONAL MATCH</span> (i)<span class="r">-[:REPORTED_IN]-&gt;</span>(m:<span class="l">Artifact</span>)
+<span class="c">// … group by company, keep each issue's status and report as evidence</span>
+<span class="k">RETURN</span> key <span class="k">AS</span> id, name, issues
+<span class="k">LIMIT</span> <span class="p">$limit</span></code><code class="cy-code" data-i="2"><span class="c">// person_pagerank.cypher: FalkorDB's native PageRank over who works with whom</span>
+<span class="k">CALL</span> <span class="f">algo.pageRank</span>(<span class="s">'Person'</span>, <span class="s">'COLLAB'</span>) <span class="k">YIELD</span> node, score
+<span class="k">RETURN</span> node.id <span class="k">AS</span> id, score
+<span class="k">ORDER BY</span> score <span class="k">DESC</span>
+<span class="k">LIMIT</span> <span class="p">$limit</span>
+<span class="c">// also native: algo.betweenness, algo.labelPropagation, shortestPath</span></code></pre>
+      </div>
+    </div>
+
+    <div class="gw-links">
+      <a class="link-btn" href="{REPO_URL}#cypher-queries-and-algorithms">All 166 Cypher queries are in the repo</a>
+      <button class="link-btn" type="button" data-open="dlgModel">See the graph data model</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 7. INTEGRATIONS ============ -->
+<section class="section works" id="works">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Works where your team works</h2>
+      <p class="sec-lede">Connectors for Slack, GitHub, Jira and Notion; an MCP server for any AI agent.</p>
+    </div>
+    <ul class="logos">
+      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/slack.svg)"></span><span class="lg-n">Slack</span><span class="lg-d">Messages in. Answers, alerts and Approve out.</span></li>
+      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/github.svg)"></span><span class="lg-n">GitHub</span><span class="lg-d">PRs and reviews in. Comments on the PR out.</span></li>
+      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/jira.svg)"></span><span class="lg-n">Jira</span><span class="lg-d">Tickets in. Comments on the ticket out.</span></li>
+      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/notion.svg)"></span><span class="lg-n">Notion</span><span class="lg-d">Pages in.</span></li>
+      <li class="lg-mcp"><span class="glyph glyph-lg" style="--icon:url(assets/icons/modelcontextprotocol.svg)"></span><span class="lg-n">MCP</span><span class="lg-d">Lore’s tools inside <span class="inl"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span>Claude Code</span>, <span class="inl"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span>Claude Desktop</span> and <span class="inl"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span>Cursor</span>.</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 8. ROADMAP ============ -->
+<section class="section next" id="next">
+  <div class="wrap next-grid">
+    <div>
+      <h2>Coming next</h2>
+      <p class="sec-lede">Lore runs from the repo today, on your machine. There is no hosted version or sign-in yet. These come next.</p>
+    </div>
+    <ul class="next-list">
+      <li><span class="nx-state">Planned</span><span class="nx-t">One-click install (OAuth) and a hosted version.</span></li>
+      <li><span class="nx-state">Planned</span><span class="nx-t">Permissions synced from Slack and GitHub.</span></li>
+      <li><span class="nx-state">Planned</span><span class="nx-t">A graph per company, with your own retention rules.</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ CLOSING CTA ============ -->
+<section class="section closing" id="closing">
+  <div class="wrap">
+    <a class="poster" href="{VIDEO_URL}">
+      <span class="poster-copy">
+        <span class="poster-play" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M7 4.8v10.4l8.2-5.2z"/></svg></span>
+        <span class="poster-t">See a regression caught live, in three minutes.</span>
+        <span class="poster-d">A customer re-reports a fixed bug. Lore flags it, draws who it touches, and posts the follow-up on Approve.</span>
+        <span class="poster-len">Watch the 3-minute demo</span>
+      </span>
+      <span class="poster-shot" aria-hidden="true"><img src="assets/img/inbox-radius.png" alt="" width="1020" height="1040" loading="lazy"></span>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-grid">
+    <div class="foot-brand">
+      <a class="brand" href="#top"><svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true"><path class="bm-edge" d="M7 20 L14 8 L21 18 Z"/><circle class="bm-node" cx="7" cy="20" r="3.2"/><circle class="bm-node" cx="21" cy="18" r="3.2"/><rect class="bm-cite" x="10.6" y="4.6" width="6.8" height="6.8" rx="1.6"/></svg><span>Lore</span></a>
+      <p>Built for Graph Hacks: Context for AI Agents (WeMakeDevs × FalkorDB).</p>
+    </div>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="{VIDEO_URL}">Demo video</a>
+      <a href="{REPO_URL}">GitHub</a>
+      <a href="{BLOG_URL}">Blog post</a>
+      <a href="{REPO_URL}/blob/main/eval/report.md">eval/report.md</a>
+    </nav>
+    <p class="foot-data">Demo data: HERB (Salesforce AI Research, synthetic, CC BY-NC 4.0) and labeled synthetic messages. No real company or personal data.</p>
+  </div>
+</footer>
+
+<dialog class="dlg" id="dlgArch" aria-labelledby="dlgArchT">
+  <div class="dlg-head"><h3 id="dlgArchT">How the pieces fit</h3><button class="icon-btn" type="button" data-close aria-label="Close">×</button></div>
+  <div class="dlg-body"><img src="assets/diagrams/lore-overview.svg" alt="Lore's big picture: company data flows through the ingestion pipeline into the FalkorDB graph, which feeds the answer agent and the Change Sentinel, which feed the web UI" loading="lazy"></div>
+</dialog>
+<dialog class="dlg" id="dlgModel" aria-labelledby="dlgModelT">
+  <div class="dlg-head"><h3 id="dlgModelT">The graph data model</h3><button class="icon-btn" type="button" data-close aria-label="Close">×</button></div>
+  <div class="dlg-body"><img src="assets/diagrams/data-model.svg" alt="Lore's graph data model: what is true and since when (Alert, Claim, Decision, Issue, Area), who (Person, Team, Customer, Company), and what was said (Artifact, Channel, Chunk, Product), with their relationships" loading="lazy"></div>
+</dialog>
+
+<script src="main.js" defer></script>
+</body>
+</html>

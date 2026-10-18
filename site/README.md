@@ -1,0 +1,28 @@
+# Lore landing page
+
+A static page (`index.html`, `styles.css`, `main.js`, `assets/`) with no build step and no backend. It never calls Lore's API. Content follows [docs/landing-brief.md](../docs/landing-brief.md).
+
+## Preview locally
+```
+python -m http.server 8765 --directory site
+```
+Open http://localhost:8765. Add `?theme=dark` or `?theme=light` to force a theme. Add `?motion=full` to see all motion on a machine with animations turned off (Windows: Settings > Accessibility > Visual effects > Animation effects).
+
+## Deploy on Vercel
+Import the repo, set **Root Directory** to `site`, framework preset **Other**, no build command. `vercel.json` sets clean URLs and asset caching.
+
+## Before submission
+Replace the placeholders in `index.html`:
+- `{VIDEO_URL}`: the 3-minute demo video
+- `{REPO_URL}`: the GitHub repo (also used for `#cypher-queries-and-algorithms` and `/blob/main/eval/report.md`)
+- `{BLOG_URL}`: the blog post
+
+```
+sed -i 's#{VIDEO_URL}#https://…#g; s#{REPO_URL}#https://github.com/…#g; s#{BLOG_URL}#https://…#g' site/index.html
+```
+
+## What's real on the page
+- The hero console replays three answers built from Lore's actual tool output (`decision_lineage`, `rank`, `who_knows`) on HERB's synthetic ExplainabilityForce product. Every quote is verbatim from the artifact named next to it. The tool times are the measured p50 per tool from `eval/report.md`.
+- The "same question, any day" panel uses the real decision chain of 'Inefficient Caching Strategy' (reported 6 Feb, resolved 24 Feb, reopened 26 Feb 2027).
+- The Approve button in "How it works" is a replay and sends nothing.
+- Numbers come from the README and `eval/report.md`: held-out products first, dev beside them. The stale-answer figures are the dev drift set.
