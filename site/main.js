@@ -39,6 +39,25 @@
     const darkCheck = () => nav.classList.toggle('on-dark', nights.some((el) => { const r = el.getBoundingClientRect(); return r.top <= 40 && r.bottom > 40 && r.right > innerWidth - 40; }));
     addEventListener('scroll', darkCheck, { passive: true }); darkCheck();
   }
+  // Hero depth (styles.css): CSS scroll-driven animations where supported; elsewhere the same motion
+  // from here, once a frame, written straight onto the moving layers.
+  if (!reduced && !(window.CSS && CSS.supports('animation-timeline: scroll()'))) {
+    const copy = $('.hero-copy'), fade = $('.hero-fade');
+    let queued = false, last = -1;
+    const depth = () => {
+      queued = false;
+      const p = Math.min(Math.max(scrollY, 0), 400);
+      if (p === last) return;
+      last = p;
+      // queried each time: the shade canvas is added further down
+      $$('.hero-graph, .hero-shade').forEach((el) => { el.style.translate = `0 ${p * .5}px`; });
+      copy.style.translate = fade.style.translate = `0 ${p * .3}px`;
+      copy.style.opacity = 1 - p / 460;
+    };
+    addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(depth); } }, { passive: true });
+    depth();
+  }
+
   const navLinks = $$('.nav-links a');
   const secObs = new IntersectionObserver((entries) => {
     entries.forEach((e) => {
@@ -47,7 +66,7 @@
     });
   }, { rootMargin: '-45% 0px -50% 0px' });
   // sections without a nav link clear the highlight
-  ['problem', 'how', 'features', 'results', 'falkordb', 'works', 'next'].forEach((id) => { const el = document.getElementById(id); el && secObs.observe(el); });
+  ['problem', 'how', 'selfhost', 'features', 'results', 'falkordb', 'works'].forEach((id) => { const el = document.getElementById(id); el && secObs.observe(el); });
 
   /* =====================================================================
      Hero shade: slow graphite smoke on the far sides only (a WebGL
@@ -69,12 +88,13 @@
         return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
       float fbm(vec2 p){float v=0.,s=.5;for(int i=0;i<5;i++){v+=s*n(p);p=p*2.03+vec2(1.7,9.2);s*=.5;}return v;}
       void main(){
-        vec2 uv=gl_FragCoord.xy/r; vec2 p=uv*vec2(r.x/r.y,1.)*2.2;
+        vec2 uv=gl_FragCoord.xy/r; vec2 p=gl_FragCoord.xy*.0045;
         vec2 q=vec2(fbm(p+vec2(0.,t*.035)),fbm(p+vec2(5.2,1.3)-t*.025));
         float f=fbm(p+2.4*q+vec2(t*.012,0.));
         float side=smoothstep(.3,.02,uv.x)+smoothstep(.7,.98,uv.x);
-        float vert=smoothstep(0.,.25,uv.y)*smoothstep(1.,.7,uv.y);
-        float al=a*side*vert*smoothstep(.38,.82,f);
+        float vert=smoothstep(0.,.25,uv.y)*smoothstep(1.,.86,uv.y);
+        float lift=mix(1.,1.4,smoothstep(.4,.75,uv.y));
+        float al=min(.9,a*side*vert*lift*smoothstep(.34,.8,f));
         gl_FragColor=vec4(c*al,al);
       }`;
     const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); return o; };
@@ -185,29 +205,30 @@
       const r = hero.getBoundingClientRect();
       W = r.width; H = r.height + 80;
       dpr = Math.min(devicePixelRatio || 1, 2);
-      canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+      const cw = Math.round(W * dpr), ch = Math.round(H * dpr);
+      if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const c = consoleEl.getBoundingClientRect();
       const left = c.left - r.left, right = r.right - c.right;
       flankL = Math.max(0, left - 24); flankR = Math.max(0, right - 24);
       cTop = c.top - r.top + 80;
       compact = flankL < 150;
-      // beside the console only: from its top bar down to its last row
+      // beside the console only: from its top bar down to its last row. Layout sets targets (tx, ty);
+      // frame() eases each node toward them, so the console growing or shrinking never snaps the graph.
       const top = cTop + 14, bottom = Math.min(H - 30, cTop + c.height + 10);
       NODES.forEach((n) => {
         if (compact) {
           // narrow screens: a quiet band of nodes above the console, no labels
-          n.x = n.s === 'L' ? W * (.04 + n.u * .4) : W * (.56 + n.u * .4);
-          n.y = 40 + n.v * Math.max(120, cTop - 120);
+          n.tx = n.s === 'L' ? W * (.04 + n.u * .4) : W * (.56 + n.u * .4);
+          n.ty = 40 + n.v * Math.max(120, cTop - 120);
         } else {
-          n.y = top + n.v * (bottom - top);
+          n.ty = top + n.v * (bottom - top);
           const fw = n.s === 'L' ? flankL : flankR;
           n.fw = fw;
-          n.x = n.s === 'L' ? 22 + n.u * (fw - 30) : W - 22 - n.u * (fw - 30);
+          n.tx = n.s === 'L' ? 22 + n.u * (fw - 30) : W - 22 - n.u * (fw - 30);
         }
-        n.ph = (n.x * 13.37 + n.y * 7.1) % 6.28;
+        if (n.x == null) { n.x = n.tx; n.y = n.ty; n.ph = (n.tx * 13.37 + n.ty * 7.1) % 6.28; n.li = 0; n.ci = 0; }
       });
-      dust.length = 0;
       const count = compact ? 18 : 46;
       let seed = 7;
       const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -216,8 +237,11 @@
         const fw = compact ? W * .45 : (side === 'L' ? flankL : flankR) + 20;
         const x = side === 'L' ? rnd() * fw : W - rnd() * fw;
         const y = compact ? 20 + rnd() * Math.max(140, cTop - 60) : cTop - 10 + rnd() * (H - cTop - 40);
-        dust.push({ x, y, r: 1.2 + rnd() * 1.8, ph: rnd() * 6.28 });
+        const r = 1.2 + rnd() * 1.8, ph = rnd() * 6.28;
+        // same seed, same order: dot i keeps its identity across layouts and glides to its new spot
+        if (dust[i]) { dust[i].tx = x; dust[i].ty = y; } else dust.push({ x, y, tx: x, ty: y, r, ph });
       }
+      dust.length = count;
     }
 
     const pos = (n, t) => reduced ? [n.x, n.y] : [n.x + Math.sin(t * .00042 + n.ph) * 4, n.y + Math.cos(t * .00036 + n.ph * 1.3) * 4];
@@ -240,7 +264,36 @@
       ctx.setLineDash([]);
     }
 
+    // per-frame easing toward targets: positions over ~0.35 s, highlight states over ~0.25 s
+    let lastT = 0;
+    const ease = (v, to, k) => v + (to - v) * k;
+    function step(t) {
+      const dt = lastT ? Math.min(t - lastT, 200) : 1e3;
+      lastT = t;
+      const kp = reduced ? 1 : 1 - Math.exp(-dt / 350), ks = reduced ? 1 : 1 - Math.exp(-dt / 250);
+      NODES.forEach((n) => {
+        n.x = ease(n.x, n.tx, kp); n.y = ease(n.y, n.ty, kp);
+        n.li = ease(n.li, lit.has(n.id) ? 1 : 0, ks); n.ci = ease(n.ci, cited.has(n.id) ? 1 : 0, ks);
+      });
+      dust.forEach((d) => { d.x = ease(d.x, d.tx, kp); d.y = ease(d.y, d.ty, kp); });
+      EDGES.forEach((e) => { e.li = ease(e.li || 0, litE.has(e.key) ? 1 : 0, ks); });
+    }
+
+    function label(n, x, y, strong, alpha) {
+      ctx.font = (strong ? '600 ' : '500 ') + (n.t === 'message' || n.t === 'pr' && n.label.startsWith('pr:') ? '10.5px "JetBrains Mono", monospace' : '11.5px "Schibsted Grotesk", sans-serif');
+      if (n.t === 'message') ctx.font = (strong ? '600 ' : '400 ') + '10px "JetBrains Mono", monospace';
+      ctx.fillStyle = strong ? colors.ink : colors.muted;
+      ctx.globalAlpha = alpha;
+      let text = n.label;
+      const maxW = Math.max(90, (n.fw || 0) * .95);
+      while (ctx.measureText(text).width > maxW && text.length > 6) text = text.slice(0, -2);
+      if (text !== n.label) text = text.trimEnd() + '…';
+      const tw = ctx.measureText(text).width;
+      ctx.fillText(text, Math.max(6, Math.min(x - tw / 2, W - tw - 6)), y);
+    }
+
     function frame(t) {
+      step(t);
       ctx.clearRect(0, 0, W, H);
       const P = new Map();
       NODES.forEach((n) => P.set(n.id, pos(n, t)));
@@ -256,48 +309,41 @@
       // edges
       EDGES.forEach((e) => {
         const [x1, y1] = P.get(e.a), [x2, y2] = P.get(e.b);
-        const on = litE.has(e.key);
+        const on = e.li;
         const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1;
         const len = Math.hypot(dx, dy) || 1, bend = Math.min(60, len * .12);
         const cx = mx - dy / len * bend, cy = my + dx / len * bend;
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(cx, cy, x2, y2);
-        if (on) {
-          ctx.strokeStyle = colors.petrol; ctx.globalAlpha = .85; ctx.lineWidth = 1.4;
-          ctx.setLineDash([5, 5]); ctx.lineDashOffset = reduced ? 0 : -t * .03;
-        } else {
-          ctx.strokeStyle = colors.rule; ctx.globalAlpha = compact ? .45 : .75; ctx.lineWidth = 1;
-          ctx.setLineDash([]);
+        // the quiet edge and the lit (dashed) edge cross-fade
+        if (on < .99) {
+          ctx.strokeStyle = colors.rule; ctx.globalAlpha = (compact ? .45 : .75) * (1 - on); ctx.lineWidth = 1;
+          ctx.setLineDash([]); ctx.stroke();
         }
-        ctx.stroke();
+        if (on > .01) {
+          ctx.strokeStyle = colors.petrol; ctx.globalAlpha = .85 * on; ctx.lineWidth = 1.4;
+          ctx.setLineDash([5, 5]); ctx.lineDashOffset = reduced ? 0 : -t * .03; ctx.stroke();
+        }
       });
       ctx.setLineDash([]); ctx.globalAlpha = 1;
 
       // nodes
       NODES.forEach((n) => {
         const [x, y] = P.get(n.id);
-        const isLit = lit.has(n.id), c = cited.get(n.id);
+        const c = cited.get(n.id), li = n.li, ci = n.ci, hot = Math.max(li, ci);
         const r = n.t === 'person' || n.t === 'company' ? 5.5 : 6;
         if (c != null && !reduced) {
           const k = Math.min(1, (t - c) / 900);
           if (k < 1) { ctx.beginPath(); ctx.arc(x, y, 8 + k * 22, 0, 6.28); ctx.strokeStyle = colors.mark; ctx.globalAlpha = 1 - k; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1; }
         }
-        ctx.globalAlpha = c != null ? 1 : isLit ? 1 : (compact ? .35 : .55);
-        const base = isLit || c != null ? colors.petrol : colors.faint;
-        if (c != null) shape(n, x, y, r + 1.5, colors.mark, colors.ink, 1.4);
-        else shape(n, x, y, r, base, base, 1.4);
+        // three layers cross-fade: quiet, lit (petrol), cited (highlighter)
+        const quiet = (compact ? .35 : .55) * (1 - hot), litA = li * (1 - ci);
+        if (quiet > .01) { ctx.globalAlpha = quiet; shape(n, x, y, r, colors.faint, colors.faint, 1.4); }
+        if (litA > .01) { ctx.globalAlpha = litA; shape(n, x, y, r, colors.petrol, colors.petrol, 1.4); }
+        if (ci > .01) { ctx.globalAlpha = ci; shape(n, x, y, r + 1.5 * ci, colors.mark, colors.ink, 1.4); }
         if (!compact && n.label) {
-          ctx.font = (c != null || isLit ? '600 ' : '500 ') + (n.t === 'message' || n.t === 'pr' && n.label.startsWith('pr:') ? '10.5px "JetBrains Mono", monospace' : '11.5px "Schibsted Grotesk", sans-serif');
-          if (n.t === 'message') ctx.font = (c != null || isLit ? '600 ' : '400 ') + '10px "JetBrains Mono", monospace';
-          ctx.fillStyle = c != null || isLit ? colors.ink : colors.muted;
-          ctx.globalAlpha = c != null || isLit ? 1 : .7;
-          let label = n.label;
-          const maxW = Math.max(90, (n.fw || 0) * .95);
-          while (ctx.measureText(label).width > maxW && label.length > 6) label = label.slice(0, -2);
-          if (label !== n.label) label = label.trimEnd() + '…';
-          const tw = ctx.measureText(label).width;
-          let lx = x - tw / 2;
-          lx = Math.max(6, Math.min(lx, W - tw - 6));
-          ctx.fillText(label, lx, y + r + 14);
+          // the quiet label and the bold one cross-fade (both drawn only mid-transition)
+          if (hot < .99) label(n, x, y + r + 14, false, .7 * (1 - hot));
+          if (hot > .01) label(n, x, y + r + 14, true, hot);
         }
         ctx.globalAlpha = 1;
       });
@@ -807,41 +853,6 @@
       });
       new IntersectionObserver(([e], obs) => { if (e.isIntersecting) { draw(); obs.disconnect(); } }, { threshold: .4 }).observe(plot);
     }
-    // comparison tabs
-    const tabs = $$('.cmp-tab');
-    const pick = (i, focus) => {
-      tabs.forEach((t, k) => { t.setAttribute('aria-selected', String(k === i)); t.tabIndex = k === i ? 0 : -1; document.getElementById(t.getAttribute('aria-controls')).hidden = k !== i; });
-      if (focus) tabs[i].focus();
-    };
-    tabs.forEach((t, i) => {
-      t.addEventListener('click', () => pick(i));
-      t.addEventListener('keydown', (e) => {
-        const k = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
-        if (k) { e.preventDefault(); pick((i + k + tabs.length) % tabs.length, true); }
-      });
-    });
-  })();
-
-  /* =====================================================================
-     Why a graph: three reasons, each with its scene and its Cypher.
-     ===================================================================== */
-  (() => {
-    const tabs = $$('.gw-tab'); if (!tabs.length) return;
-    const svgs = $$('.gw-svg'), codes = $$('.cy-code');
-    const show = (i, focus) => {
-      tabs.forEach((t, k) => { t.setAttribute('aria-selected', String(k === i)); t.tabIndex = k === i ? 0 : -1; });
-      svgs.forEach((s, k) => s.classList.toggle('is-on', k === i));
-      codes.forEach((c, k) => c.classList.toggle('is-on', k === i));
-      if (focus) tabs[i].focus();
-    };
-    tabs.forEach((t, i) => {
-      t.addEventListener('click', () => show(i));
-      t.addEventListener('keydown', (e) => {
-        const k = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
-        if (k) { e.preventDefault(); show((i + k + tabs.length) % tabs.length, true); }
-      });
-    });
-    show(0);
   })();
 
   /* =====================================================================
@@ -903,6 +914,54 @@
     $$('.cw-tab', cw).forEach((t) => t.setAttribute('aria-selected', String(t === tab)));
     $$('.cw-body', cw).forEach((b) => { b.hidden = b.dataset.c !== c; });
   });
+
+  /* ---------------- Self-hosted: one point in focus, the one before and after it faded ----------------
+     The list wraps, so there is always a point above and below. The rail's fill sets the pace (its
+     animationend advances); hovering, focusing or leaving the screen pauses it. The point in focus
+     lights the part of the drawing it is about. */
+  (() => {
+    const box = $('#pts'); if (!box) return;
+    const list = $('.pt-list', box), items = $$('.pt', box), dots = $$('.pt-dot', box);
+    const parts = $$('.perim [data-part]');
+    const n = items.length, GAP = 26, NEAR = .72;  // NEAR: a neighbour's title scale (styles.css .pt.is-near h3)
+    let cur = 0, hover = false, seen = false;
+    const layout = () => {
+      const H = list.clientHeight, hc = items[cur].offsetHeight, top = (H - hc) / 2;
+      items.forEach((it, i) => {
+        const d = ((i - cur) % n + n) % n;  // 0 in focus, 1 next, n - 1 previous
+        const off = d === 0 ? 0 : d === 1 ? 1 : d === n - 1 ? -1 : d <= n / 2 ? 2 : -2;
+        const th = it.firstElementChild.offsetHeight * NEAR;  // a neighbour shows only its scaled title
+        const y = off === 0 ? top : off === 1 ? top + hc + GAP : off === -1 ? top - GAP - th : off === 2 ? H + 40 : -th - 160;
+        it.style.setProperty('--y', `${y}px`);
+        it.classList.toggle('is-on', off === 0);
+        it.classList.toggle('is-near', Math.abs(off) === 1);
+      });
+    };
+    const go = (i) => {
+      cur = (i + n) % n;
+      layout();
+      dots.forEach((d, k) => { d.classList.remove('on'); d.setAttribute('aria-pressed', String(k === cur)); });
+      void dots[cur].offsetWidth;  // restart the fill
+      dots[cur].classList.add('on');
+      parts.forEach((p) => p.classList.toggle('is-hot', p.dataset.part === items[cur].dataset.part));
+    };
+    const pace = () => box.classList.toggle('paused', hover || !seen);
+    dots.forEach((d, i) => {
+      d.addEventListener('click', () => go(i));
+      d.firstElementChild.addEventListener('animationend', () => go(cur + 1));
+    });
+    items.forEach((it, i) => it.addEventListener('click', () => { if (i !== cur) go(i); }));
+    const zone = box.closest('.sh-body');
+    zone.addEventListener('pointerenter', () => { hover = true; pace(); });
+    zone.addEventListener('pointerleave', () => { hover = false; pace(); });
+    zone.addEventListener('focusin', () => { hover = true; pace(); });
+    zone.addEventListener('focusout', () => { hover = false; pace(); });
+    new IntersectionObserver(([e]) => { seen = e.isIntersecting; pace(); }, { threshold: .4 }).observe(box);
+    new ResizeObserver(layout).observe(list);
+    document.fonts && document.fonts.ready.then(layout);
+    pace(); go(0);
+    requestAnimationFrame(() => list.classList.add('ready'));  // no slide-in on the first layout
+  })();
 
   /* ---------------- links filled at launch ----------------
      index.html carries {APP_URL}, {VIDEO_URL}, {REPO_URL} and {BLOG_URL} until launch (site/README.md).
