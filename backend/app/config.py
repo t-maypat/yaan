@@ -28,11 +28,13 @@ class Settings(BaseSettings):
     falkordb_reader_password: str | None = None
     falkordb_admin_password: str | None = None  # user "default": ops and contract tests only
 
-    # LLM (Anthropic)
+    # LLM (Anthropic). Haiku 5.5 for both roles keeps the whole project at a few dollars (D033).
     anthropic_api_key: str | None = None
-    lore_extract_model: str = "claude-haiku-4-5"
-    lore_answer_model: str = "claude-sonnet-5-5"
-    lore_daily_spend_cap_usd: float = 20.0
+    lore_extract_model: str = "claude-haiku-5-5"
+    lore_answer_model: str = "claude-haiku-5-5"
+    lore_extract_effort: str = "low"
+    lore_answer_effort: str = "medium"
+    lore_daily_spend_cap_usd: float = 2.0  # llm.py refuses a call that could cross it
 
     # Embeddings
     lore_embed_model: str = "BAAI/bge-small-en-v1.5"

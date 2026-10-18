@@ -46,7 +46,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-    restart: unless-stopped
+    # always: comes back whenever Docker starts, e.g. after a reboot or a Docker Desktop quit (D034).
+    restart: always
 
 volumes:
   falkordb-data:

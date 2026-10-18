@@ -10,7 +10,6 @@ import sys
 
 # command -> (docs/PLAN.md phase that builds it, help text)
 PENDING: dict[str, tuple[str, str]] = {
-    "ask": ("Phase 4", "answer a question (baseline RAG in Phase 4, Lore agent in Phase 9)"),
     "eval": ("Phase 5", "run and score a system on an eval split"),
     "seed": ("Phase 15", "rebuild the demo graph from exports/ without LLM calls"),
 }
@@ -151,6 +150,59 @@ def cmd_bench_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ask(args: argparse.Namespace) -> int:
+    from app import llm
+    from app.eval import baseline_rag
+
+    if not args.baseline:
+        print("lore ask: the Lore agent arrives in Phase 9; use --baseline", file=sys.stderr)
+        return 2
+    try:
+        out = baseline_rag.answer(
+            " ".join(args.question), product_id=args.product, graph=args.graph
+        )
+    except llm.LLMError as e:
+        print(f"lore ask: {e}", file=sys.stderr)
+        return 1
+    print(out["answer_markdown"], end="\n\n")
+    for c in out["citations"]:
+        mark = "ok" if c["quote_ok"] else "QUOTE NOT FOUND" if c["retrieved"] else "NOT RETRIEVED"
+        print(f'[{c["n"]}] {c["artifact_id"]} ({mark}): "{c["quote"]}"')
+    if out["llm"]:
+        u = out["llm"]
+        cached = ", cached" if u["cached"] else ""
+        print(
+            f"\n{u['model']}: {u['input_tokens']} in / {u['output_tokens']} out tokens, "
+            f"${u['cost_usd']:.5f}{cached} · today ${llm.spent_today():.4f}"
+        )
+    return 0
+
+
+def cmd_llm_check(args: argparse.Namespace) -> int:
+    from app import llm
+    from app.config import get_settings
+
+    s = get_settings()
+    try:
+        out = llm.complete(
+            role="answer",
+            system="Reply with the single word OK.",
+            user="ping",
+            purpose="llm-check",
+            max_tokens=512,
+            use_cache=False,
+        )
+    except llm.LLMError as e:
+        print(f"lore llm-check: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:  # auth, credit and network errors from the SDK, shown as they are
+        print(f"lore llm-check: {type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    print(f"{out.model} answered {out.text.strip()!r} for ${out.cost_usd:.6f}")
+    print(f"today's spend ${llm.spent_today():.4f} of the ${s.lore_daily_spend_cap_usd:.2f} cap")
+    return 0
+
+
 def cmd_health(args: argparse.Namespace) -> int:
     from app.config import get_settings
     from app.ingest import health
@@ -170,6 +222,8 @@ COMMANDS = {
     "health": ("print the graph-health report (S10)", cmd_health),
     "search": ("hybrid search over the graph's chunks (agent tool 1)", cmd_search),
     "bench-search": ("search hit@k / precision@k and latency on dev questions", cmd_bench_search),
+    "ask": ("answer a question: --baseline = hybrid RAG (Phase 4); the agent in Phase 9", cmd_ask),
+    "llm-check": ("one tiny LLM call: is the API key set and does it have credit?", cmd_llm_check),
 }
 
 # command -> [(flag, argparse options)]
@@ -193,6 +247,12 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
     ],
     "bench-search": [
         ("--k", {"type": int, "default": 10}),
+        ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
+    ],
+    "ask": [
+        ("question", {"nargs": "+", "help": "free text"}),
+        ("--baseline", {"action": "store_true", "help": "hybrid RAG, no graph tools"}),
+        ("--product", {"help": "product id, e.g. VizForce"}),
         ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
     ],
 }

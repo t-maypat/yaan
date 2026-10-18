@@ -49,11 +49,14 @@ def search_artifacts(
     k: int = 10,
     *,
     mode: Mode = "hybrid",
+    full_text: bool = False,
     graph: str | None = None,
 ) -> dict[str, Any]:
     """Tool 1: hybrid search over chunks, fused with RRF, one result per artifact.
 
     `mode` is for evaluation and ablations: full-text only, vector only, or both fused.
+    `full_text` adds each best chunk's whole text (the baseline RAG reads it; agents quote
+    from get_artifact instead).
     """
     fetch = min(MAX_FETCH, k * FETCH_FACTOR)
     filters = {"kinds": kinds, "product_id": product_id, "since_ms": since_ms, "until_ms": until_ms}
@@ -78,7 +81,7 @@ def search_artifacts(
         timings["vector_ms"] = ms_since(started)
         used.append("search_vector.cypher")
 
-    results = fuse(lists, k)
+    results = fuse(lists, k, full_text)
     return {
         "query": query,
         "keywords": q,
@@ -91,7 +94,9 @@ def search_artifacts(
     }
 
 
-def fuse(lists: dict[str, list[dict[str, Any]]], k: int) -> list[dict[str, Any]]:
+def fuse(
+    lists: dict[str, list[dict[str, Any]]], k: int, full_text: bool = False
+) -> list[dict[str, Any]]:
     """Reciprocal rank fusion over chunk lists, then the best chunk per artifact."""
     scores: dict[str, float] = {}
     best: dict[str, dict[str, Any]] = {}
@@ -119,6 +124,8 @@ def fuse(lists: dict[str, list[dict[str, Any]]], k: int) -> list[dict[str, Any]]
             "rrf": round(scores[chunk], 5),
             **ranks[chunk],
         }
+        if full_text:
+            per_artifact[row["artifact_id"]]["text"] = row["text"]
         if len(per_artifact) == k:
             break
     return list(per_artifact.values())
