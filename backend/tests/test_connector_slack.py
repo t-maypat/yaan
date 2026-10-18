@@ -112,7 +112,8 @@ def test_post_routes_notifications_and_thread_corrections(conn):
     assert ref.startswith("https://lore-demo.slack.com/archives/C9/")
     assert (
         conn.client.posted[-1]["channel"] == "C9"
-        and "To Hannah Garcia" in conn.client.posted[-1]["text"]
+        and "For Hannah Garcia" in conn.client.posted[-1]["text"]
+        and conn.client.posted[-1]["blocks"]
     )
     fix = {
         "id": "a2",
@@ -158,8 +159,10 @@ def test_alert_cards_offer_approve_and_dismiss_until_decided():
         "quote": "times out again",
     }
     blocks = slack.alert_blocks(alert)
-    assert [e["action_id"] for e in blocks[-1]["elements"]] == ["lore_approve", "lore_dismiss"]
-    assert blocks[-1]["elements"][0]["value"] == "alert:1"
+    actions = next(b for b in blocks if b["type"] == "actions")
+    assert [e["action_id"] for e in actions["elements"]] == ["lore_approve", "lore_dismiss"]
+    assert actions["elements"][0]["value"] == "alert:1" and actions["elements"][0]["confirm"]
+    assert blocks[0]["type"] == "header" and "Regression" in blocks[0]["text"]["text"]
     done = slack.alert_blocks(alert, decided="Approved by <@U1>")
     assert done[-1]["type"] == "context" and all(b["type"] != "actions" for b in done)
 

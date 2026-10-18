@@ -18,7 +18,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 from app import db
-from app.connectors import base
+from app.connectors import base, render
 from app.connectors.base import ConnectorError, Item, Maps
 from app.ingest.normalize import Artifact
 
@@ -44,6 +44,7 @@ class SlackConnector:
         self.maps = maps or base.maps()
         self.conf = self.maps.source("slack")
         self._channels: dict[str, str] | None = None
+        self._team_url: str | None = None
 
     # --- reading ---------------------------------------------------------------------------
     def channel_ids(self) -> dict[str, str]:
@@ -130,14 +131,17 @@ class SlackConnector:
         return Item(a, updated_ms=ts_ms(edited) if edited else created)
 
     # --- writing ---------------------------------------------------------------------------
-    def post(self, action: dict[str, Any]) -> str | None:
+    def post(self, action: dict[str, Any], resolve: render.Resolve | None = None) -> str | None:
         """Notifications go to the alerts channel; a correction of a Slack message goes into
-        its thread. Anything else belongs to another tool."""
+        its thread. Anything else belongs to another tool. Rendered as Block Kit (D083)."""
         target = action.get("target_id") or ""
+        resolve = resolve or self.link
         if action["kind"] == "notify_owner":
             channel = self.alerts_channel()
-            text = f"*To {action.get('target_name') or target}* ({target}):\n{action['draft']}"
-            r = self._call("chat_postMessage", channel=channel, text=text, unfurl_links=False)
+            text, blocks = render.slack_notify(action, resolve)
+            r = self._call(
+                "chat_postMessage", channel=channel, text=text, blocks=blocks, unfurl_links=False
+            )
             return self.permalink(channel, r["ts"])
         prefix = "msg:synthetic-slack-"
         if target.startswith(prefix):
@@ -146,11 +150,28 @@ class SlackConnector:
                 "chat_postMessage",
                 channel=cid,
                 thread_ts=ts,
-                text=action["draft"],
+                text=f"Correction from Lore: {action.get('target_name') or 'this message'}",
+                blocks=render.slack_correction(action, resolve),
                 unfurl_links=False,
             )
             return self.permalink(cid, r["ts"])
         return None
+
+    def link(self, artifact_id: str) -> render.Link | None:
+        """A Slack message's label and permalink, built without an API call per message."""
+        prefix = "msg:synthetic-slack-"
+        if not artifact_id.startswith(prefix):
+            return None
+        cid, _, ts = artifact_id.removeprefix(prefix).partition("-")
+        if self._team_url is None:
+            try:
+                self._team_url = self._call("auth_test").get("url") or ""
+            except ConnectorError:
+                self._team_url = ""
+        names = {v: k for k, v in (self._channels or {}).items()}
+        label = f"Message in #{names[cid]}" if cid in names else "Slack message"
+        url = f"{self._team_url}archives/{cid}/p{ts.replace('.', '')}" if self._team_url else None
+        return label, url
 
     def alerts_channel(self) -> str:
         name = self.conf.get("alerts_channel") or "lore-alerts"
@@ -187,50 +208,12 @@ def answer_text(out: dict[str, Any], permalink: Callable[[str], str | None]) -> 
     return "\n".join(lines)
 
 
-def alert_blocks(alert: dict[str, Any], decided: str | None = None) -> list[dict[str, Any]]:
-    """An alert as a Slack card: summary, the triggering quote, Approve / Dismiss (or the
-    verdict once given)."""
-    blocks: list[dict[str, Any]] = [
-        {"type": "section", "text": {"type": "mrkdwn", "text": f"*{alert['summary']}*"}},
-        {
-            "type": "context",
-            "elements": [
-                {
-                    "type": "mrkdwn",
-                    "text": f"{alert['kind']} · {alert['severity']} · {alert['product_id']} · "
-                    f"{alert['radius_size']} affected · `{alert['id']}`",
-                }
-            ],
-        },
-    ]
-    if alert.get("quote"):
-        blocks.append(
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"> {alert['quote']}"}}
-        )
-    if decided:
-        blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": decided}]})
-    else:
-        blocks.append(
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "style": "primary",
-                        "text": {"type": "plain_text", "text": "Approve and send"},
-                        "action_id": "lore_approve",
-                        "value": alert["id"],
-                    },
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Dismiss"},
-                        "action_id": "lore_dismiss",
-                        "value": alert["id"],
-                    },
-                ],
-            }
-        )
-    return blocks
+def alert_blocks(
+    alert: dict[str, Any], decided: str | None = None, resolve: render.Resolve | None = None
+) -> list[dict[str, Any]]:
+    """An alert as a Slack card (render.alert_blocks): what changed, the evidence, who it
+    reaches, Approve / Dismiss, or the verdict once given."""
+    return render.alert_blocks(alert, decided, resolve)
 
 
 class SlackBot:
@@ -243,6 +226,8 @@ class SlackBot:
         self.app = App(token=bot_token)
         self.app_token, self.graph, self.on_message = app_token, graph, on_message
         self.connector = SlackConnector(self.app.client, graph)
+        # Links to sources in other tools; the runner sets one over every connector.
+        self.resolve: render.Resolve = self.connector.link
         self.app.event("app_mention")(self._mention)
         self.app.event("message")(self._message)
         self.app.action("lore_approve")(self._verdict("approved"))
@@ -300,11 +285,16 @@ class SlackBot:
             try:
                 out = approve.respond(alert_id, verdict, person, graph=live.demo_graph(self.graph))
                 statement = out["decision"]["statement"]
-                note = f"{verdict.capitalize()} by <@{user}> (as {person}): {statement}"
+                icon = ":white_check_mark:" if verdict == "approved" else ":no_entry_sign:"
+                note = f"{icon} *{verdict.capitalize()}* by <@{user}> · {statement}"
             except Exception as e:
                 note = f"Couldn't record it: {e}"
             alert = next((a for a in _alerts(self.graph) if a["id"] == alert_id), {"id": alert_id})
-            blocks = alert_blocks(alert, decided=note) if "summary" in alert else None
+            blocks = (
+                alert_blocks(alert, decided=note, resolve=self.resolve)
+                if "summary" in alert
+                else None
+            )
             client.chat_update(channel=channel, ts=ts, text=note, blocks=blocks)
             self.on_message()  # deliver the approved drafts now
 
@@ -316,7 +306,7 @@ class SlackBot:
             "chat_postMessage",
             channel=channel,
             text=alert["summary"],
-            blocks=alert_blocks(alert),
+            blocks=alert_blocks(alert, resolve=self.resolve),
             unfurl_links=False,
         )
         return r["ts"]

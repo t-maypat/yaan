@@ -177,9 +177,14 @@ def test_comments_go_on_the_ticket(conn, monkeypatch):
     )
     assert ref == "https://lore-demo.atlassian.net/browse/VIZ-1?focusedCommentId=77"
     path, body = conn.seen["posted"][-1]
-    assert (
-        path.endswith("/issue/VIZ-1/comment") and len(body["content"]) == 2
-    )  # one ADF paragraph a line
+    assert path.endswith("/issue/VIZ-1/comment")
+    panel, items, footer = body["content"]  # a Lore panel, one list item a line, the footer
+    assert panel["type"] == "panel" and panel["attrs"]["panelType"] == "warning"  # a correction
+    assert items["type"] == "bulletList" and len(items["content"]) == 2
+    assert conn.link("msg:synthetic-jira-VIZ-1-change-101") == (
+        "Jira VIZ-1",
+        "https://lore-demo.atlassian.net/browse/VIZ-1",
+    )
     monkeypatch.setattr(
         jira.db,
         "run",

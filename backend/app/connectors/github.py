@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 
 from app import db
-from app.connectors import base
+from app.connectors import base, render
 from app.connectors.base import ConnectorError, Item, Maps
 from app.ingest.normalize import Artifact
 
@@ -134,7 +134,15 @@ class GitHubConnector:
         )
         return Item(a, updated_ms=ms(pr["updated_at"]) or created)
 
-    def post(self, action: dict[str, Any]) -> str | None:
+    def link(self, artifact_id: str) -> render.Link | None:
+        """A sandbox PR's label and url."""
+        prefix = self.pr_id(0)[: -len("0")]
+        n = artifact_id.removeprefix(prefix)
+        if not artifact_id.startswith(prefix) or not n.isdigit():
+            return None
+        return f"PR #{n}", f"https://github.com/{self.repo}/pull/{n}"
+
+    def post(self, action: dict[str, Any], resolve: render.Resolve | None = None) -> str | None:
         """A comment on the sandbox PR the action aims at, or on the sandbox PR that fixes the
         issue a ticket comment is about."""
         target = action.get("target_id") or ""
@@ -150,10 +158,9 @@ class GitHubConnector:
         if not numbers:
             return None
         refs = []
+        body = render.markdown(action, resolve or self.link)
         for n in numbers:
-            r = self.http.post(
-                f"/repos/{self.repo}/issues/{n}/comments", json={"body": action["draft"]}
-            )
+            r = self.http.post(f"/repos/{self.repo}/issues/{n}/comments", json={"body": body})
             if r.status_code >= 400:
                 raise ConnectorError(
                     f"GitHub comment on #{n}: {r.status_code} {r.json().get('message', '')}"

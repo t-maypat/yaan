@@ -109,9 +109,15 @@ def test_comments_go_on_the_targeted_pr_or_the_issues_fix_pr(conn, monkeypatch):
     ref = conn.post(
         {"id": "a1", "kind": "ticket_comment", "target_id": "iss:VizForce:1", "draft": "Regressed."}
     )
-    assert ref == f"https://github.com/{REPO}/pull/1#c1" and conn.posted == [(1, "Regressed.")]
+    assert ref == f"https://github.com/{REPO}/pull/1#c1" and conn.posted[0][0] == 1
+    assert (
+        conn.posted[0][1].startswith("### Lore Sentinel · Follow-up")
+        and "- Regressed." in (conn.posted[0][1])
+    )
     conn.post({"id": "a2", "kind": "doc_fix", "target_id": conn.pr_id(2), "draft": "Note."})
-    assert conn.posted[-1] == (2, "Note.")
+    assert conn.posted[-1][0] == 2 and "Correction" in conn.posted[-1][1]
+    assert conn.link(conn.pr_id(7)) == ("PR #7", f"https://github.com/{REPO}/pull/7")
+    assert conn.link("pr:github_com_salesforce_x_pull_3") is None  # HERB's: no sandbox url
     assert (
         conn.post({"id": "a3", "kind": "notify_owner", "target_id": "eid_1", "draft": "x"}) is None
     )
@@ -122,7 +128,7 @@ def test_a_ticket_comment_goes_to_every_tool_that_holds_it(monkeypatch):
         def __init__(self, name):
             self.name = name
 
-        def post(self, action):
+        def post(self, action, resolve=None):
             return f"https://{self.name}/{action['id']}"
 
     marked = []

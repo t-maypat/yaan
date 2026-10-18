@@ -11,6 +11,7 @@ import time
 from typing import Any
 
 from app import db
+from app.connectors import render
 from app.connectors.base import Connector, ConnectorError, labeled
 from app.sentinel import live
 
@@ -75,11 +76,12 @@ def deliver(connectors: list[Connector], graph: str) -> tuple[list[dict], list[d
     every one that does); record where it went, so it is sent once."""
     sent, unsent = [], []
     pending = db.run("actions_to_send", {"limit": 100}, graph=graph).rows
+    resolve = render.resolver(connectors)  # each source cited as a link in its own tool
     for action in pending:
         errors, refs, via = [], [], []
         for c in connectors:
             try:
-                ref = c.post(action)
+                ref = c.post(action, resolve)
             except ConnectorError as e:  # reported, and the next connector may still take it
                 errors.append(f"{c.name}: {e}")
                 continue
@@ -159,6 +161,7 @@ def run_forever(graph: str | None = None, every_s: float = 30, say=print) -> Non
         from app.connectors.slack import SlackBot
 
         bot = SlackBot(st.slack_bot_token, st.slack_app_token, graph, on_message=wake.set)
+        bot.resolve = render.resolver(connectors)
         bot.start()
         say("slack: socket connected (@lore answers, alert cards)")
     say(f"connectors: {', '.join(c.name for c in connectors)} -> {graph}, every {every_s:g} s")

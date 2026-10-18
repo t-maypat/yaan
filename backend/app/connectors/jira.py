@@ -19,7 +19,7 @@ from typing import Any
 import httpx
 
 from app import db
-from app.connectors import base
+from app.connectors import base, render
 from app.connectors.base import ConnectorError, Item, Maps
 from app.ingest.normalize import Artifact
 
@@ -262,7 +262,12 @@ class JiraConnector:
         return items
 
     # --- writing ---------------------------------------------------------------------------
-    def post(self, action: dict[str, Any]) -> str | None:
+    def link(self, artifact_id: str) -> render.Link | None:
+        """A Jira-held artifact's label and the ticket's url."""
+        key = self.key_of(artifact_id)
+        return (f"Jira {key}", f"{self.http.base_url}/browse/{key}") if key else None
+
+    def post(self, action: dict[str, Any], resolve: render.Resolve | None = None) -> str | None:
         target = action.get("target_id") or ""
         key = self.key_of(target)
         if key is None and action["kind"] == "ticket_comment" and target.startswith("iss:"):
@@ -273,6 +278,8 @@ class JiraConnector:
         if key is None:
             return None
         out = self._req(
-            "POST", f"/rest/api/3/issue/{key}/comment", json={"body": adf(action["draft"])}
+            "POST",
+            f"/rest/api/3/issue/{key}/comment",
+            json={"body": render.jira_adf(action, resolve or self.link)},
         )
         return f"{self.http.base_url}/browse/{key}?focusedCommentId={out['id']}"

@@ -40,7 +40,7 @@ class Fake:
     def fetch(self, since_ms):
         return [i for i in self.items if i.updated_ms > since_ms]
 
-    def post(self, action):
+    def post(self, action, resolve=None):
         if self.fails:
             raise base.ConnectorError("token expired")
         if self.takes and action["target_id"].startswith(self.takes):

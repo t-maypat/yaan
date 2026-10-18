@@ -185,7 +185,7 @@ class NotionConnector:
         return items
 
     # --- writing ---------------------------------------------------------------------------
-    def post(self, action: dict[str, Any]) -> str | None:
+    def post(self, action: dict[str, Any], resolve: Any = None) -> str | None:
         target = action.get("target_id") or ""
         doc_prefix = base.synthetic_id("doc", "notion", "x")[:-1]
         msg_prefix = base.synthetic_id("msg", "notion", "x")[:-1]

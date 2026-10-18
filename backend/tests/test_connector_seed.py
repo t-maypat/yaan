@@ -107,13 +107,14 @@ def test_setup_writes_the_story_in_order_and_labeled():
 
 def test_regression_posts_a_message_the_slack_connector_will_read():
     class Slack:
-        def chat_postMessage(self, channel, text):
-            self.sent = (channel, text)
+        def chat_postMessage(self, channel, text, **persona):
+            self.sent = (channel, text, persona)
             return {"ts": "1.2"}
 
     s = Slack()
     assert seed.regression(s, "C1", say=lambda m: None) == "1.2"
     assert s.sent[1].startswith(SEEDED) and seed.TITLE in s.sent[1]
+    assert s.sent[2]["username"].startswith("Ian Davis")  # shown as the persona (customize)
 
 
 def test_a_second_take_updates_the_merged_file_on_a_new_branch():

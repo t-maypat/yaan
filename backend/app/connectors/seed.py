@@ -198,6 +198,20 @@ def setup(
 
 
 def regression(slack_client: Any, channel_id: str, say: Callable[[str], None] = print) -> str:
-    r = slack_client.chat_postMessage(channel=channel_id, text=REGRESSION)
+    """The re-report, shown under the persona's name when the app has chat:write.customize
+    (the label stays in the text: it marks the item synthetic and names who it's written as)."""
+    from slack_sdk.errors import SlackApiError
+
+    try:
+        r = slack_client.chat_postMessage(
+            channel=channel_id,
+            text=REGRESSION,
+            username="Ian Davis · synthetic demo",
+            icon_emoji=":bust_in_silhouette:",
+        )
+    except SlackApiError as e:
+        if (e.response or {}).get("error") != "missing_scope":
+            raise
+        r = slack_client.chat_postMessage(channel=channel_id, text=REGRESSION)
     say(f"slack: posted the customer re-report in #{channel_id} (ts {r['ts']})")
     return r["ts"]
