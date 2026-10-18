@@ -91,6 +91,14 @@ def test_keywords_drop_stopwords_and_any_query_syntax():
     assert tools.keywords("what is the") == ""
 
 
+def test_keywords_keep_the_products_own_name():
+    """Measured on dev (D042): dropping it cost 0.17 full-text hit@10, since within one
+    product's files the name separates that team's discussion from HERB's distractors."""
+    assert tools.keywords("Demo URLs shared for abAIX's competitors?") == (
+        "demo | urls | shared | abaix | competitors"
+    )
+
+
 def test_rrf_rewards_agreement_and_keeps_one_chunk_per_artifact():
     def row(chunk, artifact):
         return {
@@ -183,6 +191,88 @@ def test_people_adds_authors_and_participants(searchable):
     assert meeting["participants"] == ["eid_aaaa0002", "eid_aaaa0003"]
     plain = tools.search_artifacts("put on hold", mode="fulltext", graph=searchable)
     assert "authors" not in plain["results"][0]
+
+
+# --- product-scoped vector search (4.9, D042) ----------------------------------------------
+def unit(*weights: tuple[int, float]) -> list[float]:
+    v = [0.0] * 384
+    for i, w in weights:
+        v[i] = w
+    norm = math.sqrt(sum(x * x for x in v))
+    return [x / norm for x in v]
+
+
+QUERY = unit((0, 1.0))
+# Product B's 20 chunks all sit nearer the query (cosine ≈ 0.995) than any of product A's,
+# the situation where "nearest chunks graph-wide, then drop other products" finds nothing.
+TWO_PRODUCTS = (
+    [("B", f"b{i}", unit((0, 1.0), (10 + i, 0.1))) for i in range(20)]
+    + [("A", f"a{j}", unit((0, w), (50 + j, 1.0))) for j, w in enumerate([1.0, 0.8, 0.6, 0.4])]
+    + [(p, "shared", unit((0, 0.9), (60, 1.0))) for p in ("A", "B")]  # a link in both products
+)
+LOAD_TWO_PRODUCTS = """
+UNWIND $rows AS r
+MERGE (p:Product:Entity {id: r.product})
+MERGE (a:Artifact:Message {id: r.artifact})
+SET a.kind = 'message', a.ts_iso = '2026-01-01T00:00:00Z'
+MERGE (a)-[:IN_PRODUCT]->(p)
+MERGE (c:Chunk {id: r.artifact + ':0'})
+SET c.text = r.artifact, c.field = 'text', c.kind = 'message', c.ts_ms = 0,
+    c.embedding = vecf32(r.v)
+MERGE (a)-[:HAS_CHUNK]->(c)
+"""
+
+
+@pytest.fixture
+def two_products(empty_graph, monkeypatch):
+    from app import db
+
+    rows = [{"product": p, "artifact": a, "v": v} for p, a, v in TWO_PRODUCTS]
+    db.run_text(
+        LOAD_TWO_PRODUCTS, {"rows": rows}, label="two_products", graph=empty_graph, readonly=False
+    )
+    monkeypatch.setattr(tools, "embed_query", lambda text: QUERY)
+    return empty_graph
+
+
+@pytest.mark.db
+def test_scoped_vector_search_ranks_the_products_own_chunks_exactly(two_products):
+    out = tools.search_artifacts("anything", product_id="A", mode="vector", graph=two_products)
+    assert out["cypher"] == ["search_vector_scoped.cypher"]
+    cosine = {a: sum(q * x for q, x in zip(QUERY, v, strict=True)) for p, a, v in TWO_PRODUCTS}
+    expected = sorted(("a0", "a1", "a2", "a3", "shared"), key=lambda a: -cosine[a])
+    assert out["evidence_ids"] == expected == ["a0", "shared", "a1", "a2", "a3"]
+    other = tools.search_artifacts("anything", product_id="B", mode="vector", graph=two_products)
+    assert all(a.startswith("b") or a == "shared" for a in other["evidence_ids"])
+
+
+@pytest.mark.db
+def test_the_index_path_loses_a_product_crowded_out_by_others(two_products):
+    """Why 4.9 exists: the nearest 10 chunks graph-wide are all B's, so filtering them to
+    product A leaves nothing, though A has 5 matching chunks."""
+    from app import db
+
+    params = {"qvec": QUERY, "fetch": 10, "k": 10, "product_id": "A"}
+    params |= {"kinds": None, "since_ms": None, "until_ms": None}
+    assert db.run("search_vector", params, graph=two_products).rows == []
+    assert len(db.run("search_vector_scoped", params, graph=two_products).rows) == 5
+
+
+@pytest.mark.db
+def test_unscoped_vector_search_keeps_the_index(two_products):
+    out = tools.search_artifacts("anything", mode="vector", k=3, graph=two_products)
+    assert out["cypher"] == ["search_vector.cypher"]
+    assert all(a.startswith("b") for a in out["evidence_ids"])
+
+
+@pytest.mark.db
+def test_scoped_vector_search_starts_from_the_product_index(empty_graph):
+    from app import db
+
+    params = {"qvec": QUERY, "k": 10, "product_id": "A"}
+    params |= {"kinds": None, "since_ms": None, "until_ms": None}
+    plan = " / ".join(db.explain("search_vector_scoped", params, graph=empty_graph))
+    assert "Node By Index Scan" in plan and "Label Scan" not in plan
 
 
 @pytest.mark.db

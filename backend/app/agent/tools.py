@@ -13,7 +13,11 @@ from app import db
 from app.ingest.chunk_embed import embed_query
 
 RRF_K = 60  # reciprocal rank fusion constant (Cormack et al.); damps the top ranks
-FETCH_FACTOR = 5  # over-fetch per list so filters and per-artifact grouping still leave k
+# Chunks per list fed to fusion, per result wanted: enough for per-artifact grouping to
+# leave k. Deeper lists let weak matches found by both lists crowd out strong hits found by
+# one; dev hybrid hit@20 is 0.958 at 3 vs 0.906 at 5 (D042).
+DEPTH_FACTOR = 3
+INDEX_FACTOR = 5  # the graph-wide vector index is asked for more: its filters apply after it
 MAX_FETCH = 200
 MAX_KEYWORDS = 12
 SNIPPET_CHARS = 300
@@ -34,7 +38,9 @@ def keywords(text: str) -> str:
 
     FalkorDB full-text ANDs every word and has no stopword list, so a raw question would
     require "what", "the" and every other word to appear. Words are \\w+ tokens, so no
-    query syntax (`|`, `-`, `%`, quotes) can come from the user's text.
+    query syntax (`|`, `-`, `%`, quotes) can come from the user's text. The product's own
+    name stays in: within one product's files it separates that team's discussion from
+    HERB's distractors (dropping it cost 0.17 full-text hit@10 on dev, D042).
     """
     words = [w for w in re.findall(r"\w+", text.lower()) if len(w) > 1 and w not in STOPWORDS]
     return " | ".join(list(dict.fromkeys(words))[:MAX_KEYWORDS])
@@ -60,7 +66,7 @@ def search_artifacts(
     from get_artifact instead). `people` adds each artifact's author and participant ids,
     the metadata HERB's own RAG documents carry (D036).
     """
-    fetch = min(MAX_FETCH, k * FETCH_FACTOR)
+    fetch = min(MAX_FETCH, k * DEPTH_FACTOR)
     filters = {"kinds": kinds, "product_id": product_id, "since_ms": since_ms, "until_ms": until_ms}
     lists: dict[str, list[dict[str, Any]]] = {}
     timings: dict[str, float] = {}
@@ -78,10 +84,14 @@ def search_artifacts(
         vector = embed_query(query)
         timings["embed_ms"] = ms_since(started)
         started = time.perf_counter()
-        params = {"qvec": vector, "fetch": fetch, "k": fetch, **filters}
-        lists["vector"] = db.run("search_vector", params, graph=graph).rows
+        # With a product, score that product's own chunks exactly: the index returns the
+        # nearest chunks graph-wide, and filtering those by product loses most of them once
+        # several products share the graph (D042). Unscoped searches keep the index.
+        name = "search_vector" if product_id is None else "search_vector_scoped"
+        params = {"qvec": vector, "fetch": min(MAX_FETCH, k * INDEX_FACTOR), "k": fetch, **filters}
+        lists["vector"] = db.run(name, params, graph=graph).rows
         timings["vector_ms"] = ms_since(started)
-        used.append("search_vector.cypher")
+        used.append(f"{name}.cypher")
 
     results = fuse(lists, k, full_text)
     if people and results:
