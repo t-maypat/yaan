@@ -16,10 +16,10 @@ Replace the placeholders in `index.html`:
 - `{VIDEO_URL}`: the 3-minute demo video
 - `{REPO_URL}`: the GitHub repo (also used for `#cypher-queries-and-algorithms` and `/blob/main/eval/report.md`)
 - `{BLOG_URL}`: the blog post
-- `{APP_URL}`: the deployed app (the API's Docker image serves the built UI). Build the app with `VITE_SITE_URL=<this site>` to get its "About Lore" link back here.
+- `{SNAPSHOT_URL}`: the release asset with the demo graph snapshot (used in `docs.html`, step 4)
 
 ```
-sed -i 's#{VIDEO_URL}#https://…#g; s#{REPO_URL}#https://github.com/…#g; s#{BLOG_URL}#https://…#g; s#{APP_URL}#https://…#g' site/index.html
+sed -i 's#{VIDEO_URL}#https://…#g; s#{REPO_URL}#https://github.com/…#g; s#{BLOG_URL}#https://…#g; s#{SNAPSHOT_URL}#https://…#g' site/index.html site/docs.html
 ```
 
 ## Protecting a public deployment

@@ -306,7 +306,7 @@ docker compose --profile app run --rm api lore seed --from <snapshot URL from th
 - **Development:** `uv sync --project backend`, `uv run --project backend pytest backend` (1,000+ tests), `npm --prefix frontend run dev`. The `Makefile` wraps the same commands on Linux and macOS.
 
 ## Data and license
-[HERB](https://huggingface.co/datasets/Salesforce/HERB) by Salesforce AI Research, a public **synthetic** enterprise dataset, licensed **CC BY-NC 4.0** ([paper](https://arxiv.org/abs/2506.23139)). Lore uses no real company's or person's data. Demo and connector items are synthetic too and labeled `[synthetic demo …]`. The snapshot redistributes HERB-derived data under the same license, with attribution.
+**Code:** Apache-2.0 ([LICENSE](LICENSE)). **Data:** [HERB](https://huggingface.co/datasets/Salesforce/HERB) by Salesforce AI Research, a public **synthetic** enterprise dataset, licensed **CC BY-NC 4.0** ([paper](https://arxiv.org/abs/2506.23139)). Lore uses no real company's or person's data. Demo and connector items are synthetic too and labeled `[synthetic demo …]`. The snapshot redistributes HERB-derived data under the same license, with attribution.
 
 ## Evaluation methodology
 See [eval/report.md](eval/report.md): the dev/held-out split and its guard, the systems (each one change apart), the judge, the drift set, the error analysis, the declared deviations, and the reproduction commands. Decisions and verified facts are logged in [docs/decisions.md](docs/decisions.md); beginner-level guides to every part are in [docs/learn/](docs/learn/README.md).

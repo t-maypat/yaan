@@ -36,15 +36,16 @@
       <a href="#how">How it works</a>
       <a href="#results">Benchmarks</a>
       <a href="#features">Features</a>
+      <a href="#selfhost">Self-hosted</a>
       <a href="#falkordb">Why FalkorDB</a>
+      <a href="docs.html">Docs</a>
     </nav>
     <div class="nav-actions">
       <button class="icon-btn" id="themeToggle" type="button" aria-label="Switch to dark theme">
         <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>
         <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.3 8.3 0 0 1 9.4 4a8.3 8.3 0 1 0 10.6 10.6Z"/></svg>
       </button>
-      <a class="icon-btn" href="{REPO_URL}" aria-label="Yaan on GitHub"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span></a>
-      <a class="btn btn-line btn-sm nav-app" href="{APP_URL}">Open the app</a>
+      <a class="icon-btn" href="{REPO_URL}" aria-label="Yaan on GitHub"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span></a>
       <a class="btn btn-ink btn-sm" href="{VIDEO_URL}">Watch the demo</a>
     </div>
   </div>
@@ -58,7 +59,7 @@
   <div class="hero-fade" aria-hidden="true"></div>
 
   <div class="hero-copy">
-    <p class="powered">Powered by <span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></p>
+    <p class="powered"><span class="pw-os"><span class="pw-dot" aria-hidden="true"></span>Open source, self-hosted</span><span class="pw-sep" aria-hidden="true"></span>Powered by <span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></p>
     <h1 class="hero-title">The company brain that knows what’s still true.</h1>
     <p class="hero-sub">Yaan turns your team’s Slack, meetings, pull requests, tickets and docs into a time-aware graph of people, work and decisions. Ask what’s true now, what was true then, why, and who knows, with a word-for-word source for every sentence.</p>
     <div class="hero-ctas">
@@ -66,7 +67,8 @@
         <svg class="play" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9.2"/><path d="M8.2 6.6v6.8l5.4-3.4z"/></svg>
         Watch the 3-minute demo
       </a>
-      <a class="btn btn-line" href="{REPO_URL}"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span>View on GitHub</a>
+      <a class="btn btn-line" href="docs.html">Self-host it</a>
+      <a class="btn btn-ghost" href="{REPO_URL}"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span>View on GitHub</a>
     </div>
   </div>
 
@@ -131,40 +133,40 @@
   <div class="marquee" id="marquee">
     <div class="mq-track">
       <ul class="mq-set">
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/slack.svg)"></span><span class="mq-n">Slack</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/linear.svg)"></span><span class="mq-n">Linear</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span><span class="mq-n">GitHub</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/confluence.svg)"></span><span class="mq-n">Confluence</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/jira.svg)"></span><span class="mq-n">Jira</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/gitlab.svg)"></span><span class="mq-n">GitLab</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/notion.svg)"></span><span class="mq-n">Notion</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/googledrive.svg)"></span><span class="mq-n">Google Drive</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/modelcontextprotocol.svg)"></span><span class="mq-n">MCP</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/googlemeet.svg)"></span><span class="mq-n">Google Meet</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span><span class="mq-n">Claude Code</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/zoom.svg)"></span><span class="mq-n">Zoom</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span><span class="mq-n">Cursor</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/discord.svg)"></span><span class="mq-n">Discord</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/openai.svg)"></span><span class="mq-n">Codex</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/gmail.svg)"></span><span class="mq-n">Gmail</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/slack.svg)"></span><span class="mq-n">Slack</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/linear.svg)"></span><span class="mq-n">Linear</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span><span class="mq-n">GitHub</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/confluence.svg)"></span><span class="mq-n">Confluence</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/jira.svg)"></span><span class="mq-n">Jira</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/gitlab.svg)"></span><span class="mq-n">GitLab</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/notion.svg)"></span><span class="mq-n">Notion</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/googledrive.svg)"></span><span class="mq-n">Google Drive</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/modelcontextprotocol.svg);--icon-d:url(assets/icons/color/modelcontextprotocol-d.svg)"></span><span class="mq-n">MCP</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/googlemeet.svg)"></span><span class="mq-n">Google Meet</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/claude.svg)"></span><span class="mq-n">Claude Code</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/zoom.svg)"></span><span class="mq-n">Zoom</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/cursor.svg);--icon-d:url(assets/icons/color/cursor-d.svg)"></span><span class="mq-n">Cursor</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/discord.svg)"></span><span class="mq-n">Discord</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/openai.svg);--icon-d:url(assets/icons/color/openai-d.svg)"></span><span class="mq-n">Codex</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/gmail.svg)"></span><span class="mq-n">Gmail</span></li>
       </ul>
       <ul class="mq-set" aria-hidden="true">
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/slack.svg)"></span><span class="mq-n">Slack</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/linear.svg)"></span><span class="mq-n">Linear</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span><span class="mq-n">GitHub</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/confluence.svg)"></span><span class="mq-n">Confluence</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/jira.svg)"></span><span class="mq-n">Jira</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/gitlab.svg)"></span><span class="mq-n">GitLab</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/notion.svg)"></span><span class="mq-n">Notion</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/googledrive.svg)"></span><span class="mq-n">Google Drive</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/modelcontextprotocol.svg)"></span><span class="mq-n">MCP</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/googlemeet.svg)"></span><span class="mq-n">Google Meet</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span><span class="mq-n">Claude Code</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/zoom.svg)"></span><span class="mq-n">Zoom</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span><span class="mq-n">Cursor</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/discord.svg)"></span><span class="mq-n">Discord</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/openai.svg)"></span><span class="mq-n">Codex</span></li>
-          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/gmail.svg)"></span><span class="mq-n">Gmail</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/slack.svg)"></span><span class="mq-n">Slack</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/linear.svg)"></span><span class="mq-n">Linear</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span><span class="mq-n">GitHub</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/confluence.svg)"></span><span class="mq-n">Confluence</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/jira.svg)"></span><span class="mq-n">Jira</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/gitlab.svg)"></span><span class="mq-n">GitLab</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/notion.svg)"></span><span class="mq-n">Notion</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/googledrive.svg)"></span><span class="mq-n">Google Drive</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/modelcontextprotocol.svg);--icon-d:url(assets/icons/color/modelcontextprotocol-d.svg)"></span><span class="mq-n">MCP</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/googlemeet.svg)"></span><span class="mq-n">Google Meet</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/claude.svg)"></span><span class="mq-n">Claude Code</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/zoom.svg)"></span><span class="mq-n">Zoom</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/cursor.svg);--icon-d:url(assets/icons/color/cursor-d.svg)"></span><span class="mq-n">Cursor</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/discord.svg)"></span><span class="mq-n">Discord</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/color/openai.svg);--icon-d:url(assets/icons/color/openai-d.svg)"></span><span class="mq-n">Codex</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/color/gmail.svg)"></span><span class="mq-n">Gmail</span></li>
       </ul>
     </div>
   </div>
@@ -204,7 +206,7 @@
         <!-- Scene 1: connect. Four sources narrow into one pipeline that feeds one service. -->
         <div class="scene scene-connect is-active" data-scene="0">
           <div class="hg">
-            <div class="hg-cols"><div class="hg-col"><span class="hg-src"><span class="glyph" style="--icon:url(assets/icons/slack.svg)"></span>Slack</span><span class="hg-lane"><i class="drop" style="--d:0.00s">msg:…1bc7a</i><i class="drop" style="--d:1.45s">msg:…ca81d</i><i class="drop" style="--d:2.90s">msg:…47b0c</i></span></div><div class="hg-col"><span class="hg-src"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span>GitHub</span><span class="hg-lane"><i class="drop" style="--d:0.55s">PR #53</i><i class="drop" style="--d:2.00s">PR #55</i><i class="drop" style="--d:3.45s">review</i></span></div><div class="hg-col"><span class="hg-src"><span class="glyph" style="--icon:url(assets/icons/jira.svg)"></span>Jira</span><span class="hg-lane"><i class="drop" style="--d:1.10s">ticket reopened</i><i class="drop" style="--d:2.55s">KAN-1</i></span></div><div class="hg-col"><span class="hg-src"><span class="glyph" style="--icon:url(assets/icons/notion.svg)"></span>Notion</span><span class="hg-lane"><i class="drop" style="--d:1.65s">design review</i><i class="drop" style="--d:3.10s">spec v2</i></span></div></div>
+            <div class="hg-cols"><div class="hg-col"><span class="hg-src"><span class="glyph" style="--icon:url(assets/icons/color/slack.svg)"></span>Slack</span><span class="hg-lane"><i class="drop" style="--d:0.00s">msg:…1bc7a</i><i class="drop" style="--d:1.45s">msg:…ca81d</i><i class="drop" style="--d:2.90s">msg:…47b0c</i></span></div><div class="hg-col"><span class="hg-src"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span>GitHub</span><span class="hg-lane"><i class="drop" style="--d:0.55s">PR #53</i><i class="drop" style="--d:2.00s">PR #55</i><i class="drop" style="--d:3.45s">review</i></span></div><div class="hg-col"><span class="hg-src"><span class="glyph" style="--icon:url(assets/icons/color/jira.svg)"></span>Jira</span><span class="hg-lane"><i class="drop" style="--d:1.10s">ticket reopened</i><i class="drop" style="--d:2.55s">KAN-1</i></span></div><div class="hg-col"><span class="hg-src"><span class="glyph" style="--icon:url(assets/icons/color/notion.svg)"></span>Notion</span><span class="hg-lane"><i class="drop" style="--d:1.65s">design review</i><i class="drop" style="--d:3.10s">spec v2</i></span></div></div>
             <svg class="hg-funnel" viewBox="0 0 600 96" aria-hidden="true"><path id="hgp0" d="M75 0 C75 52, 296 40, 296 96"/><path id="hgp1" d="M225 0 C225 50, 298 46, 298 96"/><path id="hgp2" d="M375 0 C375 50, 302 46, 302 96"/><path id="hgp3" d="M525 0 C525 52, 304 40, 304 96"/><circle r="4" class="hg-dot"><animateMotion dur="1.8s" begin="0.00s" repeatCount="indefinite" rotate="auto"><mpath href="#hgp0"/></animateMotion></circle><circle r="4" class="hg-dot"><animateMotion dur="1.8s" begin="0.45s" repeatCount="indefinite" rotate="auto"><mpath href="#hgp1"/></animateMotion></circle><circle r="4" class="hg-dot"><animateMotion dur="1.8s" begin="0.90s" repeatCount="indefinite" rotate="auto"><mpath href="#hgp2"/></animateMotion></circle><circle r="4" class="hg-dot"><animateMotion dur="1.8s" begin="1.35s" repeatCount="indefinite" rotate="auto"><mpath href="#hgp3"/></animateMotion></circle></svg>
             <div class="hg-neck" aria-hidden="true"><i></i></div>
             <div class="hg-core">
@@ -234,18 +236,20 @@
           <p class="rm-foot">Nothing is deleted. A new fact closes the old one’s window and both stay in the graph, so “what was true on 25 Feb?” is one lookup.</p>
         </div>
 
-        <!-- Scene 3: act. The alert reaches the AI tool the team already uses. -->
+        <!-- Scene 3: act. The alert reaches the AI tool the team already uses; each client in its own look. -->
         <div class="scene scene-act" data-scene="2">
-          <div class="cw">
-            <div class="cw-bar">
-              <span class="cw-tab on"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span>Claude Code</span>
-              <span class="cw-tab"><span class="glyph" style="--icon:url(assets/icons/openai.svg)"></span>Codex</span>
-              <span class="cw-tab"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span>Cursor</span>
+          <div class="cw" data-client="claude">
+            <div class="cw-bar" role="tablist" aria-label="AI client">
+              <button type="button" role="tab" class="cw-tab" data-c="claude" aria-selected="true"><span class="glyph" style="--icon:url(assets/icons/color/claude.svg)"></span>Claude Code</button>
+              <button type="button" role="tab" class="cw-tab" data-c="codex" aria-selected="false"><span class="glyph" style="--icon:url(assets/icons/color/openai.svg);--icon-d:url(assets/icons/color/openai-d.svg)"></span>Codex</button>
+              <button type="button" role="tab" class="cw-tab" data-c="cursor" aria-selected="false"><span class="glyph" style="--icon:url(assets/icons/color/cursor.svg);--icon-d:url(assets/icons/color/cursor-d.svg)"></span>Cursor</button>
               <span class="cw-mcp">via MCP</span>
             </div>
-            <div class="cw-body">
-              <p class="cw-user"><span>›</span> anything break overnight?</p>
-              <p class="cw-tool"><i></i>yaan · open_alerts <span>12 ms</span></p>
+
+            <div class="cw-body cw-claude" data-c="claude" role="tabpanel">
+              <p class="cc-head"><span class="cc-star" aria-hidden="true">✻</span>Claude Code <span>~/acme</span></p>
+              <p class="cw-user"><span>&gt;</span> anything break overnight?</p>
+              <p class="cw-tool"><i></i>yaan · open_alerts <span>(MCP) 12 ms</span></p>
               <div class="cw-ai">
                 <p><span class="dot-warn"></span><b>One regression.</b> ‘Inefficient Caching Strategy’ was marked resolved on 24 Feb 2027 and reopened on 26 Feb 2027.</p>
                 <ul class="cw-radius">
@@ -263,14 +267,71 @@
                   <span class="replay-note">A replay: nothing is sent from this page.</span>
                 </div>
                 <ol class="delivery" aria-live="polite">
-                  <li><span class="glyph" style="--icon:url(assets/icons/jira.svg)"></span>Comment posted on the Jira ticket</li>
-                  <li><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span>Comment posted on PR #53</li>
+                  <li><span class="glyph" style="--icon:url(assets/icons/color/jira.svg)"></span>Comment posted on the Jira ticket</li>
+                  <li><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span>Comment posted on PR #53</li>
+                  <li><span class="shape s-dec"></span>Your approval recorded as a decision</li>
+                </ol>
+              </div>
+            </div>
+
+            <div class="cw-body cw-codex" data-c="codex" role="tabpanel" hidden>
+              <div class="cx-head"><b>&gt;_ OpenAI Codex</b><span>directory: ~/acme</span><span>mcp: yaan</span></div>
+              <p class="cx-user"><span>›</span> anything break overnight?</p>
+              <p class="cx-tool"><span>•</span> Called <b>yaan.open_alerts</b>({})</p>
+              <p class="cx-tree">└ 1 open alert · 12 ms</p>
+              <div class="cx-ai">
+                <p><b>One regression.</b> ‘Inefficient Caching Strategy’ was marked resolved on 24 Feb 2027 and reopened on 26 Feb 2027.</p>
+                <ul class="cw-radius">
+                  <li><span class="shape s-pr"></span>PR #53, the fix</li>
+                  <li><span class="shape s-person"></span>Hannah Johnson, wrote it</li>
+                  <li><span class="shape s-cust"></span>CUST-0011</li>
+                  <li><span class="shape s-co"></span>DataSolutions</li>
+                </ul>
+                <p class="cw-draft">Drafted follow-up for Jira and PR #53, quoting Bob Davis: <mark>“the customer has reopened the bug titled ‘Inefficient Caching Strategy’”</mark></p>
+              </div>
+              <div class="alert">
+                <div class="alert-actions">
+                  <button class="btn btn-ink btn-sm" data-approve type="button">Approve</button>
+                  <button class="btn btn-line btn-sm" data-dismiss type="button">Dismiss</button>
+                  <span class="replay-note">A replay: nothing is sent from this page.</span>
+                </div>
+                <ol class="delivery" aria-live="polite">
+                  <li><span class="glyph" style="--icon:url(assets/icons/color/jira.svg)"></span>Comment posted on the Jira ticket</li>
+                  <li><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span>Comment posted on PR #53</li>
+                  <li><span class="shape s-dec"></span>Your approval recorded as a decision</li>
+                </ol>
+              </div>
+            </div>
+
+            <div class="cw-body cw-cursor" data-c="cursor" role="tabpanel" hidden>
+              <div class="cu-head"><span class="cu-mode">∞ Agent</span><span class="cu-title">Overnight check</span></div>
+              <p class="cu-user">anything break overnight?</p>
+              <p class="cu-tool"><span class="cu-ok">✓</span>Called MCP tool <b>open_alerts</b><span>yaan</span></p>
+              <div class="cu-ai">
+                <p><b>One regression.</b> ‘Inefficient Caching Strategy’ was marked resolved on 24 Feb 2027 and reopened on 26 Feb 2027.</p>
+                <ul class="cw-radius">
+                  <li><span class="shape s-pr"></span>PR #53, the fix</li>
+                  <li><span class="shape s-person"></span>Hannah Johnson, wrote it</li>
+                  <li><span class="shape s-cust"></span>CUST-0011</li>
+                  <li><span class="shape s-co"></span>DataSolutions</li>
+                </ul>
+                <p class="cw-draft">Yaan drafted a follow-up for Jira and PR #53, quoting Bob Davis: <mark>“the customer has reopened the bug titled ‘Inefficient Caching Strategy’”</mark></p>
+              </div>
+              <div class="alert">
+                <div class="alert-actions">
+                  <button class="btn btn-ink btn-sm" data-approve type="button">Approve</button>
+                  <button class="btn btn-line btn-sm" data-dismiss type="button">Dismiss</button>
+                  <span class="replay-note">A replay: nothing is sent from this page.</span>
+                </div>
+                <ol class="delivery" aria-live="polite">
+                  <li><span class="glyph" style="--icon:url(assets/icons/color/jira.svg)"></span>Comment posted on the Jira ticket</li>
+                  <li><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span>Comment posted on PR #53</li>
                   <li><span class="shape s-dec"></span>Your approval recorded as a decision</li>
                 </ol>
               </div>
             </div>
           </div>
-          <p class="cw-alt">Claude Code shown. Codex, Cursor and any MCP client see the same alerts; Slack and the Yaan inbox carry the same Approve button.</p>
+          <p class="cw-alt">Pick your client: Claude Code, Codex or Cursor see the same alerts over MCP. Approve lands in the Yaan inbox or Slack.</p>
         </div>
       </div>
     </div>
@@ -346,9 +407,9 @@
     </div>
     <div class="byo">
       <div class="byo-icons" aria-hidden="true">
-        <span class="byo-ic"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span></span>
-        <span class="byo-ic"><span class="glyph" style="--icon:url(assets/icons/openai.svg)"></span></span>
-        <span class="byo-ic"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span></span>
+        <span class="byo-ic"><span class="glyph" style="--icon:url(assets/icons/color/claude.svg)"></span></span>
+        <span class="byo-ic"><span class="glyph" style="--icon:url(assets/icons/color/openai.svg);--icon-d:url(assets/icons/color/openai-d.svg)"></span></span>
+        <span class="byo-ic"><span class="glyph" style="--icon:url(assets/icons/color/cursor.svg);--icon-d:url(assets/icons/color/cursor-d.svg)"></span></span>
       </div>
       <div class="byo-copy">
         <h3>Use the Claude, Codex or Cursor subscription you already pay for.</h3>
@@ -356,11 +417,48 @@
       </div>
     </div>
     <ul class="logos">
-      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/slack.svg)"></span><span class="lg-n">Slack</span><span class="lg-d">Messages in. Answers, alerts and Approve out.</span></li>
-      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/github.svg)"></span><span class="lg-n">GitHub</span><span class="lg-d">PRs and reviews in. Comments on the PR out.</span></li>
-      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/jira.svg)"></span><span class="lg-n">Jira</span><span class="lg-d">Tickets in. Comments on the ticket out.</span></li>
-      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/notion.svg)"></span><span class="lg-n">Notion</span><span class="lg-d">Pages in.</span></li>
-      <li class="lg-mcp"><span class="glyph glyph-lg" style="--icon:url(assets/icons/modelcontextprotocol.svg)"></span><span class="lg-n">MCP</span><span class="lg-d">Yaan’s tools inside <span class="inl"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span>Claude</span>, <span class="inl"><span class="glyph" style="--icon:url(assets/icons/openai.svg)"></span>Codex</span> and <span class="inl"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span>Cursor</span>.</span></li>
+      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/color/slack.svg)"></span><span class="lg-n">Slack</span><span class="lg-d">Messages in. Answers, alerts and Approve out.</span></li>
+      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span><span class="lg-n">GitHub</span><span class="lg-d">PRs and reviews in. Comments on the PR out.</span></li>
+      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/color/jira.svg)"></span><span class="lg-n">Jira</span><span class="lg-d">Tickets in. Comments on the ticket out.</span></li>
+      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/color/notion.svg)"></span><span class="lg-n">Notion</span><span class="lg-d">Pages in.</span></li>
+      <li class="lg-mcp"><span class="glyph glyph-lg" style="--icon:url(assets/icons/color/modelcontextprotocol.svg);--icon-d:url(assets/icons/color/modelcontextprotocol-d.svg)"></span><span class="lg-n">MCP</span><span class="lg-d">Yaan’s tools inside <span class="inl"><span class="glyph" style="--icon:url(assets/icons/color/claude.svg)"></span>Claude</span>, <span class="inl"><span class="glyph" style="--icon:url(assets/icons/color/openai.svg);--icon-d:url(assets/icons/color/openai-d.svg)"></span>Codex</span> and <span class="inl"><span class="glyph" style="--icon:url(assets/icons/color/cursor.svg);--icon-d:url(assets/icons/color/cursor-d.svg)"></span>Cursor</span>.</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ OPEN SOURCE, SELF-HOSTED ============ -->
+<section class="section selfhost" id="selfhost">
+  <div class="wrap">
+    <div class="sh-top">
+      <div class="sh-copy">
+        <h2>Open source. Self‑hosted. Yours.</h2>
+        <p class="sec-lede">Yaan runs on your own servers under the Apache-2.0 license. Your company’s knowledge stays inside your network, and every line of code that touches it is open to read.</p>
+        <div class="sh-ctas">
+          <a class="btn btn-ink" href="docs.html">Read the self-hosting guide</a>
+          <a class="btn btn-line" href="{REPO_URL}"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span>Read the source</a>
+        </div>
+      </div>
+      <figure class="sh-map" aria-label="Everything runs inside your infrastructure; only calls to the AI model you choose leave it">
+        <div class="shm-net">
+          <span class="shm-k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Your infrastructure</span>
+          <div class="shm-row"><span class="shm-chip"><span class="glyph" style="--icon:url(assets/icons/color/slack.svg)"></span>Slack</span><span class="shm-chip"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span>GitHub</span><span class="shm-chip"><span class="glyph" style="--icon:url(assets/icons/color/jira.svg)"></span>Jira</span><span class="shm-chip"><span class="glyph" style="--icon:url(assets/icons/color/notion.svg)"></span>Notion</span></div>
+          <div class="shm-core">
+            <span class="shm-node"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="ym-arm" d="M7 6 L16 17 L25 6"/><path class="ym-stem" d="M16 17 V27"/><circle class="ym-node" cx="16" cy="17" r="3.3"/><rect class="ym-cite" x="3.4" y="2.4" width="7.2" height="7.2" rx="1.7"/><circle class="ym-src" cx="25" cy="6" r="3.3"/></svg>Yaan</span>
+            <span class="shm-link" aria-hidden="true"></span>
+            <span class="shm-node"><span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></span>
+          </div>
+          <div class="shm-row"><span class="shm-chip"><span class="glyph" style="--icon:url(assets/icons/color/claude.svg)"></span>Claude Code</span><span class="shm-chip"><span class="glyph" style="--icon:url(assets/icons/color/openai.svg);--icon-d:url(assets/icons/color/openai-d.svg)"></span>Codex</span><span class="shm-chip"><span class="glyph" style="--icon:url(assets/icons/color/cursor.svg);--icon-d:url(assets/icons/color/cursor-d.svg)"></span>Cursor</span></div>
+        </div>
+        <div class="shm-out"><span class="shm-arrow" aria-hidden="true"></span><span>AI model API<em>your key, optional</em></span></div>
+      </figure>
+    </div>
+    <ul class="sh-grid">
+      <li class="sh-item"><svg class="sh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><rect x="9.5" y="13" width="5" height="7" rx="1"/></svg><h3>Your data stays in your network</h3><p>Messages, pull requests and tickets go into a graph on your own disk. The only outside call is to the AI model you choose, with your own key.</p></li>
+      <li class="sh-item"><svg class="sh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><h3>Ready for more capable AI</h3><p>AI tools can read, never write. Generated queries run as a read-only database user with a time limit, and a person approves every action before it posts.</p></li>
+      <li class="sh-item"><svg class="sh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6h6v6H7.5c0 2 1 3.5 3.5 4"/><path d="M13 6h6v6h-3.5c0 2 1 3.5 3.5 4"/></svg><h3>Every claim carries its proof</h3><p>Each sentence quotes its source word for word, checked in code before you see it. No quote, no sentence.</p></li>
+      <li class="sh-item"><svg class="sh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 8-4 4 4 4"/><path d="m16 8 4 4-4 4"/><path d="m13.5 5-3 14"/></svg><h3>Read every line</h3><p>Apache-2.0. All 166 graph queries live in plain files, each with a test, so a security review is reading, not guessing.</p></li>
+      <li class="sh-item"><svg class="sh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="m12 17 4-5"/><circle cx="12" cy="17" r="1.2"/></svg><h3>Costs you control</h3><p>Use your own Anthropic key under a hard daily cap, or your team’s Claude, Codex or Cursor subscription over MCP. Graph lookups cost nothing.</p></li>
+      <li class="sh-item"><svg class="sh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.6-1.7"/></svg><h3>No lock-in</h3><p>Standard Cypher on FalkorDB. Dump the whole graph to one file and restore it on any machine.</p></li>
     </ul>
   </div>
 </section>
@@ -498,8 +596,8 @@
   <div class="wrap">
     <div class="sec-head">
       <h2 class="why-fk">Why <span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></h2>
-      <p class="sec-lede">Yaan’s answers live in the links between people, work and decisions, so the engine that holds those links decides how fast, and how right, an answer is. Yaan runs on FalkorDB: an in-memory graph database on Redis that stores adjacency as sparse matrices and runs traversals as linear algebra.</p>
-      <p class="rust"><span class="glyph rust-mark" style="--icon:url(assets/icons/rust.svg)" aria-hidden="true"></span>Rust-based, by the way. Yaan pins <span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span> 6.0.1, the new Rust engine.</p>
+      <p class="sec-lede">Yaan’s answers live in the links between people, work and decisions, so the engine that holds those links decides how fast, and how right, an answer is. Yaan runs on FalkorDB: the Rust-based, in-memory graph database on Redis that stores adjacency as sparse matrices and runs traversals as linear algebra.</p>
+      <p class="rust"><span class="glyph rust-mark" style="--icon:url(assets/icons/color/rust.svg);--icon-d:url(assets/icons/color/rust-d.svg)" aria-hidden="true"></span>Rust-based</p>
     </div>
 
     <ul class="proof">
@@ -724,10 +822,10 @@
   <div class="wrap next-grid">
     <div>
       <h2>Coming next</h2>
-      <p class="sec-lede">Today Yaan runs from the repo on your machine, and the demo app runs on a shared synthetic graph. There is no sign-in yet. These come next.</p>
+      <p class="sec-lede">Today you run Yaan on your own machine or server with one Docker command. These come next.</p>
     </div>
     <ul class="next-list">
-      <li><span class="nx-state">Planned</span><span class="nx-t">One-click install (OAuth) and a hosted version.</span></li>
+      <li><span class="nx-state">Planned</span><span class="nx-t">One-click connections (OAuth) for every tool.</span></li>
       <li><span class="nx-state">Planned</span><span class="nx-t">Permissions synced from Slack and GitHub.</span></li>
       <li><span class="nx-state">Planned</span><span class="nx-t">A graph per company, with your own retention rules.</span></li>
     </ul>
@@ -746,29 +844,41 @@
       </span>
       <span class="poster-shot" aria-hidden="true"><img src="assets/img/inbox-radius.png" alt="" width="1020" height="1040" loading="lazy"></span>
     </a>
-    <div class="closing-alt">
-      <p>Rather click around yourself? The app runs on the same synthetic demo graph: ask questions, scrub the timeline, approve an alert.</p>
-      <a class="btn btn-line" href="{APP_URL}">Open the app</a>
-    </div>
   </div>
 </section>
 
 </main>
 
 <footer class="foot">
-  <div class="wrap foot-grid">
-    <div class="foot-brand">
-      <a class="brand" href="#top"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="ym-arm" d="M7 6 L16 17 L25 6"/><path class="ym-stem" d="M16 17 V27"/><circle class="ym-node" cx="16" cy="17" r="3.3"/><rect class="ym-cite" x="3.4" y="2.4" width="7.2" height="7.2" rx="1.7"/><circle class="ym-src" cx="25" cy="6" r="3.3"/></svg><span>Yaan</span></a>
-      <p>The company brain that knows what’s still true.</p>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="brand" href="#top"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="ym-arm" d="M7 6 L16 17 L25 6"/><path class="ym-stem" d="M16 17 V27"/><circle class="ym-node" cx="16" cy="17" r="3.3"/><rect class="ym-cite" x="3.4" y="2.4" width="7.2" height="7.2" rx="1.7"/><circle class="ym-src" cx="25" cy="6" r="3.3"/></svg><span>Yaan</span></a>
+        <p>The company brain that knows what’s still true.</p>
+        <p class="foot-os">Open source under Apache-2.0. Runs on your own servers. Powered by <span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></p>
+      </div>
+      <nav class="foot-col" aria-label="Product">
+        <p class="foot-h">Product</p>
+        <a href="#how">How it works</a>
+        <a href="#results">Benchmarks</a>
+        <a href="#features">Features</a>
+        <a href="#falkordb">Why FalkorDB</a>
+      </nav>
+      <nav class="foot-col" aria-label="Get started">
+        <p class="foot-h">Get started</p>
+        <a href="docs.html">Self-hosting guide</a>
+        <a href="docs.html#architecture">Architecture</a>
+        <a href="{VIDEO_URL}">Watch the 3-minute demo</a>
+        <a href="{REPO_URL}">Source code on GitHub</a>
+      </nav>
+      <nav class="foot-col" aria-label="Learn more">
+        <p class="foot-h">Learn more</p>
+        <a href="{BLOG_URL}">The story behind Yaan</a>
+        <a href="{REPO_URL}/blob/main/eval/report.md">Full evaluation report</a>
+        <a href="https://arxiv.org/abs/2506.23139">Salesforce AI Research’s HERB paper</a>
+      </nav>
     </div>
-    <nav class="foot-links" aria-label="Footer">
-      <a href="{VIDEO_URL}">Demo video</a>
-      <a href="{REPO_URL}">GitHub</a>
-      <a href="{APP_URL}">The app</a>
-      <a href="{BLOG_URL}">Blog post</a>
-      <a href="{REPO_URL}/blob/main/eval/report.md">eval/report.md</a>
-    </nav>
-    <p class="foot-data">Demo data: <a href="https://arxiv.org/abs/2506.23139">HERB</a>, the enterprise benchmark from Salesforce AI Research (EMNLP 2025; synthetic, CC BY-NC 4.0), and labeled synthetic messages. No real company or personal data.</p>
+    <p class="foot-data"><b>About the demo data.</b> Everything you see here runs on HERB, a synthetic company dataset published by Salesforce AI Research (EMNLP 2025, CC BY-NC 4.0), plus a few demo messages we wrote and labeled as synthetic. No real company’s or person’s data appears anywhere.</p>
   </div>
 </footer>
 

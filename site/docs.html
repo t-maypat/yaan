@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yaan docs · self-host and connect</title>
+<meta name="description" content="Self-host Yaan in about 15 minutes, connect Slack, GitHub, Jira and Notion, and use it from Claude Code, Codex or Cursor. Plus how Yaan is built.">
+<meta name="theme-color" content="#f1f3f5">
+<link rel="icon" href="assets/favicon.svg?v=yaan" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=Schibsted+Grotesk:wght@400..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="docs.css">
+<script>
+  // Light by default; ?theme= or a saved choice wins. Before first paint, so no flash.
+  (function () {
+    var t = null;
+    try { t = new URLSearchParams(location.search).get('theme') || localStorage.getItem('lore-theme'); } catch (e) {}
+    document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+  })();
+</script>
+</head>
+<body class="docs">
+<a class="skip" href="#doc">Skip to content</a>
+
+<header class="nav is-scrolled" id="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html" aria-label="Yaan home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="ym-arm" d="M7 6 L16 17 L25 6"/><path class="ym-stem" d="M16 17 V27"/><circle class="ym-node" cx="16" cy="17" r="3.3"/><rect class="ym-cite" x="3.4" y="2.4" width="7.2" height="7.2" rx="1.7"/><circle class="ym-src" cx="25" cy="6" r="3.3"/></svg>
+      <span>Yaan</span><span class="docs-tag">Docs</span>
+    </a>
+    <nav class="nav-links" aria-label="Site">
+      <a href="index.html#how">How it works</a>
+      <a href="index.html#results">Benchmarks</a>
+      <a href="index.html#selfhost">Self-hosted</a>
+      <a href="docs.html" class="is-current">Docs</a>
+    </nav>
+    <div class="nav-actions">
+      <button class="icon-btn" id="themeToggle" type="button" aria-label="Switch to dark theme">
+        <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.3 8.3 0 0 1 9.4 4a8.3 8.3 0 1 0 10.6 10.6Z"/></svg>
+      </button>
+      <a class="icon-btn" href="{REPO_URL}" aria-label="Yaan on GitHub"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span></a>
+    </div>
+  </div>
+</header>
+
+<div class="docs-shell">
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-h">Self-host Yaan</p>
+    <a href="#overview">Overview</a>
+    <a href="#before">Before you start</a>
+    <a href="#step-1">1. Get the code</a>
+    <a href="#step-2">2. Make your settings</a>
+    <a href="#step-3">3. Start Yaan</a>
+    <a href="#step-4">4. Load the demo graph</a>
+    <a href="#step-5">5. Open Yaan</a>
+    <p class="toc-h">Connect</p>
+    <a href="#tools">Your tools</a>
+    <a href="#ai">Your AI client</a>
+    <p class="toc-h">Run it well</p>
+    <a href="#secure">Keep it secure</a>
+    <a href="#architecture">Architecture</a>
+  </aside>
+
+  <main class="doc" id="doc">
+
+    <section id="overview" class="doc-hero">
+      <p class="doc-kicker"><span class="pw-dot" aria-hidden="true"></span>Open source, Apache-2.0</p>
+      <h1>Self-host Yaan</h1>
+      <p class="doc-lede">This guide shows how to run Yaan on your own computer or server, connect your team’s tools, and use Yaan from the AI client you already have. You need about 15 minutes.</p>
+      <div class="doc-glance">
+        <div><b>5 steps</b><span>to a running Yaan</span></div>
+        <div><b>4 tools</b><span>Slack, GitHub, Jira, Notion</span></div>
+        <div><b>3 AI clients</b><span>Claude Code, Codex, Cursor</span></div>
+      </div>
+      <p class="doc-note"><b>Note:</b> Yaan’s internal name is <code>lore</code>. The commands, settings and files use this name.</p>
+    </section>
+
+    <section id="before">
+      <h2>Before you start</h2>
+      <ul class="need">
+        <li><span class="need-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18v4a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/><path d="M6 12V9h3v3M9 12V9h3v3M12 12V9h3v3M9 9V6h3v3"/></svg></span><div><b>Docker, with Docker Compose</b><span>On Windows and macOS, install Docker Desktop. On Linux, install Docker Engine and the Compose plugin.</span></div></li>
+        <li><span class="need-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M18 11.5c0 3-3 3.5-6 3.5H8"/></svg></span><div><b>Git</b><span>To get the code.</span></div></li>
+        <li><span class="need-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/></svg></span><div><b>An Anthropic API key (optional)</b><span>Without a key, you can browse the graph and use all graph tools. To ask new questions, you need a key.</span></div></li>
+      </ul>
+    </section>
+
+    <section id="step-1" class="step-doc">
+      <span class="sd-n">1</span>
+      <h2>Get the code</h2>
+      <p>Open a terminal. Run these commands:</p>
+      <pre class="code"><code>git clone {REPO_URL} yaan
+cd yaan</code></pre>
+    </section>
+
+    <section id="step-2" class="step-doc">
+      <span class="sd-n">2</span>
+      <h2>Make your settings</h2>
+      <p>Copy the example settings file:</p>
+      <pre class="code"><code>cp .env.example .env</code></pre>
+      <p>Open <code>.env</code> in a text editor. Change these values:</p>
+      <dl class="vars">
+        <div><dt><code>FALKORDB_ADMIN_PASSWORD</code><br><code>FALKORDB_WRITER_PASSWORD</code><br><code>FALKORDB_READER_PASSWORD</code></dt><dd>Set a different, strong password for each database user. Use only letters, digits and dashes.</dd></div>
+        <div><dt><code>ANTHROPIC_API_KEY</code></dt><dd>Paste your key here. This is optional.</dd></div>
+        <div><dt><code>LORE_DAILY_SPEND_CAP_USD</code></dt><dd>The maximum AI spend for one day, in US dollars. Yaan stops calls that could go above it.</dd></div>
+      </dl>
+      <p class="caution"><b>Caution:</b> Do not put <code>.env</code> into Git. It contains your passwords and keys.</p>
+    </section>
+
+    <section id="step-3" class="step-doc">
+      <span class="sd-n">3</span>
+      <h2>Start Yaan</h2>
+      <p>This command builds Yaan and starts it with its FalkorDB database:</p>
+      <pre class="code"><code>docker compose --profile app up -d --build</code></pre>
+      <p>The first build takes some minutes. Later starts are fast.</p>
+    </section>
+
+    <section id="step-4" class="step-doc">
+      <span class="sd-n">4</span>
+      <h2>Load the demo graph</h2>
+      <p>Load the ready-made graph. It holds a synthetic company, so you can try Yaan before you connect your own tools. This step needs no API key.</p>
+      <pre class="code"><code>docker compose --profile app run --rm api lore seed --from {SNAPSHOT_URL}</code></pre>
+    </section>
+
+    <section id="step-5" class="step-doc">
+      <span class="sd-n">5</span>
+      <h2>Open Yaan</h2>
+      <p>Go to <a href="http://127.0.0.1:8000">http://127.0.0.1:8000</a> in your browser. Ask a question, open the Inbox, or move the timeline.</p>
+      <p class="tip"><b>Tip:</b> Yaan listens only on your own computer (127.0.0.1). To give your team access, see <a href="#secure">Keep it secure</a>.</p>
+    </section>
+
+    <section id="tools">
+      <h2>Connect your tools</h2>
+      <p>Each connector reads events into Yaan. Approved actions go back out as comments and messages. Connect one tool or all four. Put each value into <code>.env</code>.</p>
+      <div class="cards">
+        <article class="card-tool">
+          <header><span class="glyph" style="--icon:url(assets/icons/color/slack.svg)"></span><h3>Slack</h3><span class="mins">10 min</span></header>
+          <ol>
+            <li>Make a Slack app from the manifest in <code>docs/connectors.md</code>.</li>
+            <li>Make an app-level token with the scope <code>connections:write</code>. Put it in <code>SLACK_APP_TOKEN</code>.</li>
+            <li>Install the app. Put the bot token in <code>SLACK_BOT_TOKEN</code>.</li>
+            <li>Invite the app to your channels.</li>
+          </ol>
+          <p class="card-in">In: messages, and questions that mention the app. Out: answers, alerts, Approve.</p>
+        </article>
+        <article class="card-tool">
+          <header><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span><h3>GitHub</h3><span class="mins">5 min</span></header>
+          <ol>
+            <li>Make a fine-grained token for your repository.</li>
+            <li>Give it read and write access to Contents, Pull requests and Issues.</li>
+            <li>Put the token in <code>GITHUB_TOKEN</code>. Put <code>owner/name</code> in <code>GITHUB_REPO</code>.</li>
+          </ol>
+          <p class="card-in">In: pull requests, reviews, issues. Out: comments.</p>
+        </article>
+        <article class="card-tool">
+          <header><span class="glyph" style="--icon:url(assets/icons/color/jira.svg)"></span><h3>Jira</h3><span class="mins">10 min</span></header>
+          <ol>
+            <li>Put your site address in <code>JIRA_BASE_URL</code>.</li>
+            <li>Put the project <b>key</b> in <code>JIRA_PROJECT</code>. The key is the prefix of ticket IDs, for example <code>KAN</code>.</li>
+            <li>Make an API token. Put it in <code>JIRA_API_TOKEN</code>, and your login email in <code>JIRA_EMAIL</code>.</li>
+          </ol>
+          <p class="card-in">In: tickets and status changes. Out: comments.</p>
+        </article>
+        <article class="card-tool">
+          <header><span class="glyph" style="--icon:url(assets/icons/color/notion.svg)"></span><h3>Notion</h3><span class="mins">5 min</span></header>
+          <ol>
+            <li>Make an internal integration that can read and insert content and comments.</li>
+            <li>Put its secret in <code>NOTION_TOKEN</code>.</li>
+            <li>Connect the integration to your page. Put the page ID in <code>NOTION_PAGE_ID</code>.</li>
+          </ol>
+          <p class="card-in">In: pages and comments. Out: comments.</p>
+        </article>
+      </div>
+      <h3 class="h3-doc">Start the connectors</h3>
+      <p>Tell Yaan which product each channel, repository, project and page belongs to. Edit <code>connectors.yaml</code>. Then apply your settings and check them:</p>
+      <pre class="code"><code>docker compose --profile app up -d --force-recreate api
+docker compose --profile app exec api lore connectors status</code></pre>
+      <p>Start the connectors. They keep running in the background:</p>
+      <pre class="code"><code>docker compose --profile app exec -d api lore connectors run</code></pre>
+      <p class="tip"><b>Tip:</b> Slack uses Socket Mode. You do not need a public URL. GitHub, Jira and Notion are checked every 30 seconds.</p>
+    </section>
+
+    <section id="ai">
+      <h2>Connect your AI client</h2>
+      <p>Yaan gives its graph tools to any MCP client. Your client’s model does the reasoning. Yaan’s graph lookups cost no AI tokens. Yaan must be running.</p>
+      <div class="cards cards-3">
+        <article class="card-tool">
+          <header><span class="glyph" style="--icon:url(assets/icons/color/claude.svg)"></span><h3>Claude Code</h3></header>
+          <p>Run this command once:</p>
+          <pre class="code"><code>claude mcp add --transport http yaan http://127.0.0.1:8000/mcp</code></pre>
+        </article>
+        <article class="card-tool">
+          <header><span class="glyph" style="--icon:url(assets/icons/color/openai.svg);--icon-d:url(assets/icons/color/openai-d.svg)"></span><h3>Codex</h3></header>
+          <p>Add this to <code>~/.codex/config.toml</code>:</p>
+          <pre class="code"><code>[mcp_servers.yaan]
+command = "docker"
+args = ["exec", "-i", "lore-api-1", "lore", "mcp"]</code></pre>
+        </article>
+        <article class="card-tool">
+          <header><span class="glyph" style="--icon:url(assets/icons/color/cursor.svg);--icon-d:url(assets/icons/color/cursor-d.svg)"></span><h3>Cursor</h3></header>
+          <p>Add this to <code>~/.cursor/mcp.json</code>:</p>
+          <pre class="code"><code>{
+  "mcpServers": {
+    "yaan": { "url": "http://127.0.0.1:8000/mcp" }
+  }
+}</code></pre>
+        </article>
+      </div>
+      <p>Then ask, for example: “Which customers are waiting on a fix?” or “Anything break overnight?”</p>
+    </section>
+
+    <section id="secure">
+      <h2>Keep it secure</h2>
+      <p>Yaan is safe on your own computer with the default settings. Before other people can reach it, do these steps:</p>
+      <ul class="checks">
+        <li><b>Change the three database passwords.</b> The example values are for local use only.</li>
+        <li><b>Keep the ports on 127.0.0.1.</b> Put an HTTPS proxy, for example Caddy or nginx, in front of Yaan.</li>
+        <li><b>Tell Yaan the address of your proxy.</b> Set <code>FORWARDED_ALLOW_IPS</code>. Then each visitor gets their own request limit.</li>
+        <li><b>Set a daily AI spend cap.</b> Use <code>LORE_DAILY_SPEND_CAP_USD</code>.</li>
+        <li><b>For a public demo, replay answers only.</b> Set <code>LORE_LLM_CACHE_ONLY=1</code>. Yaan then never calls the AI model for a new question. Also set <code>LORE_MCP_ASK=0</code>.</li>
+        <li><b>Keep the request limits on.</b> The defaults limit questions per address, per day and in total, and limit how many answers run at the same time.</li>
+      </ul>
+      <div class="safety">
+        <h3>Safety is built in</h3>
+        <p>AI tools in Yaan can read but cannot write. Questions the AI writes in Cypher run as a read-only database user, with a time limit. A person approves every action before Yaan posts it. Every sentence in an answer must quote its source word for word, or Yaan removes the sentence.</p>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <h2>Architecture</h2>
+      <p>Yaan is one service and one database. Both run on your server. Events come in from your tools, go through one pipeline, and become a graph in FalkorDB. Two parts read that graph: the answer agent, which answers questions, and the Change Sentinel, which watches for changes. Your team uses Yaan from the web app, from Slack, or from their AI client.</p>
+
+      <figure class="arch">
+        <div class="arch-scroll">
+<svg class="arch-svg" viewBox="0 0 1160 690" role="img" aria-labelledby="archT archD">
+  <title id="archT">Yaan architecture</title>
+  <desc id="archD">Slack, GitHub, Jira and Notion send events to Yaan's connectors. The ingestion pipeline writes them into a FalkorDB graph. The answer agent and the Change Sentinel read the graph. Answers and alerts go to the web app, the MCP server and the Slack bot. Approved actions go back to the tools. Only the LLM gateway calls the AI model, with your key.</desc>
+  <defs>
+    <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1.2" cy="1.2" r="1.2" class="a-dot"/></pattern>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" class="a-head"/></marker>
+  </defs>
+  <rect width="1160" height="690" fill="url(#dots)"/>
+
+  <!-- groups -->
+  <rect x="20" y="100" width="200" height="380" rx="16" class="g g-tools"/>
+  <text x="40" y="128" class="g-t">Your tools</text>
+  <rect x="270" y="40" width="620" height="560" rx="18" class="g g-yaan"/>
+  <svg x="288" y="54" width="24" height="24" viewBox="0 0 32 32"><path class="ym-arm" d="M7 6 L16 17 L25 6"/><path class="ym-stem" d="M16 17 V27"/><circle class="ym-node" cx="16" cy="17" r="3.3"/><rect class="ym-cite" x="3.4" y="2.4" width="7.2" height="7.2" rx="1.7"/><circle class="ym-src" cx="25" cy="6" r="3.3"/></svg>
+  <text x="318" y="72" class="g-t">Yaan <tspan class="g-s">runs on your server</tspan></text>
+  <rect x="940" y="110" width="200" height="400" rx="16" class="g g-use"/>
+  <text x="958" y="138" class="g-t">Where your team works</text>
+
+  <!-- edges (drawn under the nodes) -->
+  <g class="e">
+    <path d="M200 176 H245 M200 246 H245 M200 316 H245 M200 386 H245"/>
+    <path d="M245 386 V132 H288" marker-end="url(#ah)"/>
+    <path d="M415 164 V198" marker-end="url(#ah)"/>
+    <path d="M580 300 V338" marker-end="url(#ah)"/>
+    <path d="M420 480 V388 H428" marker-end="url(#ah)"/>
+    <path d="M740 480 V388 H732" marker-end="url(#ah)"/>
+    <path d="M420 556 V580 H915 M870 518 H915 M915 580 V192"/>
+    <path d="M915 192 H958" marker-end="url(#ah)"/>
+    <path d="M915 278 H958" marker-end="url(#ah)"/>
+    <path d="M915 364 H958" marker-end="url(#ah)"/>
+    <path d="M1040 510 V656 H120 V482" marker-end="url(#ah)" class="e-back"/>
+  </g>
+  <g class="e e-dash">
+    <path d="M745 200 V166" marker-end="url(#ah)"/>
+    <path d="M870 132 H905 V48 H948" marker-end="url(#ah)"/>
+  </g>
+  <g class="lbl">
+    <text x="252" y="122">in</text>
+    <text x="588" y="324">writes</text>
+    <text x="752" y="188">extract</text>
+    <text x="410" y="440" text-anchor="end">reads</text>
+    <text x="750" y="440">watches</text>
+    <text x="922" y="572">answers</text>
+    <text x="878" y="510">alerts</text>
+    <text x="580" y="650" text-anchor="middle">Approve: comments and messages go back to your tools</text>
+    <text x="912" y="94">your key</text>
+  </g>
+
+  <!-- your tools -->
+  <g class="n"><rect x="40" y="148" width="160" height="56" rx="12"/><image href="assets/icons/color/slack.svg" x="54" y="164" width="24" height="24"/><text x="88" y="173" class="n-t">Slack</text><text x="88" y="190" class="n-s">messages</text></g>
+  <g class="n"><rect x="40" y="218" width="160" height="56" rx="12"/><image class="ic-l" href="assets/icons/color/github.svg" x="54" y="234" width="24" height="24"/><image class="ic-d" href="assets/icons/color/github-d.svg" x="54" y="234" width="24" height="24"/><text x="88" y="243" class="n-t">GitHub</text><text x="88" y="260" class="n-s">PRs, reviews</text></g>
+  <g class="n"><rect x="40" y="288" width="160" height="56" rx="12"/><image href="assets/icons/color/jira.svg" x="54" y="304" width="24" height="24"/><text x="88" y="313" class="n-t">Jira</text><text x="88" y="330" class="n-s">tickets</text></g>
+  <g class="n"><rect x="40" y="358" width="160" height="56" rx="12"/><image href="assets/icons/color/notion.svg" x="54" y="374" width="24" height="24"/><text x="88" y="383" class="n-t">Notion</text><text x="88" y="400" class="n-s">pages</text></g>
+
+  <!-- Yaan -->
+  <g class="n"><rect x="290" y="100" width="250" height="64" rx="12"/><text x="306" y="126" class="n-t">Connectors</text><text x="306" y="146" class="n-s">Slack socket, 30-second polling</text></g>
+  <g class="n"><rect x="620" y="100" width="250" height="64" rx="12"/><text x="636" y="122" class="n-t">LLM gateway</text><text x="636" y="140" class="n-s">cache, daily cap, quote check</text><text x="636" y="155" class="n-s">for extraction and answers</text></g>
+  <g class="n n-wide"><rect x="290" y="200" width="580" height="100" rx="14"/><text x="306" y="226" class="n-t">Ingestion pipeline</text><text x="854" y="226" class="n-s" text-anchor="end">the same path for every source</text>
+    <g class="chips">
+      <rect x="306" y="244" width="74" height="40" rx="9"/><text x="343" y="268">Normalize</text>
+      <rect x="386" y="244" width="74" height="40" rx="9"/><text x="423" y="268">Structure</text>
+      <rect x="466" y="244" width="74" height="40" rx="9"/><text x="503" y="268">Embed</text>
+      <rect x="546" y="244" width="74" height="40" rx="9"/><text x="583" y="268">Link</text>
+      <rect x="626" y="244" width="74" height="40" rx="9" class="hot"/><text x="663" y="268">Extract</text>
+      <rect x="706" y="244" width="74" height="40" rx="9"/><text x="743" y="268">Fold</text>
+      <rect x="786" y="244" width="74" height="40" rx="9"/><text x="823" y="268">Derive</text>
+    </g>
+  </g>
+  <g class="n n-db"><rect x="430" y="340" width="300" height="96" rx="14"/>
+    <image class="fk-d" href="assets/brand/falkordb-logo-dark.svg" x="527" y="354" width="106" height="28"/>
+    <image class="fk-l" href="assets/brand/falkordb-logo-light.svg" x="527" y="354" width="106" height="28"/>
+    <text x="580" y="404" class="n-s" text-anchor="middle">graph, vector, full-text, algorithms</text>
+    <text x="580" y="422" class="n-s" text-anchor="middle">Redis 8, on your disk</text></g>
+  <g class="n"><rect x="290" y="480" width="260" height="76" rx="12"/><text x="306" y="506" class="n-t">Answer agent</text><text x="306" y="525" class="n-s">17 read-only graph tools</text><text x="306" y="542" class="n-s">every sentence quotes its source</text></g>
+  <g class="n"><rect x="610" y="480" width="260" height="76" rx="12"/><text x="626" y="506" class="n-t">Change Sentinel</text><text x="626" y="525" class="n-s">watches every decision</text><text x="626" y="542" class="n-s">blast radius, drafted fixes</text></g>
+
+  <!-- outside -->
+  <g class="n n-ext"><rect x="950" y="20" width="190" height="56" rx="12"/><text x="966" y="44" class="n-t">AI model API</text><text x="966" y="62" class="n-s">your key, outside your network</text></g>
+
+  <!-- where your team works -->
+  <g class="n"><rect x="960" y="160" width="160" height="64" rx="12"/><text x="976" y="186" class="n-t">Web app</text><text x="976" y="205" class="n-s">Ask, Inbox, Timeline</text></g>
+  <g class="n"><rect x="960" y="246" width="160" height="64" rx="12"/><text x="976" y="272" class="n-t">MCP server</text>
+    <image href="assets/icons/color/claude.svg" x="976" y="282" width="16" height="16"/>
+    <image class="ic-l" href="assets/icons/color/openai.svg" x="998" y="282" width="16" height="16"/><image class="ic-d" href="assets/icons/color/openai-d.svg" x="998" y="282" width="16" height="16"/>
+    <image class="ic-l" href="assets/icons/color/cursor.svg" x="1020" y="282" width="16" height="16"/><image class="ic-d" href="assets/icons/color/cursor-d.svg" x="1020" y="282" width="16" height="16"/></g>
+  <g class="n"><rect x="960" y="332" width="160" height="64" rx="12"/><image href="assets/icons/color/slack.svg" x="976" y="345" width="16" height="16"/><text x="998" y="358" class="n-t">Slack bot</text><text x="976" y="383" class="n-s">answers, alerts, Approve</text></g>
+</svg>
+        </div>
+        <figcaption>Everything inside the large box runs on your server. Only the LLM gateway calls out, to the AI model you choose, with your key.</figcaption>
+      </figure>
+
+      <div class="parts">
+        <div class="part"><h3>Connectors</h3><p>Read new events from Slack, GitHub, Jira and Notion. Post approved actions back.</p></div>
+        <div class="part"><h3>Ingestion pipeline</h3><p>Turns each event into nodes and links. The AI extracts events; code checks every quote against its message before it enters the graph.</p></div>
+        <div class="part"><h3>FalkorDB graph</h3><p>Holds people, work and decisions, with a start and end date on each decision. Also holds the vector and full-text indexes.</p></div>
+        <div class="part"><h3>Answer agent</h3><p>Answers with 17 read-only graph tools. A validator removes any sentence without a word-for-word quote.</p></div>
+        <div class="part"><h3>Change Sentinel</h3><p>Watches decisions. When new talk contradicts one, it finds who and what the change touches and drafts a follow-up.</p></div>
+        <div class="part"><h3>LLM gateway</h3><p>The only part that calls the AI model. It caches calls, enforces the daily cap and records the cost of each call.</p></div>
+      </div>
+    </section>
+
+    <footer class="doc-foot">
+      <p>Need more detail? The full setup for each tool, with the Slack app manifest and each token’s permissions, is in <code>docs/connectors.md</code> in the repository.</p>
+      <a class="btn btn-line btn-sm" href="index.html">Back to the Yaan home page</a>
+    </footer>
+  </main>
+</div>
+
+<script src="docs.js" defer></script>
+</body>
+</html>

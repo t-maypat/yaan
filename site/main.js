@@ -894,6 +894,15 @@
     });
   })();
 
+  /* ---------------- Act: switch between Claude Code, Codex and Cursor ---------------- */
+  document.addEventListener('click', (ev) => {
+    const tab = ev.target.closest('.cw-tab'); if (!tab) return;
+    const cw = tab.closest('.cw'), c = tab.dataset.c;
+    cw.dataset.client = c;
+    $$('.cw-tab', cw).forEach((t) => t.setAttribute('aria-selected', String(t === tab)));
+    $$('.cw-body', cw).forEach((b) => { b.hidden = b.dataset.c !== c; });
+  });
+
   /* ---------------- links filled at launch ----------------
      index.html carries {APP_URL}, {VIDEO_URL}, {REPO_URL} and {BLOG_URL} until launch (site/README.md).
      Locally the app is the API's built UI on :8000; elsewhere an unfilled link says so instead of 404ing. */
