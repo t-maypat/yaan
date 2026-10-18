@@ -4,7 +4,7 @@
 
 **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB) · **Track 03 Company Brain** (primary) · **Track 01** (agents acting on connected data)
 
-Video: *link added at submission* · Blog: *link added at submission* · Run it yourself: [Quickstart](#quickstart) (two commands, no API key to browse)
+Website: [yaan-brain.vercel.app](https://yaan-brain.vercel.app/) · Video: [DEMO_VIDEO.md](DEMO_VIDEO.md) · Blog: *link added at submission* · Run it yourself: [Quickstart](#quickstart) (two commands, no API key to browse)
 
 ![The Inbox: a regression alert with its blast radius drawn as a graph: the reopened rate-limiting issue in the middle, linked to the PR that fixed it, its author and reviewers, the customer's company, two teams, the earlier "resolved" message and sibling security issues](docs/img/inbox-radius.png)
 

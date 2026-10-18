@@ -9,6 +9,8 @@ python -m http.server 8765 --directory site
 Open http://localhost:8765. Add `?theme=dark` or `?theme=light` to force a theme. Add `?motion=full` to see all motion on a machine with animations turned off (Windows: Settings > Accessibility > Visual effects > Animation effects).
 
 ## Deploy on Vercel
+Live at https://yaan-brain.vercel.app/.
+
 Import the repo, set **Root Directory** to `site`, framework preset **Other**, no build command. `vercel.json` sets clean URLs and asset caching.
 
 ## Links
