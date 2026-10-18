@@ -1,53 +1,52 @@
 @import "tailwindcss";
 
-/* Lore's tokens. The one loud element is the highlighter: a quote copied word for word from
-   a source is marked like a highlighter on paper, everywhere it appears (answer hover, source
-   card, full text, evidence graph). Everything else stays quiet: cool paper, ink, one petrol
-   blue for links and graph structure, one brick red for failures. */
+/* Lore's tokens, shared with the landing page (site/styles.css). The one loud element is the
+   highlighter: a quote copied word for word from a source is marked like a highlighter on
+   paper, everywhere it appears. Everything else stays quiet: cool paper, ink, petrol blue for
+   links and graph structure, brick red for failures. Light is the default; dark is chosen. */
 :root {
-  --paper: #f3f5f7;
+  --paper: #f1f3f5;
+  --paper-2: #e9edf1;
   --surface: #ffffff;
-  --ink: #18202b;
-  --muted: #5b6675;
-  --rule: #d5dbe2;
-  --mark: #f6de5c;
-  --mark-ink: #18202b;
-  --link: #1f6f8b;
-  --link-soft: #dbeaf0;
-  --warn: #a8432f;
-  --warn-soft: #f6e3de;
+  --surface-2: #f7f8fa;
+  --ink: #131a23;
+  --ink-2: #2b3542;
+  --muted: #586473;
+  --faint: #8794a3;
+  --rule: #dce1e7;
+  --rule-2: #c9d0d8;
+  --mark: #f5da4a;
+  --mark-ink: #131a23;
+  --link: #1d6a86;
+  --link-soft: #dcebf1;
+  --warn: #a5412d;
+  --warn-soft: #f7e4df;
+  --ok: #2c7a55;
+  --shadow: 0 1px 0 rgba(255, 255, 255, .7) inset, 0 1px 2px rgba(19, 40, 56, .06), 0 12px 32px -12px rgba(19, 40, 56, .18);
+  --shadow-sm: 0 1px 2px rgba(19, 40, 56, .06), 0 6px 16px -8px rgba(19, 40, 56, .16);
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #12171e;
-    --surface: #19202a;
-    --ink: #e6eaef;
-    --muted: #93a0af;
-    --rule: #2c3542;
-    --mark: #e9cf4a;
-    --mark-ink: #12171e;
-    --link: #6bb7cf;
-    --link-soft: #1d3540;
-    --warn: #e58a75;
-    --warn-soft: #3a2420;
-    color-scheme: dark;
-  }
-}
-
 :root[data-theme="dark"] {
-  --paper: #12171e;
-  --surface: #19202a;
-  --ink: #e6eaef;
-  --muted: #93a0af;
-  --rule: #2c3542;
-  --mark: #e9cf4a;
+  --paper: #0e141b;
+  --paper-2: #121a23;
+  --surface: #151d27;
+  --surface-2: #19232e;
+  --ink: #e5eaf0;
+  --ink-2: #c8d1db;
+  --muted: #93a1b1;
+  --faint: #6a7889;
+  --rule: #253140;
+  --rule-2: #314052;
+  --mark: #e8cd45;
   --mark-ink: #12171e;
-  --link: #6bb7cf;
-  --link-soft: #1d3540;
+  --link: #69b6d0;
+  --link-soft: #16303c;
   --warn: #e58a75;
   --warn-soft: #3a2420;
+  --ok: #6fc59a;
+  --shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 12px 32px -12px rgba(0, 0, 0, .5);
+  --shadow-sm: 0 6px 16px -8px rgba(0, 0, 0, .5);
   color-scheme: dark;
 }
 
@@ -73,16 +72,99 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: 15.5px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+}
+code, kbd, pre, .font-mono {
+  font-variant-ligatures: none;  /* Cypher arrows must read as typed */
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
 :focus-visible {
   outline: 2px solid var(--link);
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: 4px;
 }
+::selection { background: var(--mark); color: var(--mark-ink); }
+
+/* ---------- shell: the same bar as the landing page ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  background: color-mix(in srgb, var(--paper) 84%, transparent);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom: 1px solid var(--rule);
+}
+.brand { display: inline-flex; align-items: center; gap: 9px; font: 500 23px/1 var(--font-serif); letter-spacing: -.01em; }
+.brand svg { width: 26px; height: 26px; }
+.bm-edge { fill: none; stroke: var(--link); stroke-width: 1.6; stroke-linejoin: round; }
+.bm-node { fill: var(--link); }
+.bm-cite { fill: var(--mark); stroke: var(--ink); stroke-width: 1.3; }
+.tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--paper-2); border: 1px solid var(--rule); }
+.tab { padding: 6px 13px; border-radius: 8px; font-size: 14.5px; font-weight: 500; color: var(--muted); transition: color .2s, background-color .2s, box-shadow .2s; white-space: nowrap; }
+.tab:hover { color: var(--ink); }
+.tab[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+.tab .count { display: inline-grid; place-items: center; min-width: 19px; height: 19px; padding: 0 5px; margin-left: 6px; border-radius: 999px; background: var(--warn); color: #fff; font-size: 11px; font-weight: 700; vertical-align: 1px; }
+.chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--rule); background: var(--surface); font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.chip .k { color: var(--faint); font-size: 12px; }
+.icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; border: 1px solid transparent; color: var(--ink); }
+.icon-btn:hover { border-color: var(--rule-2); background: var(--surface); }
+.icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 18px;
+  border-radius: 9px; border: 1px solid transparent; font-weight: 600; font-size: 14.5px; cursor: pointer;
+  transition: background-color .2s, border-color .2s, transform .15s, opacity .2s;
+}
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .38; cursor: not-allowed; transform: none; }
+.btn-ink { background: var(--ink); color: var(--paper); box-shadow: 0 6px 18px -8px rgba(19, 26, 35, .55); }
+.btn-ink:hover:not(:disabled) { background: var(--ink-2); }
+.btn-line { background: var(--surface); color: var(--ink); border-color: var(--rule-2); }
+.btn-line:hover:not(:disabled) { border-color: var(--ink); }
+.btn-sm { height: 34px; padding: 0 13px; font-size: 13.5px; border-radius: 8px; }
+.btn kbd { font-family: var(--font-mono); font-size: 10.5px; padding: 1px 5px; border-radius: 4px; border: 1px solid color-mix(in srgb, currentColor 35%, transparent); font-weight: 500; opacity: .75; }
+
+/* ---------- the query instrument (the landing page's console bar) ---------- */
+.query {
+  position: relative; border: 1px solid var(--rule-2); border-radius: 14px; background: var(--surface);
+  box-shadow: var(--shadow-sm); transition: border-color .25s, box-shadow .25s;
+}
+.query::before {
+  content: ""; position: absolute; inset: -7px; pointer-events: none; opacity: 0; transition: opacity .25s;
+  --c: var(--link); --l: 11px; --w: 1.5px;
+  background:
+    linear-gradient(var(--c), var(--c)) left top / var(--l) var(--w) no-repeat,
+    linear-gradient(var(--c), var(--c)) left top / var(--w) var(--l) no-repeat,
+    linear-gradient(var(--c), var(--c)) right top / var(--l) var(--w) no-repeat,
+    linear-gradient(var(--c), var(--c)) right top / var(--w) var(--l) no-repeat,
+    linear-gradient(var(--c), var(--c)) left bottom / var(--l) var(--w) no-repeat,
+    linear-gradient(var(--c), var(--c)) left bottom / var(--w) var(--l) no-repeat,
+    linear-gradient(var(--c), var(--c)) right bottom / var(--l) var(--w) no-repeat,
+    linear-gradient(var(--c), var(--c)) right bottom / var(--w) var(--l) no-repeat;
+}
+.query:focus-within { border-color: color-mix(in srgb, var(--link) 55%, var(--rule-2)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--link) 13%, transparent), var(--shadow-sm); }
+.query:focus-within::before { opacity: 1; }
+.query-row { display: flex; align-items: center; gap: 12px; padding: 14px 14px 10px 18px; }
+.query-row svg.glyph { flex: none; width: 21px; height: 21px; fill: none; stroke: var(--muted); stroke-width: 1.7; stroke-linecap: round; }
+.query-input { flex: 1; min-width: 0; border: 0; background: transparent; font-family: var(--font-serif); color: var(--ink); outline: none; }
+.query-input::placeholder { color: var(--faint); }
+.query-input:focus-visible { outline: none; }
+.query-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px 12px 18px; border-top: 1px solid var(--rule); background: var(--surface-2); border-radius: 0 0 14px 14px; }
+.scope-select { display: inline-flex; align-items: center; gap: 7px; padding: 3px 4px 3px 10px; border-radius: 7px; border: 1px solid var(--rule); background: var(--surface); font-size: 13px; }
+.scope-select label { color: var(--faint); font-size: 12px; }
+.scope-select select { border: 0; background: transparent; color: var(--ink); font-size: 13px; padding: 2px 2px; max-width: 15rem; outline: none; cursor: pointer; }
+.scope-select.err { border-color: var(--warn); }
+.scope-select.err select { color: var(--warn); }
+
+/* ---------- cards ---------- */
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; box-shadow: var(--shadow-sm); }
+.card-pad { padding: 20px 22px; }
+.card-h { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 12px; letter-spacing: .01em; }
+.suggest-card { padding: 16px 18px 10px; }
+.suggest-card h3 { padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--rule); font-size: 14px; }
 
 /* A verbatim quote: highlighter strokes, slightly ragged at the ends like a real marker. */
 mark.verbatim {
@@ -103,7 +185,7 @@ mark.verbatim {
 /* The answer's prose (react-markdown output). */
 .answer {
   font-family: var(--font-serif);
-  font-size: 1.2rem;
+  font-size: 1.22rem;
   line-height: 1.62;
   max-width: 68ch;
 }
@@ -149,10 +231,19 @@ mark.verbatim {
   .step-in {
     animation: step-in 220ms ease-out both;
   }
+  .rise {
+    animation: rise .6s cubic-bezier(.2, .7, .2, 1) both;
+  }
 }
 @keyframes step-in {
   from {
     opacity: 0;
     transform: translateX(-6px);
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
   }
 }

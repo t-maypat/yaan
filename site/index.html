@@ -5,8 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lore · the company brain that knows what's still true</title>
 <meta name="description" content="Lore turns your team's Slack, meetings, pull requests, tickets and docs into a time-aware FalkorDB graph of people, work and decisions, with a word-for-word source for every sentence.">
-<meta name="theme-color" content="#f1f3f5" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0e141b" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f1f3f5">
 <meta property="og:title" content="Lore: the company brain that knows what's still true">
 <meta property="og:description" content="A time-aware graph of people, work and decisions. Every sentence cites a verbatim source. Built on FalkorDB.">
 <meta property="og:image" content="assets/img/inbox-radius.png">
@@ -16,8 +15,12 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=Schibsted+Grotesk:wght@400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <script>
-  // Theme before first paint: a saved choice wins, else the system setting.
-  try { var t = new URLSearchParams(location.search).get('theme') || localStorage.getItem('lore-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+  // Theme before first paint: ?theme=, then a saved choice, else light (the default).
+  (function () {
+    var t = null;
+    try { t = new URLSearchParams(location.search).get('theme') || localStorage.getItem('lore-theme'); } catch (e) {}
+    document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+  })();
 </script>
 </head>
 <body>
@@ -38,7 +41,7 @@
       <a href="#how">How it works</a>
       <a href="#features">Features</a>
       <a href="#results">Results</a>
-      <a href="#graph">Why a graph</a>
+      <a href="#falkordb">Why FalkorDB</a>
     </nav>
     <div class="nav-actions">
       <button class="icon-btn" id="themeToggle" type="button" aria-label="Switch to dark theme">
@@ -46,6 +49,7 @@
         <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.3 8.3 0 0 1 9.4 4a8.3 8.3 0 1 0 10.6 10.6Z"/></svg>
       </button>
       <a class="icon-btn" href="{REPO_URL}" aria-label="Lore on GitHub"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span></a>
+      <a class="btn btn-line btn-sm nav-app" href="{APP_URL}">Open the app</a>
       <a class="btn btn-ink btn-sm" href="{VIDEO_URL}">Watch the demo</a>
     </div>
   </div>
@@ -126,73 +130,47 @@
   <p class="console-note">Replayed from Lore’s tool output on HERB’s synthetic ExplainabilityForce data. Tool times are the measured p50 per tool.</p>
 </section>
 
-<!-- ============ 2. PROBLEM ============ -->
-<section class="section problem" id="problem">
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>Search finds the message that said “fixed”. It doesn’t know the bug came back.</h2>
-      <p class="sec-lede">Company knowledge goes stale. Statuses change, decisions get reversed, owners move on. A search-and-summarize assistant quotes whatever matched, even if it was overturned last week.</p>
-    </div>
-
-    <div class="drift" id="drift">
-      <div class="drift-top">
-        <p class="drift-q"><span class="dq-k">Same question to both</span> Is the ‘Inefficient Caching Strategy’ bug resolved?</p>
-        <p class="drift-asof">Asked as of <strong id="driftDate">6 Mar 2027</strong></p>
-      </div>
-
-      <div class="dtl" aria-hidden="true">
-        <div class="dtl-track">
-          <span class="dtl-win w-rep" style="--a:15.2%;--b:69.7%"><b>reported</b></span>
-          <span class="dtl-win w-res" style="--a:69.7%;--b:75.8%"><b>resolved</b></span>
-          <span class="dtl-win w-reo" style="--a:75.8%;--b:100%"><b>reopened</b></span>
-          <span class="dtl-msg" style="--x:15.2%" title="msg:20270206-1-47b0c"></span>
-          <span class="dtl-msg" style="--x:69.7%" title="msg:20270224-0-ca81d"></span>
-          <span class="dtl-msg" style="--x:75.8%" title="msg:20270226-0-1bc7a"></span>
-          <span class="dtl-now" id="dtlNow"></span>
-        </div>
-        <div class="dtl-axis"><span style="--x:0%">1 Feb</span><span style="--x:15.2%">6 Feb</span><span style="--x:69.7%">24 Feb</span><span class="ax-r" style="--x:75.8%">26 Feb</span><span class="ax-end" style="--x:100%">6 Mar</span></div>
-      </div>
-      <label class="dtl-range">
-        <span class="sr-only">Move the date the question is asked</span>
-        <input type="range" id="driftRange" min="0" max="33" value="33" step="1" aria-valuetext="6 Mar 2027">
-      </label>
-      <p class="dtl-hint">Drag to ask on another day. Search has no clock, so its answer never moves.</p>
-
-      <div class="duel">
-        <article class="ans ans-rag" id="ansRag">
-          <header class="ans-h">
-            <span class="ans-who">Search and summarize</span>
-            <span class="stamp" id="ragStamp">Stale</span>
-          </header>
-          <p class="ans-text">“Yes, it has been resolved.”</p>
-          <div class="ans-ev">
-            <p class="ev-k">Top match it trusted</p>
-            <blockquote class="q q-plain">
-              <p>the bug titled ‘Inefficient Caching Strategy’ has been resolved.</p>
-              <footer><code>msg:20270224-0-ca81d</code> Hannah Johnson, 24 Feb 2027</footer>
-            </blockquote>
-          </div>
-          <p class="ans-note" id="ragNote">Right only between 24 and 26 Feb. On every other day it is wrong.</p>
-        </article>
-
-        <article class="ans ans-lore" id="ansLore">
-          <header class="ans-h">
-            <span class="ans-who"><svg class="mini-mark" viewBox="0 0 28 28" aria-hidden="true"><path class="bm-edge" d="M7 20 L14 8 L21 18 Z"/><circle class="bm-node" cx="7" cy="20" r="3.2"/><circle class="bm-node" cx="21" cy="18" r="3.2"/><rect class="bm-cite" x="10.6" y="4.6" width="6.8" height="6.8" rx="1.6"/></svg>Lore</span>
-            <span class="stamp stamp-ok">Current</span>
-          </header>
-          <p class="ans-text" id="loreText"></p>
-          <div class="ans-ev" id="loreEv"></div>
-          <p class="ans-note" id="loreNote"></p>
-        </article>
-      </div>
-
-      <div class="drift-stat">
-        <p class="ds-cap">Stale answers on our drift test (HERB dev products)</p>
-        <div class="ds-row">
-          <div class="ds"><span class="ds-n">8.7%</span><span class="ds-l">Search only: the same agent without its graph tools</span></div>
-          <div class="ds ds-lore"><span class="ds-n">0%</span><span class="ds-l">Lore, reading the decision in force</span></div>
-        </div>
-      </div>
+<!-- ============ LOGO STRIP ============ -->
+<section class="strip" aria-labelledby="stripCap">
+  <p class="strip-cap" id="stripCap">Connects to where your team already talks, ships and writes. <span>Planned connectors are marked.</span></p>
+  <div class="marquee" id="marquee">
+    <div class="mq-track">
+      <ul class="mq-set">
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/slack.svg)"></span><span class="mq-n">Slack</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/linear.svg)"></span><span class="mq-n">Linear</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span><span class="mq-n">GitHub</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/confluence.svg)"></span><span class="mq-n">Confluence</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/jira.svg)"></span><span class="mq-n">Jira</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/gitlab.svg)"></span><span class="mq-n">GitLab</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/notion.svg)"></span><span class="mq-n">Notion</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/googledrive.svg)"></span><span class="mq-n">Google Drive</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/modelcontextprotocol.svg)"></span><span class="mq-n">MCP</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/googlemeet.svg)"></span><span class="mq-n">Google Meet</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span><span class="mq-n">Claude Code</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/zoom.svg)"></span><span class="mq-n">Zoom</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span><span class="mq-n">Cursor</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/discord.svg)"></span><span class="mq-n">Discord</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span><span class="mq-n">Claude Desktop</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/gmail.svg)"></span><span class="mq-n">Gmail</span><span class="mq-soon">planned</span></li>
+      </ul>
+      <ul class="mq-set" aria-hidden="true">
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/slack.svg)"></span><span class="mq-n">Slack</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/linear.svg)"></span><span class="mq-n">Linear</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span><span class="mq-n">GitHub</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/confluence.svg)"></span><span class="mq-n">Confluence</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/jira.svg)"></span><span class="mq-n">Jira</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/gitlab.svg)"></span><span class="mq-n">GitLab</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/notion.svg)"></span><span class="mq-n">Notion</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/googledrive.svg)"></span><span class="mq-n">Google Drive</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/modelcontextprotocol.svg)"></span><span class="mq-n">MCP</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/googlemeet.svg)"></span><span class="mq-n">Google Meet</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span><span class="mq-n">Claude Code</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/zoom.svg)"></span><span class="mq-n">Zoom</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span><span class="mq-n">Cursor</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/discord.svg)"></span><span class="mq-n">Discord</span><span class="mq-soon">planned</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span><span class="mq-n">Claude Desktop</span></li>
+          <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/gmail.svg)"></span><span class="mq-n">Gmail</span><span class="mq-soon">planned</span></li>
+      </ul>
     </div>
   </div>
 </section>
@@ -313,6 +291,77 @@
   </div>
 </section>
 
+<!-- ============ 2. PROBLEM ============ -->
+<section class="section problem" id="problem">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Search finds the message that said “fixed”. It doesn’t know the bug came back.</h2>
+      <p class="sec-lede">Company knowledge goes stale. Statuses change, decisions get reversed, owners move on. A search-and-summarize assistant quotes whatever matched, even if it was overturned last week.</p>
+    </div>
+
+    <div class="drift" id="drift">
+      <div class="drift-top">
+        <p class="drift-q"><span class="dq-k">Same question to both</span> Is the ‘Inefficient Caching Strategy’ bug resolved?</p>
+        <p class="drift-asof">Asked as of <strong id="driftDate">6 Mar 2027</strong></p>
+      </div>
+
+      <div class="dtl" aria-hidden="true">
+        <div class="dtl-track">
+          <span class="dtl-win w-rep" style="--a:15.2%;--b:69.7%"><b>reported</b></span>
+          <span class="dtl-win w-res" style="--a:69.7%;--b:75.8%"><b>resolved</b></span>
+          <span class="dtl-win w-reo" style="--a:75.8%;--b:100%"><b>reopened</b></span>
+          <span class="dtl-msg" style="--x:15.2%" title="msg:20270206-1-47b0c"></span>
+          <span class="dtl-msg" style="--x:69.7%" title="msg:20270224-0-ca81d"></span>
+          <span class="dtl-msg" style="--x:75.8%" title="msg:20270226-0-1bc7a"></span>
+          <span class="dtl-now" id="dtlNow"></span>
+        </div>
+        <div class="dtl-axis"><span style="--x:0%">1 Feb</span><span style="--x:15.2%">6 Feb</span><span style="--x:69.7%">24 Feb</span><span class="ax-r" style="--x:75.8%">26 Feb</span><span class="ax-end" style="--x:100%">6 Mar</span></div>
+      </div>
+      <label class="dtl-range">
+        <span class="sr-only">Move the date the question is asked</span>
+        <input type="range" id="driftRange" min="0" max="33" value="33" step="1" aria-valuetext="6 Mar 2027">
+      </label>
+      <p class="dtl-hint">Drag to ask on another day. Search has no clock, so its answer never moves.</p>
+
+      <div class="duel">
+        <article class="ans ans-rag" id="ansRag">
+          <header class="ans-h">
+            <span class="ans-who">Search and summarize</span>
+            <span class="stamp" id="ragStamp">Stale</span>
+          </header>
+          <p class="ans-text">“Yes, it has been resolved.”</p>
+          <div class="ans-ev">
+            <p class="ev-k">Top match it trusted</p>
+            <blockquote class="q q-plain">
+              <p>the bug titled ‘Inefficient Caching Strategy’ has been resolved.</p>
+              <footer><code>msg:20270224-0-ca81d</code> Hannah Johnson, 24 Feb 2027</footer>
+            </blockquote>
+          </div>
+          <p class="ans-note" id="ragNote">Right only between 24 and 26 Feb. On every other day it is wrong.</p>
+        </article>
+
+        <article class="ans ans-lore" id="ansLore">
+          <header class="ans-h">
+            <span class="ans-who"><svg class="mini-mark" viewBox="0 0 28 28" aria-hidden="true"><path class="bm-edge" d="M7 20 L14 8 L21 18 Z"/><circle class="bm-node" cx="7" cy="20" r="3.2"/><circle class="bm-node" cx="21" cy="18" r="3.2"/><rect class="bm-cite" x="10.6" y="4.6" width="6.8" height="6.8" rx="1.6"/></svg>Lore</span>
+            <span class="stamp stamp-ok">Current</span>
+          </header>
+          <p class="ans-text" id="loreText"></p>
+          <div class="ans-ev" id="loreEv"></div>
+          <p class="ans-note" id="loreNote"></p>
+        </article>
+      </div>
+
+      <div class="drift-stat">
+        <p class="ds-cap">Stale answers on our drift test (HERB dev products)</p>
+        <div class="ds-row">
+          <div class="ds"><span class="ds-n">8.7%</span><span class="ds-l">Search only: the same agent without its graph tools</span></div>
+          <div class="ds ds-lore"><span class="ds-n">0%</span><span class="ds-l">Lore, reading the decision in force</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ 4. FEATURES ============ -->
 <section class="section features" id="features">
   <div class="wrap">
@@ -378,32 +427,54 @@
       <p class="sec-lede">On HERB, Salesforce’s public enterprise benchmark (synthetic company data), on 7 held-out products we never looked at while building: 399 questions, run once. Same model, same judge prompts and same search for every system.</p>
     </div>
 
-    <div class="ablate" id="ablate">
-      <div class="ab-ctl">
-        <p class="ab-k">Lore, with its FalkorDB graph tools</p>
-        <button class="switch" id="graphSwitch" type="button" role="switch" aria-checked="true">
-          <span class="sw-track"><span class="sw-thumb"></span></span>
-          <span class="sw-label" id="swLabel">Graph tools on</span>
-        </button>
-        <p class="ab-hint">Turn them off. Everything else stays the same: model, prompts, search.</p>
-      </div>
-      <div class="ab-figs">
-        <div class="ab-fig ab-main">
-          <span class="ab-n" id="abAvg">63.6</span>
-          <span class="ab-l">average judged score out of 100, held-out products</span>
-          <span class="ab-bar"><i id="abAvgBar" style="--v:63.6"></i></span>
-        </div>
-        <div class="ab-fig">
-          <span class="ab-n" id="abCust">54.2</span>
-          <span class="ab-l">on customer questions, held-out</span>
-          <span class="ab-bar"><i id="abCustBar" style="--v:54.2"></i></span>
-        </div>
-        <div class="ab-fig">
-          <span class="ab-n" id="abStale">0%</span>
-          <span class="ab-l">stale answers on the drift test</span>
-          <span class="ab-bar ab-bar-warn"><i id="abStaleBar" style="--v:0"></i></span>
+    <div class="lift" id="ablate">
+      <div class="lift-head">
+        <p class="lift-k">Lore’s average judged score on products it never saw</p>
+        <p class="lift-n"><span id="abAvg">63.6</span><small>/ 100</small></p>
+        <div class="lift-chips">
+          <p class="chip-lift"><b>2.6×</b><span>the same agent without the FalkorDB graph (24.2)</span></p>
+          <p class="chip-lift"><b>+20.2</b><span>points over the HERB paper’s best agent, GPT-4o (43.4)</span></p>
         </div>
       </div>
+
+      <figure class="bars" aria-labelledby="barsCap">
+        <figcaption id="barsCap" class="bars-cap">Average judged score, held-out products (higher is better)</figcaption>
+        <div class="bars-plot">
+          <div class="bars-grid" aria-hidden="true"><span style="--x:0">0</span><span style="--x:25">25</span><span style="--x:50">50</span><span style="--x:75">75</span><span style="--x:100">100</span></div>
+          <div class="bar-row is-lore" data-tip="Lore, with the FalkorDB graph: 63.6">
+            <span class="bar-name">Lore</span>
+            <span class="bar-track" style="--v:63.6"><i class="bar" id="barLore"></i><b class="bar-v" id="barLoreV">63.6</b></span>
+          </div>
+          <div class="bar-row is-ref" data-tip="HERB paper, best product-specific agent (GPT-4o ReAct, different setup): 43.4">
+            <span class="bar-name">HERB paper’s best agent <em>GPT-4o, different setup</em></span>
+            <span class="bar-track" style="--v:43.4"><i class="bar"></i><b class="bar-v">43.4</b></span>
+          </div>
+          <div class="bar-row" data-tip="The same Lore agent with search and read only, no FalkorDB graph traversal: 24.2">
+            <span class="bar-name">Lore without the FalkorDB graph</span>
+            <span class="bar-track" style="--v:24.2"><i class="bar"></i><b class="bar-v">24.2</b></span>
+          </div>
+          <div class="bar-row" data-tip="Plain RAG baseline: 9.6">
+            <span class="bar-name">Plain RAG</span>
+            <span class="bar-track" style="--v:9.6"><i class="bar"></i><b class="bar-v">9.6</b></span>
+          </div>
+          <span class="brace brace-a" aria-hidden="true"><b>+20.2</b></span>
+          <span class="brace brace-b" aria-hidden="true"><b>2.6×</b></span>
+        </div>
+        <div class="bars-tip" id="barsTip" role="status"></div>
+        <div class="lift-foot">
+        <div class="lift-ctl">
+            <button class="switch" id="graphSwitch" type="button" role="switch" aria-checked="true">
+              <span class="sw-track"><span class="sw-thumb"></span></span>
+              <span class="sw-label" id="swLabel">FalkorDB graph on</span>
+            </button>
+            <p class="ab-hint">Turn it off: same model, prompts and search, no graph traversal.</p>
+          </div>
+          <dl class="lift-mini">
+            <div><dt>Customer questions</dt><dd id="abCust">54.2</dd></div>
+            <div><dt>Stale answers, drift test</dt><dd id="abStale">0%</dd></div>
+          </dl>
+        </div>
+      </figure>
     </div>
 
     <div class="table-wrap">
@@ -413,36 +484,147 @@
           <tr><th scope="col">System</th><th scope="col">Avg score, held-out</th><th scope="col">Customer questions</th><th scope="col">Quotes verified</th><th scope="col">Avg on the 3 dev products we built on</th></tr>
         </thead>
         <tbody>
-          <tr><th scope="row">Plain RAG</th><td><span class="cell-bar" style="--v:9.6"></span>9.6</td><td>0.0</td><td>98.5%</td><td class="dev">14.7</td></tr>
-          <tr><th scope="row">Lore without its graph tools</th><td><span class="cell-bar" style="--v:24.2"></span>24.2</td><td>0.0</td><td>100%</td><td class="dev">25.0</td></tr>
           <tr class="rt-lore"><th scope="row">Lore</th><td><span class="cell-bar" style="--v:63.6"></span>63.6</td><td>54.2</td><td>100%</td><td class="dev">83.2</td></tr>
-          <tr class="rt-ref"><th scope="row">HERB paper’s best agent <span>GPT-4o, different setup</span></th><td><span class="cell-bar" style="--v:43.4"></span>43.4</td><td></td><td></td><td class="dev"></td></tr>
+          <tr class="rt-ref"><th scope="row">HERB paper’s best agent <span>GPT-4o, different setup</span></th><td><span class="cell-bar" style="--v:43.4"></span>43.4</td><td>n/a</td><td>n/a</td><td class="dev">n/a</td></tr>
+          <tr><th scope="row">Lore without the FalkorDB graph<sup>*</sup></th><td><span class="cell-bar" style="--v:24.2"></span>24.2</td><td>0.0</td><td>100%</td><td class="dev">25.0</td></tr>
+          <tr><th scope="row">Plain RAG</th><td><span class="cell-bar" style="--v:9.6"></span>9.6</td><td>0.0</td><td>98.5%</td><td class="dev">14.7</td></tr>
         </tbody>
       </table>
-      <p class="table-note"><strong>Lore scores lower on products it has never seen (63.6) than on the ones it was built on (83.2). We report both.</strong> Scores are judged answers out of 100, not accuracy. Stale answers, on 24 hand-labeled questions about status now and on a past date: plain RAG 6.7%, search only 8.7%, Lore 0%. Method and footnotes in <a href="{REPO_URL}/blob/main/eval/report.md">eval/report.md</a>.</p>
+      <p class="table-note"><strong>Lore scores lower on products it has never seen (63.6) than on the ones it was built on (83.2). We report both.</strong> Scores are judged answers out of 100, not accuracy. <sup>*</sup>The same agent with search and read only: it keeps the vector and full-text search, and loses every graph query. Stale answers, on 24 hand-labeled questions about status now and on a past date: plain RAG 6.7%, search only 8.7%, Lore 0%. Method and footnotes in <a href="{REPO_URL}/blob/main/eval/report.md">eval/report.md</a>.</p>
     </div>
 
     <div class="figs3">
       <div class="f3"><span class="f3-n">3–28 ms</span><span class="f3-l">per graph query, p50. The seconds in an answer are the model’s turns.</span></div>
       <div class="f3"><span class="f3-n">~$0.003</span><span class="f3-l">per answer, about 1.7k tokens.</span></div>
-      <div class="f3"><span class="f3-n">64 → 24</span><span class="f3-l">when the graph tools are removed, on products it never saw.</span></div>
+      <div class="f3"><span class="f3-n">100%</span><span class="f3-l">of 1,009 citations quote their source word for word, checked in code.</span></div>
     </div>
   </div>
 </section>
 
-<!-- ============ 6. WHY A GRAPH ============ -->
-<section class="section graphwhy" id="graph">
+<!-- ============ 6. WHY FALKORDB ============ -->
+<section class="section falkor" id="falkordb">
   <div class="wrap">
     <div class="sec-head">
-      <h2>Why it has to be a graph</h2>
-      <p class="sec-lede">The answers above come from structure no pile of text chunks holds: time windows, links between ids, and who works with whom. FalkorDB runs all three natively.</p>
+      <h2>Why FalkorDB</h2>
+      <p class="sec-lede">Lore’s answers live in the links between people, work and decisions, so the engine that holds those links decides how fast, and how right, an answer is. Lore runs on FalkorDB: an in-memory graph database on Redis that stores adjacency as sparse matrices and runs traversals as linear algebra.</p>
+      <p class="rust"><span class="glyph rust-mark" style="--icon:url(assets/icons/rust.svg)" aria-hidden="true"></span>Rust-based, by the way. Lore pins FalkorDB 6.0.1, the new Rust engine.</p>
     </div>
 
-    <div class="gw" id="gw">
+    <ul class="proof">
+      <li><span class="pf-n">2.6×</span><span class="pf-l">Lore’s score with the FalkorDB graph versus without it, held-out (63.6 vs 24.2)</span><span class="pf-src us">Measured by us</span></li>
+      <li><span class="pf-n">3–28 ms</span><span class="pf-l">p50 per graph query, on 38,535 nodes and 96,047 edges</span><span class="pf-src us">Measured by us</span></li>
+      <li><span class="pf-n">496×</span><span class="pf-l">lower p99 latency than Neo4j: 83 ms against 41,157 ms</span><span class="pf-src">FalkorDB’s benchmark</span></li>
+      <li><span class="pf-n">6×</span><span class="pf-l">less memory than Neo4j: 100 MB against 600 MB</span><span class="pf-src">FalkorDB’s benchmark</span></li>
+    </ul>
+
+    <div class="engine">
+      <div class="stack" id="stack">
+        <p class="stack-k">What Lore stands on</p>
+        <ol class="layers">
+          <li class="layer l-lore" data-use="17 read-only agent tools and the Change Sentinel, all as parameterized Cypher in backend/queries/.">
+            <span class="ly-t">Lore</span><span class="ly-d">166 Cypher queries · 17 agent tools · the Sentinel</span>
+          </li>
+          <li class="layer" data-use="Decision windows, SUPERSEDES chains, counts over REPORTED_BY and WORKS_AT, bounded paths: every answer that needs a link.">
+            <span class="ly-t">Cypher</span><span class="ly-d">patterns, bounded paths, aggregates, UNION</span>
+          </li>
+          <li class="layer layer-split">
+            <span class="ly-cell" data-use="Hybrid search: an HNSW vector index on 17,795 chunks (384-d, cosine), fused with full-text, scoped to one product in the same engine."><span class="ly-t">Vector</span><span class="ly-d">HNSW, cosine</span></span>
+            <span class="ly-cell" data-use="Keyword search with English stemming, fused with the vector hits."><span class="ly-t">Full-text</span><span class="ly-d">stemmed</span></span>
+            <span class="ly-cell" data-use="Who knows what: PageRank, betweenness and label-propagation communities over who works with whom; shortestPath from a listed owner to the real expert."><span class="ly-t">Algorithms</span><span class="ly-d">PageRank, betweenness, communities</span></span>
+          </li>
+          <li class="layer l-core" data-use="Adjacency as sparse matrices, traversals as linear algebra: the reason a 3-hop blast radius comes back in milliseconds.">
+            <span class="ly-t">FalkorDB 6 engine</span><span class="ly-d">Rust · sparse adjacency matrices · linear-algebra traversal</span>
+          </li>
+          <li class="layer l-redis" data-use="A read-only ACL user for agent-generated Cypher (GRAPH.RO_QUERY), per-query timeouts, GRAPH.COPY for the resettable demo graph, DUMP/RESTORE for the snapshot.">
+            <span class="ly-t">Redis 8</span><span class="ly-d">in memory · ACL users · persistence · many graphs per server</span>
+          </li>
+        </ol>
+        <p class="stack-use" id="stackUse" aria-live="polite">Point at a layer to see what Lore uses it for.</p>
+      </div>
+
+      <figure class="tail" aria-labelledby="tailCap">
+        <figcaption id="tailCap"><span class="tail-t">The tail is what an agent feels</span><span class="tail-d">An answer makes several graph calls in a row, so one slow call stalls the whole answer. Latency in FalkorDB’s published benchmark against Neo4j, log scale.</span></figcaption>
+        <div class="tail-legend"><span class="lg-f">FalkorDB</span><span class="lg-o">Neo4j</span></div>
+        <div class="tail-plot" id="tailPlot">
+          <div class="tail-axis" aria-hidden="true"><span style="--x:0">10 ms</span><span style="--x:25">100 ms</span><span style="--x:50">1 s</span><span style="--x:75">10 s</span><span style="--x:100">100 s</span></div>
+          <div class="tail-row" data-f="36" data-o="469"><span class="tr-p">p50</span><span class="tr-track"><i class="tb tb-o"></i><i class="tb tb-f"></i><b class="tv tv-f"></b><b class="tv tv-o"></b></span><span class="tr-x">13×</span></div>
+          <div class="tail-row" data-f="74" data-o="13969"><span class="tr-p">p95</span><span class="tr-track"><i class="tb tb-o"></i><i class="tb tb-f"></i><b class="tv tv-f"></b><b class="tv tv-o"></b></span><span class="tr-x">189×</span></div>
+          <div class="tail-row" data-f="83" data-o="41157"><span class="tr-p">p99</span><span class="tr-track"><i class="tb tb-o"></i><i class="tb tb-f"></i><b class="tv tv-f"></b><b class="tv tv-o"></b></span><span class="tr-x">496×</span></div>
+        </div>
+        <table class="algo">
+          <caption>Graph algorithms on 820K nodes and 9.8M edges, same source</caption>
+          <thead><tr><th scope="col">Algorithm</th><th scope="col">FalkorDB</th><th scope="col">Neo4j</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">PageRank <span>Lore ranks who connects teams with it</span></th><td>18.5 ms</td><td>417.3 ms</td></tr>
+            <tr><th scope="row">Weakly connected components</th><td>17.8 ms</td><td>1,324.3 ms</td></tr>
+          </tbody>
+        </table>
+        <p class="tail-src">Source: falkordb.com and benchmark.falkordb.com. Their numbers, their setup; ours are the two marked “Measured by us”.</p>
+      </figure>
+    </div>
+
+    <div class="cmp" id="cmp">
+      <div class="cmp-head">
+        <h3>Against the alternatives</h3>
+        <div class="cmp-tabs" role="tablist" aria-label="Compare FalkorDB with">
+          <button role="tab" class="cmp-tab" id="cmpT0" aria-controls="cmpP0" aria-selected="true" tabindex="0">vs Neo4j</button><button role="tab" class="cmp-tab" id="cmpT1" aria-controls="cmpP1" aria-selected="false" tabindex="-1">vs AWS Neptune</button><button role="tab" class="cmp-tab" id="cmpT2" aria-controls="cmpP2" aria-selected="false" tabindex="-1">vs TigerGraph</button><button role="tab" class="cmp-tab" id="cmpT3" aria-controls="cmpP3" aria-selected="false" tabindex="-1">vs ArangoDB</button>
+        </div>
+      </div>
+      <div class="cmp-panel" id="cmpP0" role="tabpanel" aria-labelledby="cmpT0">
+            <table class="cmp-t">
+              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f">FalkorDB</th><th scope="col" class="c-o">Neo4j</th></tr></thead>
+              <tbody>
+              <tr class="win"><th scope="row">Written in</th><td class="c-f">C and Rust</td><td class="c-o">Java</td></tr>
+              <tr class="win"><th scope="row">Data storage</th><td class="c-f">In memory</td><td class="c-o">On disk</td></tr>
+              <tr class="win"><th scope="row">p99 latency, FalkorDB benchmark</th><td class="c-f">83 ms</td><td class="c-o">41,157 ms</td></tr>
+              <tr class="win"><th scope="row">Memory, same benchmark</th><td class="c-f">100 MB</td><td class="c-o">600 MB</td></tr>
+              <tr class="win"><th scope="row">Multi-tenancy</th><td class="c-f"><span class="ck" aria-label="yes">✓</span> All plans</td><td class="c-o">Enterprise plan only</td></tr>
+              <tr><th scope="row">Query language</th><td class="c-f">Cypher</td><td class="c-o">Cypher</td></tr>
+              <tr><th scope="row">Vector + full-text search</th><td class="c-f"><span class="ck" aria-label="yes">✓</span></td><td class="c-o"><span class="ck" aria-label="yes">✓</span></td></tr>
+              </tbody>
+            </table>
+          </div><div class="cmp-panel" id="cmpP1" role="tabpanel" aria-labelledby="cmpT1" hidden>
+            <table class="cmp-t">
+              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f">FalkorDB</th><th scope="col" class="c-o">AWS Neptune</th></tr></thead>
+              <tbody>
+              <tr class="win"><th scope="row">Latency</th><td class="c-f">Fast</td><td class="c-o">Poor</td></tr>
+              <tr class="win"><th scope="row">Memory efficiency</th><td class="c-f">Highly efficient</td><td class="c-o">Poor</td></tr>
+              <tr><th scope="row">Horizontal scaling</th><td class="c-f">Flexible</td><td class="c-o">Flexible</td></tr>
+              <tr><th scope="row">Query language</th><td class="c-f">Cypher</td><td class="c-o">openCypher, Gremlin, SPARQL</td></tr>
+              <tr class="win"><th scope="row">Runs on your laptop</th><td class="c-f"><span class="ck" aria-label="yes">✓</span> One Docker container</td><td class="c-o"><span class="cx" aria-label="no">✕</span> AWS managed service</td></tr>
+              </tbody>
+            </table>
+          </div><div class="cmp-panel" id="cmpP2" role="tabpanel" aria-labelledby="cmpT2" hidden>
+            <table class="cmp-t">
+              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f">FalkorDB</th><th scope="col" class="c-o">TigerGraph</th></tr></thead>
+              <tbody>
+              <tr class="win"><th scope="row">Latency</th><td class="c-f">Fast</td><td class="c-o">Adequate</td></tr>
+              <tr class="win"><th scope="row">Memory efficiency</th><td class="c-f">Highly efficient</td><td class="c-o">Moderate</td></tr>
+              <tr class="win"><th scope="row">Horizontal scaling</th><td class="c-f">Flexible</td><td class="c-o">Limited</td></tr>
+              <tr class="win"><th scope="row">Query language</th><td class="c-f">Cypher</td><td class="c-o">GSQL</td></tr>
+              </tbody>
+            </table>
+          </div><div class="cmp-panel" id="cmpP3" role="tabpanel" aria-labelledby="cmpT3" hidden>
+            <table class="cmp-t">
+              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f">FalkorDB</th><th scope="col" class="c-o">ArangoDB</th></tr></thead>
+              <tbody>
+              <tr class="win"><th scope="row">Latency</th><td class="c-f">Fast</td><td class="c-o">Poor</td></tr>
+              <tr class="win"><th scope="row">Memory efficiency</th><td class="c-f">Highly efficient</td><td class="c-o">Moderate</td></tr>
+              <tr class="win"><th scope="row">Horizontal scaling</th><td class="c-f">Flexible</td><td class="c-o">Limited</td></tr>
+              <tr class="win"><th scope="row">Query language</th><td class="c-f">Cypher</td><td class="c-o">AQL</td></tr>
+              </tbody>
+            </table>
+          </div>
+      <p class="cmp-src">Ratings and benchmark figures as published on falkordb.com; query languages and deployment from each vendor’s documentation.</p>
+    </div>
+
+    <div class="uses">
+      <h3>Three answers only a graph gives</h3>
+      <div class="gw" id="gw">
       <div class="gw-list" role="tablist" aria-label="Reasons" aria-orientation="vertical">
         <button role="tab" class="gw-tab" aria-selected="true" aria-controls="gwPanel" data-i="0">
           <span class="gw-t">Facts change, and the graph remembers how.</span>
-          <span class="gw-d">Statuses are Decision nodes with validity windows, linked by SUPERSEDES. “Was it fixed on 25 Feb?” is one comparison.</span>
+          <span class="gw-d">Statuses are Decision nodes with validity windows, linked by SUPERSEDES. “Was it fixed on 25 Feb?” is one comparison in FalkorDB.</span>
         </button>
         <button role="tab" class="gw-tab" aria-selected="false" aria-controls="gwPanel" data-i="1">
           <span class="gw-t">The answer lives in the links.</span>
@@ -536,6 +718,7 @@
 <span class="c">// also native: algo.betweenness, algo.labelPropagation, shortestPath</span></code></pre>
       </div>
     </div>
+    </div>
 
     <div class="gw-links">
       <a class="link-btn" href="{REPO_URL}#cypher-queries-and-algorithms">All 166 Cypher queries are in the repo</a>
@@ -566,7 +749,7 @@
   <div class="wrap next-grid">
     <div>
       <h2>Coming next</h2>
-      <p class="sec-lede">Lore runs from the repo today, on your machine. There is no hosted version or sign-in yet. These come next.</p>
+      <p class="sec-lede">Today Lore runs from the repo on your machine, and the demo app runs on a shared synthetic graph. There is no sign-in yet. These come next.</p>
     </div>
     <ul class="next-list">
       <li><span class="nx-state">Planned</span><span class="nx-t">One-click install (OAuth) and a hosted version.</span></li>
@@ -588,6 +771,10 @@
       </span>
       <span class="poster-shot" aria-hidden="true"><img src="assets/img/inbox-radius.png" alt="" width="1020" height="1040" loading="lazy"></span>
     </a>
+    <div class="closing-alt">
+      <p>Rather click around yourself? The app runs on the same synthetic demo graph: ask questions, scrub the timeline, approve an alert.</p>
+      <a class="btn btn-line" href="{APP_URL}">Open the app</a>
+    </div>
   </div>
 </section>
 
@@ -602,6 +789,7 @@
     <nav class="foot-links" aria-label="Footer">
       <a href="{VIDEO_URL}">Demo video</a>
       <a href="{REPO_URL}">GitHub</a>
+      <a href="{APP_URL}">The app</a>
       <a href="{BLOG_URL}">Blog post</a>
       <a href="{REPO_URL}/blob/main/eval/report.md">eval/report.md</a>
     </nav>

@@ -18,6 +18,37 @@ const VIEWERS: { id: string; label: string }[] = [
   { id: "eid_9e9883de", label: "Hannah Garcia, Software Engineer (not in it)" },
 ];
 
+// The landing page, when the app is deployed next to it (VITE_SITE_URL at build time).
+const SITE_URL: string | undefined = import.meta.env.VITE_SITE_URL;
+
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => document.documentElement.dataset.theme === "dark");
+  const flip = () => {
+    const next = dark ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try {
+      localStorage.setItem("lore-theme", next);
+    } catch {
+      /* storage blocked: the choice lasts this visit */
+    }
+    setDark(!dark);
+  };
+  return (
+    <button type="button" className="icon-btn" onClick={flip} aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>
+      {dark ? (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 14.6A8.3 8.3 0 0 1 9.4 4a8.3 8.3 0 1 0 10.6 10.6Z" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2" />
+          <path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 type Run = {
   question: string;
   product: string | null;
@@ -129,33 +160,38 @@ export default function App() {
   const artifacts = products.reduce((n, p) => n + p.artifacts, 0);
   const form = (
     <form onSubmit={submit} className={compact ? "" : "mt-10"}>
-      <label htmlFor="q" className={compact ? "sr-only" : "block text-sm text-muted mb-1"}>
-        Your question
-      </label>
-      <div className="flex flex-col sm:flex-row sm:items-end gap-x-4 gap-y-3">
-        <input
-          id="q"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          maxLength={500}
-          placeholder="Which customers are waiting on a fix?"
-          className={`flex-1 min-w-0 bg-transparent border-0 border-b-2 border-ink px-0 font-serif placeholder:text-muted/70 focus:outline-none focus-visible:outline-none focus:border-link ${
-            compact ? "text-lg py-1.5" : "text-[1.3rem] sm:text-[1.6rem] py-2"
-          }`}
-        />
-        <div className="flex gap-3 items-end">
+      <div className="query">
+        <div className="query-row">
+          <svg className="glyph" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="6.5" />
+            <path d="M15.4 15.4 21 21" />
+          </svg>
+          <label htmlFor="q" className="sr-only">
+            Your question
+          </label>
+          <input
+            id="q"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            maxLength={500}
+            placeholder="Which customers are waiting on a fix?"
+            className={`query-input ${compact ? "text-[1.15rem] py-1" : "text-[1.3rem] sm:text-[1.55rem] py-1.5"}`}
+          />
+          {run?.running ? (
+            <button type="button" onClick={stop} className="btn btn-line">
+              Stop
+            </button>
+          ) : (
+            <button type="submit" disabled={draft.trim().length < 3} className="btn btn-ink">
+              <kbd className="hidden sm:inline">Enter</kbd> Ask
+            </button>
+          )}
+        </div>
+        <div className="query-scope">
           <ProductPicker products={products} value={product} onChange={setProduct} error={productError} />
-          <div>
-            <label htmlFor="viewer" className="block text-[0.78rem] text-muted">
-              View as
-            </label>
-            <select
-              id="viewer"
-              value={viewer ?? ""}
-              onChange={(e) => setViewer(e.target.value || null)}
-              title="Answer as this person: sources they can't see are left out (synthetic policy)"
-              className="bg-transparent border-0 border-b-2 border-ink py-1.5 pr-1 max-w-[11rem]"
-            >
+          <span className="scope-select" title="Answer as this person: sources they can't see are left out (synthetic policy)">
+            <label htmlFor="viewer">view as</label>
+            <select id="viewer" value={viewer ?? ""} onChange={(e) => setViewer(e.target.value || null)}>
               <option value="">Anyone</option>
               {VIEWERS.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -163,20 +199,10 @@ export default function App() {
                 </option>
               ))}
             </select>
-          </div>
-          {run?.running ? (
-            <button type="button" onClick={stop} className="px-5 py-2 border-2 border-ink font-medium">
-              Stop
-            </button>
-          ) : (
-            <button
-              type="submit"
-              disabled={draft.trim().length < 3}
-              className="px-6 py-2 border-2 border-ink bg-ink text-paper font-medium disabled:opacity-35"
-            >
-              Ask
-            </button>
-          )}
+          </span>
+          <span className="ml-auto text-[0.8rem] text-muted hidden md:inline">
+            Every sentence comes with a quote checked word for word.
+          </span>
         </div>
       </div>
     </form>
@@ -184,8 +210,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-rule">
-        <div className="max-w-[90rem] mx-auto px-4 sm:px-8 py-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+      <header className="topbar">
+        <div className="max-w-[90rem] mx-auto px-4 sm:px-8 py-2.5 flex flex-wrap items-center gap-x-6 gap-y-2">
           <button
             type="button"
             onClick={() => {
@@ -193,31 +219,47 @@ export default function App() {
               setRun(null);
               window.location.hash = "ask";
             }}
-            className="font-serif text-[1.6rem] font-semibold tracking-tight leading-none"
+            className="brand"
             aria-label="Lore, back to the start"
           >
+            <svg viewBox="0 0 28 28" aria-hidden="true">
+              <path className="bm-edge" d="M7 20 L14 8 L21 18 Z" />
+              <circle className="bm-node" cx="7" cy="20" r="3.2" />
+              <circle className="bm-node" cx="21" cy="18" r="3.2" />
+              <rect className="bm-cite" x="10.6" y="4.6" width="6.8" height="6.8" rx="1.6" />
+            </svg>
             Lore
           </button>
-          <nav aria-label="Views" className="flex flex-wrap gap-x-5 gap-y-1 text-[0.95rem] mr-auto ml-4">
+          <nav aria-label="Views" className="tabs mr-auto overflow-x-auto max-w-full">
             {VIEWS.map((v) => (
-              <a
-                key={v}
-                href={`#${v}`}
-                aria-current={view === v ? "page" : undefined}
-                className={view === v ? "font-semibold border-b-2 border-ink" : "text-link hover:underline underline-offset-2"}
-              >
+              <a key={v} href={`#${v}`} aria-current={view === v ? "page" : undefined} className="tab">
                 {VIEW_WORDS[v]}
-                {v === "inbox" && openAlerts ? ` (${openAlerts} open)` : ""}
+                {v === "inbox" && openAlerts ? (
+                  <span className="count" aria-label={`${openAlerts} open`}>
+                    {openAlerts}
+                  </span>
+                ) : null}
               </a>
             ))}
           </nav>
-          <p className="text-sm text-muted">
-            {productError
-              ? `The graph didn't answer: ${productError}`
-              : products.length
-                ? `${artifacts.toLocaleString("en")} artifacts from ${products.length} products in the graph`
-                : "Connecting to the graph"}
-          </p>
+          <span className={`chip hidden md:inline-flex ${productError ? "text-warn" : ""}`}>
+            {productError ? (
+              `The graph didn't answer: ${productError}`
+            ) : products.length ? (
+              <>
+                <span className="k">graph</span>
+                {artifacts.toLocaleString("en")} artifacts, {products.length} products
+              </>
+            ) : (
+              "Connecting to the graph"
+            )}
+          </span>
+          <ThemeToggle />
+          {SITE_URL && (
+            <a href={SITE_URL} className="btn btn-line btn-sm hidden sm:inline-flex">
+              About Lore
+            </a>
+          )}
         </div>
       </header>
 
@@ -256,17 +298,17 @@ export default function App() {
 
 function Opening({ form, onPick, products }: { form: ReactNode; onPick: (s: Suggestion) => void; products: Product[] }) {
   return (
-    <section className="pt-14 sm:pt-20 max-w-[64rem]">
-      <h1 className="font-serif text-[2.4rem] sm:text-[3.4rem] leading-[1.05] tracking-[-0.015em] font-medium max-w-[20ch] text-balance">
+    <section className="pt-14 sm:pt-20 max-w-[64rem] mx-auto rise">
+      <h1 className="font-serif text-[2.6rem] sm:text-[4rem] leading-none tracking-[-0.028em] max-w-[18ch] text-balance">
         What's true at the company, and who said so.
       </h1>
-      <p className="mt-5 text-[1.05rem] text-muted max-w-[58ch] leading-relaxed">
+      <p className="mt-5 text-[1.08rem] text-muted max-w-[58ch] leading-relaxed">
         Lore answers from a graph of Slack messages, meetings, documents and pull requests. Each sentence of an answer
         links to a quote you can check against its source. When nothing supports an answer, Lore says so.
       </p>
       {form}
       <div className="mt-14">
-        <h2 className="font-semibold">Try a question from the data</h2>
+        <h2 className="font-serif text-[1.6rem] tracking-[-0.01em]">Try a question from the data</h2>
         <p className="text-sm text-muted mt-0.5">
           The data is HERB, a public synthetic company. Each product also goes by a codename in its chats.
         </p>
@@ -281,10 +323,10 @@ function QuestionIndex({ onPick, disabled, products }: { onPick: (s: Suggestion)
   const groups = [...new Set(SUGGESTIONS.map((s) => s.product))];
   const alias = (id: string) => products.find((p) => p.id === id)?.aliases[0];
   return (
-    <div className="grid gap-x-10 gap-y-6 mt-5 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 mt-5 sm:grid-cols-2 lg:grid-cols-3">
       {groups.map((g) => (
-        <section key={g} aria-label={g}>
-          <h3 className="text-sm pb-1.5 mb-1 border-b border-rule">
+        <section key={g} aria-label={g} className="card suggest-card">
+          <h3>
             <span className="font-semibold">{g}</span>
             {alias(g) && <span className="text-muted">, called {alias(g)} in chats</span>}
           </h3>
@@ -296,7 +338,7 @@ function QuestionIndex({ onPick, disabled, products }: { onPick: (s: Suggestion)
                   disabled={disabled}
                   onClick={() => onPick(s)}
                   title={s.question}
-                  className="font-serif text-[1.08rem] leading-snug text-left py-1.5 w-full hover:text-link hover:underline underline-offset-[0.2em] decoration-1 disabled:opacity-50 disabled:no-underline"
+                  className="font-serif text-[1.06rem] leading-snug text-left py-1.5 px-2 -mx-2 w-[calc(100%+1rem)] rounded-lg hover:bg-(--surface-2) hover:text-link disabled:opacity-50"
                 >
                   {s.short}
                 </button>
@@ -317,16 +359,13 @@ function ProductPicker(props: {
 }) {
   const { products, value, onChange, error } = props;
   return (
-    <div>
-      <label htmlFor="product" className="block text-[0.78rem] text-muted">
-        Product
-      </label>
+    <span className={`scope-select ${error ? "err" : ""}`}>
+      <label htmlFor="product">product</label>
       <select
         id="product"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
         title={error ? `Products not loaded: ${error}` : undefined}
-        className={`bg-transparent border-0 border-b-2 py-1.5 pr-1 ${error ? "border-warn text-warn" : "border-ink"}`}
       >
         <option value="">{error ? "Not loaded" : "Any"}</option>
         {products.map((p) => (
@@ -335,7 +374,7 @@ function ProductPicker(props: {
           </option>
         ))}
       </select>
-    </div>
+    </span>
   );
 }
 
@@ -353,9 +392,9 @@ function RunView(props: {
     .filter((n) => n.label === "issue" || n.label === "pr")
     .sort((a, b) => Number(b.cited) - Number(a.cited));
   return (
-    <div className="grid gap-x-12 gap-y-10 border-t border-rule pt-8 lg:grid-cols-[15rem_minmax(0,1fr)_21rem]">
-      <section aria-labelledby="h-walk" className="order-3 lg:order-1">
-        <h2 id="h-walk" className="font-semibold mb-3">
+    <div className="grid gap-5 pt-6 items-start lg:grid-cols-[16rem_minmax(0,1fr)_22rem]">
+      <section aria-labelledby="h-walk" className="order-3 lg:order-1 card card-pad lg:sticky lg:top-20">
+        <h2 id="h-walk" className="card-h">
           How Lore found it
         </h2>
         <Walk steps={run.steps} running={run.running && !run.answer} />
@@ -367,21 +406,27 @@ function RunView(props: {
         )}
       </section>
 
-      <section aria-labelledby="h-answer" className="order-1 lg:order-2 min-w-0">
+      <section aria-labelledby="h-answer" className="order-1 lg:order-2 min-w-0 card card-pad sm:px-8 sm:py-7">
         <h2 id="h-answer" className="font-serif text-[1.75rem] leading-[1.15] tracking-[-0.01em] mb-6 max-w-[34ch]">
           {run.question}
         </h2>
         {run.asOfMs !== null && (
           <p className="-mt-4 mb-5 text-sm">
-            <span className="bg-mark text-mark-ink px-1 font-semibold">As of {when(new Date(run.asOfMs).toISOString())}</span>{" "}
+            <span className="bg-mark text-mark-ink px-1.5 py-0.5 rounded font-semibold">As of {when(new Date(run.asOfMs).toISOString())}</span>{" "}
             <span className="text-muted">Lore answers for the state in force at that moment.</span>
           </p>
         )}
         {run.error && (
-          <div className="border-l-4 border-warn bg-warn-soft px-4 py-3 mb-4 max-w-[68ch]" role="alert">
+          <div className="border-l-4 border-warn bg-warn-soft rounded-r-lg px-4 py-3 mb-4 max-w-[68ch]" role="alert">
             <p className="font-semibold text-warn">The question failed</p>
             <p className="mt-0.5">{run.error}</p>
-            <p className="text-sm text-muted mt-1">Ask again, or check the API log for the cause.</p>
+            <p className="text-sm text-muted mt-1">
+              {run.error.startsWith("CacheOnly")
+                ? "This deployment answers its suggested questions only; it never spends on new ones."
+                : run.error.startsWith("429") || run.error.startsWith("503")
+                  ? "Lore is limiting requests right now. Wait a minute and ask again."
+                  : "Ask again, or check the API log for the cause."}
+            </p>
           </div>
         )}
         {run.answer ? (
@@ -392,7 +437,7 @@ function RunView(props: {
 
         {!!run.subgraph?.nodes.length && (
           <section aria-labelledby="h-evidence" className="mt-12">
-            <h2 id="h-evidence" className="font-semibold">
+            <h2 id="h-evidence" className="font-serif text-[1.35rem] tracking-[-0.01em]">
               Evidence in the graph
             </h2>
             <p className="text-sm text-muted mt-0.5 mb-3 max-w-[68ch]">
@@ -415,7 +460,7 @@ function RunView(props: {
 
         {subjects.length > 0 && (
           <section aria-labelledby="h-timeline" className="mt-12">
-            <h2 id="h-timeline" className="font-semibold">
+            <h2 id="h-timeline" className="font-serif text-[1.35rem] tracking-[-0.01em]">
               How it changed over time
             </h2>
             <p className="text-sm text-muted mt-0.5 mb-4 max-w-[68ch]">
@@ -435,10 +480,10 @@ function RunView(props: {
         )}
       </section>
 
-      <section aria-labelledby="h-sources" className="order-2 lg:order-3 min-w-0">
+      <section aria-labelledby="h-sources" className={`order-2 lg:order-3 min-w-0 ${run.citations.length ? "card card-pad lg:sticky lg:top-20" : ""}`}>
         {run.citations.length > 0 && (
           <>
-            <h2 id="h-sources" className="font-semibold">
+            <h2 id="h-sources" className="card-h mb-1">
               Sources
             </h2>
             <p className="text-sm text-muted mt-0.5 mb-4">

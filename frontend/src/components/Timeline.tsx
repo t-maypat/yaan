@@ -193,7 +193,7 @@ function Chain(props: {
             type="button"
             disabled={running || t === asOfMs}
             onClick={() => onReask(t)}
-            className="px-4 py-1.5 border-2 border-ink font-medium disabled:opacity-35"
+            className="btn btn-line btn-sm"
             title={question}
           >
             Ask again as of this moment
@@ -203,7 +203,7 @@ function Chain(props: {
               type="button"
               disabled={running}
               onClick={() => onReask(null)}
-              className="px-4 py-1.5 border-2 border-ink font-medium disabled:opacity-35"
+              className="btn btn-line btn-sm"
             >
               Ask again for now
             </button>

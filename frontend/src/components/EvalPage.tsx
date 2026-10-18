@@ -64,7 +64,7 @@ export function EvalPage() {
 
       <AvgBars systems={main} reference={data.reference} splitWord={mainWord} />
 
-      <div className="overflow-x-auto mt-10">
+      <div className="overflow-x-auto mt-10 card card-pad">
         <table className="w-full text-[0.9rem] min-w-[44rem]">
           <caption className="text-left font-semibold mb-2">All scores{test.length ? " (held-out, then dev)" : " (dev)"}</caption>
           <thead>
@@ -166,7 +166,7 @@ function AvgBars({
   const [hover, setHover] = useState<string | null>(null);
   const max = 100;
   return (
-    <figure className="mt-8" aria-labelledby="h-avg">
+    <figure className="mt-8 card card-pad" aria-labelledby="h-avg">
       <figcaption id="h-avg" className="font-semibold">
         Average score per system ({splitWord}, 0–100)
       </figcaption>

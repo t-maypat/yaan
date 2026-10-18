@@ -140,8 +140,8 @@ export function Inbox({ onCount }: { onCount: (open: number) => void }) {
         </div>
       )}
 
-      <div className="grid gap-x-12 gap-y-8 border-t border-rule pt-8 mt-10 lg:grid-cols-[22rem_minmax(0,1fr)]">
-        <section aria-labelledby="h-alerts" className="min-w-0 order-2 lg:order-1">
+      <div className="grid gap-5 pt-2 mt-10 items-start lg:grid-cols-[22rem_minmax(0,1fr)]">
+        <section aria-labelledby="h-alerts" className="min-w-0 order-2 lg:order-1 card card-pad lg:sticky lg:top-20">
           <div className="flex items-baseline justify-between gap-3 mb-2">
             <h2 id="h-alerts" className="font-semibold">
               Alerts
@@ -196,7 +196,7 @@ export function Inbox({ onCount }: { onCount: (open: number) => void }) {
           </ul>
         </section>
 
-        <section aria-label="The selected alert" className="min-w-0 order-1 lg:order-2">
+        <section aria-label="The selected alert" className="min-w-0 order-1 lg:order-2 card card-pad sm:px-8 sm:py-7">
           {current ? (
             <AlertView key={current} id={current} onAnswered={() => reload()} />
           ) : (
@@ -246,7 +246,7 @@ function LiveDemo({ onIngested, onReset }: { onIngested: (r: IngestResult) => vo
   };
 
   return (
-    <section aria-labelledby="h-live" className="mt-10 max-w-[64rem]">
+    <section aria-labelledby="h-live" className="mt-10 max-w-[64rem] card card-pad">
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
         <h2 id="h-live" className="font-semibold">
           Try it live
@@ -277,7 +277,7 @@ function LiveDemo({ onIngested, onReset }: { onIngested: (r: IngestResult) => vo
               type="button"
               onClick={() => send(m.name)}
               disabled={!!busy || m.injected || (i > 0 && !items?.[i - 1]?.injected)}
-              className="mt-2 px-4 py-1.5 border-2 border-ink font-medium text-sm disabled:opacity-40"
+              className="mt-2 btn btn-line btn-sm"
             >
               {busy === m.name ? "Running the pipeline" : m.injected ? "Sent" : "Send this message"}
             </button>
@@ -658,7 +658,7 @@ function Respond({ detail, actions, onDone }: { detail: AlertDetail; actions: Ac
             type="button"
             disabled={busy || !person || !chosen.size}
             onClick={() => go("approve")}
-            className="px-5 py-2 border-2 border-ink bg-ink text-paper font-medium disabled:opacity-35"
+            className="btn btn-ink"
           >
             Approve and send {chosen.size}
           </button>
@@ -666,7 +666,7 @@ function Respond({ detail, actions, onDone }: { detail: AlertDetail; actions: Ac
             type="button"
             disabled={busy || !person}
             onClick={() => go("dismiss")}
-            className="px-5 py-2 border-2 border-ink font-medium disabled:opacity-35"
+            className="btn btn-line"
           >
             Dismiss
           </button>

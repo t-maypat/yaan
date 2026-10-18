@@ -16,7 +16,7 @@
 
   /* ---------------- theme ---------------- */
   const themeBtn = $('#themeToggle');
-  const isDark = () => root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDark = () => root.dataset.theme === 'dark';  // light unless chosen (index.html sets it before paint)
   const syncThemeLabel = () => themeBtn.setAttribute('aria-label', isDark() ? 'Switch to light theme' : 'Switch to dark theme');
   syncThemeLabel();
   themeBtn.addEventListener('click', () => {
@@ -26,14 +26,13 @@
     syncThemeLabel();
     graph && graph.refreshColors();
   });
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { syncThemeLabel(); graph && graph.refreshColors(); });
 
   /* ---------------- nav ---------------- */
   const nav = $('#nav');
   const onScroll = () => nav.classList.toggle('is-scrolled', scrollY > 12);
   addEventListener('scroll', onScroll, { passive: true });
   onScroll();
-  const night = document.getElementById('graph');
+  const night = document.getElementById('falkordb');
   if (night) {
     const darkCheck = () => { const r = night.getBoundingClientRect(); nav.classList.toggle('on-dark', r.top <= 40 && r.bottom > 40); };
     addEventListener('scroll', darkCheck, { passive: true }); darkCheck();
@@ -46,7 +45,7 @@
     });
   }, { rootMargin: '-45% 0px -50% 0px' });
   // sections without a nav link clear the highlight
-  ['problem', 'how', 'features', 'results', 'graph', 'works', 'next'].forEach((id) => { const el = document.getElementById(id); el && secObs.observe(el); });
+  ['problem', 'how', 'features', 'results', 'falkordb', 'works', 'next'].forEach((id) => { const el = document.getElementById(id); el && secObs.observe(el); });
 
   /* =====================================================================
      Hero graph: the real subgraph around ExplainabilityForce, drawn in the
@@ -643,33 +642,96 @@
   })();
 
   /* =====================================================================
-     Results: the ablation switch.
+     Results: the FalkorDB-graph switch and the bar tooltips.
      ===================================================================== */
   (() => {
     const sw = $('#graphSwitch'); if (!sw) return;
     const box = $('#ablate'), label = $('#swLabel');
+    const bar = $('#barLore'), barV = $('#barLoreV');
     const figs = [
-      { n: $('#abAvg'), bar: $('#abAvgBar'), on: 63.6, off: 24.2, pct: false },
-      { n: $('#abCust'), bar: $('#abCustBar'), on: 54.2, off: 0.0, pct: false },
-      { n: $('#abStale'), bar: $('#abStaleBar'), on: 0, off: 8.7, pct: true },
+      { n: $('#abAvg'), on: 63.6, off: 24.2, pct: false, bar: true },
+      { n: $('#abCust'), on: 54.2, off: 0.0, pct: false },
+      { n: $('#abStale'), on: 0, off: 8.7, pct: true },
     ];
-    const show = (f, v) => { f.n.textContent = f.pct ? (v === 0 ? '0%' : v.toFixed(1) + '%') : v.toFixed(1); };
+    const fmt = (f, v) => f.pct ? (v === 0 ? '0%' : v.toFixed(1) + '%') : v.toFixed(1);
     sw.addEventListener('click', () => {
       const on = sw.getAttribute('aria-checked') !== 'true';
       sw.setAttribute('aria-checked', String(on));
-      label.textContent = on ? 'Graph tools on' : 'Graph tools off';
+      label.textContent = on ? 'FalkorDB graph on' : 'FalkorDB graph off';
       box.classList.toggle('is-off', !on);
       figs.forEach((f) => {
         const from = parseFloat(f.n.textContent), to = on ? f.on : f.off;
-        f.bar.style.setProperty('--v', to);
-        if (reduced) return show(f, to);
+        if (f.bar) { bar.style.setProperty('--v', to); barV.parentElement.style.setProperty('--v', to); barV.style.setProperty('--v', to); }
+        const set = (v) => { f.n.textContent = fmt(f, v); if (f.bar) barV.textContent = fmt(f, v); };
+        if (reduced) return set(to);
         const t0 = performance.now(), D = 900;
         const tick = (t) => {
           const k = Math.min(1, (t - t0) / D), e = 1 - Math.pow(1 - k, 3);
-          show(f, k < 1 ? from + (to - from) * e : to);
+          set(k < 1 ? from + (to - from) * e : to);
           if (k < 1) requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
+      });
+    });
+    // one tooltip per bar, near the end of the hovered bar
+    const tip = $('#barsTip'), fig = $('.bars');
+    $$('.bar-row').forEach((row) => {
+      const show = () => {
+        tip.textContent = row.dataset.tip;
+        const r = row.getBoundingClientRect(), f = fig.getBoundingClientRect(), b = $('.bar', row).getBoundingClientRect();
+        tip.style.left = Math.min(b.right - f.left + 12, f.width - 300) + 'px';
+        tip.style.top = (r.top - f.top - 30) + 'px';
+        tip.classList.add('on');
+      };
+      row.addEventListener('mouseenter', show);
+      row.addEventListener('mouseleave', () => tip.classList.remove('on'));
+    });
+  })();
+
+  /* =====================================================================
+     Why FalkorDB: the engine stack, the tail-latency plot, the comparison.
+     ===================================================================== */
+  (() => {
+    // stack: point at a layer to read what Lore uses it for
+    const out = $('#stackUse');
+    if (out) {
+      const idle = out.textContent;
+      $$('#stack [data-use]').forEach((el) => {
+        el.tabIndex = 0;
+        const on = () => { $$('#stack [data-use]').forEach((x) => x.classList.toggle('is-on', x === el)); out.textContent = el.dataset.use; };
+        el.addEventListener('mouseenter', on);
+        el.addEventListener('focus', on);
+      });
+      $('#stack').addEventListener('mouseleave', () => { $$('#stack [data-use]').forEach((x) => x.classList.remove('is-on')); out.textContent = idle; });
+    }
+    // tail plot: log scale from 10 ms to 100 s, drawn when it scrolls into view
+    const plot = $('#tailPlot');
+    if (plot) {
+      const x = (ms) => Math.max(0, Math.min(100, (Math.log10(ms) - 1) / 4 * 100));
+      const label = (ms) => ms >= 1000 ? (ms / 1000).toLocaleString('en', { maximumFractionDigits: 1 }) + ' s' : ms + ' ms';
+      const draw = () => $$('.tail-row', plot).forEach((row) => {
+        const f = +row.dataset.f, o = +row.dataset.o;
+        $('.tb-f', row).style.width = x(f) + '%';
+        $('.tb-o', row).style.width = x(o) + '%';
+        const vf = $('.tv-f', row), vo = $('.tv-o', row);
+        vf.textContent = label(f); vo.textContent = 'Neo4j ' + label(o);
+        vf.style.left = `calc(${x(f)}% + 8px)`;
+        vo.style.left = x(o) > 70 ? `calc(${x(o)}% - ${vo.offsetWidth + 8}px)` : `calc(${x(o)}% + 8px)`;
+        if (x(o) > 70) vo.style.color = '#0a1117';
+      });
+      new IntersectionObserver(([e], obs) => { if (e.isIntersecting) { draw(); obs.disconnect(); } }, { threshold: .4 }).observe(plot);
+    }
+    // comparison tabs
+    const tabs = $$('.cmp-tab');
+    const pick = (i, focus) => {
+      tabs.forEach((t, k) => { t.setAttribute('aria-selected', String(k === i)); t.tabIndex = k === i ? 0 : -1; document.getElementById(t.getAttribute('aria-controls')).hidden = k !== i; });
+      if (focus) tabs[i].focus();
+    };
+    tabs.forEach((t, i) => {
+      t.addEventListener('click', () => pick(i));
+      t.addEventListener('keydown', (e) => {
+        const k = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+        if (k) { e.preventDefault(); pick((i + k + tabs.length) % tabs.length, true); }
       });
     });
   })();

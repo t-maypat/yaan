@@ -64,7 +64,7 @@ export function GraphHealthPage() {
 
 function CountTable({ caption, head, rows }: { caption: string; head: string; rows: [string, number][] }) {
   return (
-    <table className="w-full text-[0.92rem]">
+    <table className="w-full text-[0.92rem] card card-pad block">
       <caption className="text-left font-semibold mb-2">{caption}</caption>
       <thead>
         <tr className="border-b border-ink text-left">
