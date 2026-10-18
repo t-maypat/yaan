@@ -1,7 +1,7 @@
 """Settings from the environment and the repo-root .env (template: .env.example).
 
 Optional secrets stay None here; the code that needs one raises a clear error when
-it's missing. Phase 1 adds the FalkorDB ACL users.
+it's missing.
 """
 
 from functools import lru_cache
@@ -21,11 +21,12 @@ class Settings(BaseSettings):
     lore_graph: str = "lore_herb"
     lore_demo_graph: str = "lore_demo"
     query_timeout_ms: int = 2000  # default timeout for reads (agent tools); writes can't take one
-    # Redis ACL users (Phase 1.4). Unset = Redis's default user.
-    falkordb_writer_user: str | None = None
+    # Redis ACL users (Phase 1.4, D018), created by docker-compose.yml from the same .env.
+    falkordb_writer_user: str = "lore_writer"
     falkordb_writer_password: str | None = None
-    falkordb_reader_user: str | None = None
+    falkordb_reader_user: str = "lore_reader"
     falkordb_reader_password: str | None = None
+    falkordb_admin_password: str | None = None  # user "default": ops and contract tests only
 
     # LLM (Anthropic)
     anthropic_api_key: str | None = None

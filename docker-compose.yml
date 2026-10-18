@@ -1,6 +1,6 @@
 # Local stack: FalkorDB + Browser. The image's run.sh starts
 #   redis-server $REDIS_ARGS --protected-mode no --dir /var/lib/falkordb/data --loadmodule falkordb.so $FALKORDB_ARGS
-# Phase 1.4 adds ACL users; Phase 15 adds the api, web and TLS proxy services for deployment.
+# Phase 15 adds the api, web and TLS proxy services for deployment.
 name: lore
 
 services:
@@ -15,15 +15,34 @@ services:
       # - RESULTSET_SIZE -1: no silent truncation (the image's 10000 cut results without a
       #   warning); every read query carries its own LIMIT.
       FALKORDB_ARGS: "TIMEOUT_DEFAULT 10000 TIMEOUT_MAX 120000 RESULTSET_SIZE -1 MAX_QUEUED_QUERIES 25"
-      # Persistence (D013): a snapshot within 60 s of any change, plus a final save on a clean stop.
-      REDIS_ARGS: "--save 60 1"
+      # Redis options. run.sh word-splits this unquoted, so passwords must have no spaces or
+      # glob characters (`allkeys` / `allcommands` stand in for `~*` / `+@all` for that reason).
+      # - Persistence (D013): a snapshot within 60 s of any change, plus a final save on a clean stop.
+      # - ACL users (D018, A12), recreated from these arguments at every start:
+      #   default = admin, password required (redis-cli, the Browser, snapshots, config);
+      #   writer  = graph commands only: no FLUSHALL, no CONFIG, no key commands;
+      #   reader  = read and plan only. GRAPH.QUERY, GRAPH.PROFILE (it executes) and GRAPH.DELETE
+      #             are refused, so a write can't even be sent: the second lock behind RO_QUERY.
+      #   Both app users get INFO and CLIENT SETINFO because the falkordb client sends them on
+      #   connect. Key access is ~* because FalkorDB declares even RO_QUERY as read-write on its key.
+      REDIS_ARGS: >-
+        --save 60 1
+        --user default on >${FALKORDB_ADMIN_PASSWORD:?set FALKORDB_ADMIN_PASSWORD in .env (see .env.example)} allkeys allcommands
+        --user ${FALKORDB_WRITER_USER:-lore_writer} on >${FALKORDB_WRITER_PASSWORD:?set FALKORDB_WRITER_PASSWORD in .env} allkeys -@all
+        +graph.query +graph.ro_query +graph.explain +graph.profile +graph.list +graph.delete
+        +graph.constraint +graph.memory +ping +info +client|setinfo
+        --user ${FALKORDB_READER_USER:-lore_reader} on >${FALKORDB_READER_PASSWORD:?set FALKORDB_READER_PASSWORD in .env} allkeys -@all
+        +graph.ro_query +graph.explain +graph.list +ping +info +client|setinfo
+      # redis-cli inside the container authenticates as the admin with this.
+      REDISCLI_AUTH: "${FALKORDB_ADMIN_PASSWORD}"
     ports:
       - "127.0.0.1:${FALKORDB_PORT:-6379}:6379"
       - "127.0.0.1:3000:3000" # FalkorDB Browser: local only, never public
     volumes:
       - falkordb-data:/var/lib/falkordb/data # = redis-server --dir (run.sh); verified A7
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # Check the reply, not the exit code: redis-cli exits 0 even on NOAUTH.
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 20

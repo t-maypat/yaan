@@ -158,6 +158,20 @@ def test_a_server_timeout_becomes_query_timeout(fake):
         db.run("get_people")
 
 
+@pytest.mark.parametrize(("readonly", "key"), [(True, "READER"), (False, "WRITER")])
+def test_client_fails_loudly_without_a_password(monkeypatch, readonly, key):
+    settings = Settings(
+        _env_file=None, falkordb_reader_password=None, falkordb_writer_password=None
+    )
+    monkeypatch.setattr(db, "get_settings", lambda: settings)
+    db.client.cache_clear()
+    try:
+        with pytest.raises(RuntimeError, match=f"FALKORDB_{key}_PASSWORD"):
+            db.client(readonly)
+    finally:
+        db.client.cache_clear()
+
+
 def test_explain_returns_plan_lines_through_the_reader(fake):
     assert db.explain("get_people", {"k": 1}) == FakePlan.plan
     assert fake[True].calls[0]["kind"] == "explain"

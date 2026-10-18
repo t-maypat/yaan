@@ -1,9 +1,9 @@
 """FalkorDB access: the one place Lore's Python code talks to the graph. Built in Phase 1.3.
 
-Two clients (CONTEXT §9.11):
-- the writer, for ingestion, sends GRAPH.QUERY;
+Two clients (CONTEXT §9.11), each logged in as its own Redis ACL user (D018):
+- the writer, for ingestion, sends GRAPH.QUERY; its user may run graph commands only;
 - the reader, for agent tools and eval, sends GRAPH.RO_QUERY, which the server refuses to run
-  if the query would write. Phase 1.4 gives it its own read-only ACL user.
+  if the query would write. Its user can't even send GRAPH.QUERY: two locks, not one.
 
 Queries live in backend/queries/<name>.cypher, one parameterized statement each, and are sent
 exactly as written (FalkorDB accepts // comments).
@@ -89,9 +89,14 @@ def client(readonly: bool) -> FalkorDB:
     """The shared reader or writer connection (a connection pool, safe across threads)."""
     s = get_settings()
     if readonly:
-        user, password = s.falkordb_reader_user, s.falkordb_reader_password
+        user, password, key = s.falkordb_reader_user, s.falkordb_reader_password, "READER"
     else:
-        user, password = s.falkordb_writer_user, s.falkordb_writer_password
+        user, password, key = s.falkordb_writer_user, s.falkordb_writer_password, "WRITER"
+    if not password:
+        raise RuntimeError(
+            f"FALKORDB_{key}_PASSWORD is not set. Copy the FalkorDB user lines from .env.example "
+            "into .env, then restart FalkorDB (docker compose up -d) so it creates the users."
+        )
     return FalkorDB(
         host=s.falkordb_host,
         port=s.falkordb_port,
