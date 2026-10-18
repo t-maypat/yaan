@@ -42,7 +42,16 @@ def get_system(name: str) -> System:
             prepare=lambda q, product: baseline_rag.retrieve(q, product_id=product),
             respond=baseline_rag.answer_from,
         )
-    raise ValueError(f"unknown system {name!r}: 'baseline' (the Lore agent arrives in Phase 9)")
+    if name == "lore":
+        from app.agent import loop
+
+        # The agent reads the graph between LLM turns, so all of it runs in the pool:
+        # the graph client is thread-safe and the embedder is behind a lock (tools.py).
+        return System(
+            prepare=lambda q, product: product,
+            respond=lambda q, product: loop.answer(q, product_id=product),
+        )
+    raise ValueError(f"unknown system {name!r}: 'baseline' or 'lore'")
 
 
 def questions(split: str = "dev", products: list[str] | None = None) -> list[dict[str, Any]]:

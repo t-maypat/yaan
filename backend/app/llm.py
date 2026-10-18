@@ -240,7 +240,134 @@ def complete(
     return result
 
 
-def log_call(purpose: str, r: LLMResult, elapsed_ms: float = 0.0) -> None:
+@dataclass(frozen=True)
+class Turn:
+    """One assistant turn of a tool-using conversation (converse)."""
+
+    content: list[dict[str, Any]]  # the assistant's blocks as request params, thinking kept
+    stop_reason: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    cost_usd: float
+    cached: bool
+    request_id: str | None
+
+    @property
+    def tool_uses(self) -> list[dict[str, Any]]:
+        return [b for b in self.content if b["type"] == "tool_use"]
+
+    @property
+    def text(self) -> str:
+        return "".join(b["text"] for b in self.content if b["type"] == "text")
+
+
+def block_param(block: Any) -> dict[str, Any]:
+    """A response content block as the request param that sends it back unchanged.
+
+    Haiku 5.5 thinks by default; its thinking blocks (empty text, a signature) must go back
+    exactly as received with the tool results, so the history stays append-only.
+    """
+    if block.type == "text":
+        return {"type": "text", "text": block.text}
+    if block.type == "thinking":
+        return {"type": "thinking", "thinking": block.thinking, "signature": block.signature}
+    if block.type == "redacted_thinking":
+        return {"type": "redacted_thinking", "data": block.data}
+    if block.type == "tool_use":
+        return {"type": "tool_use", "id": block.id, "name": block.name, "input": block.input}
+    raise LLMError(f"unexpected content block type {block.type!r}")
+
+
+def converse(
+    *,
+    role: Role,
+    system: str,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    purpose: str,
+    output_schema: dict[str, Any] | None = None,
+    max_tokens: int = 16000,
+    use_cache: bool = True,
+) -> Turn:
+    """One turn of a tool-using conversation through the gateway (the agent loop, 9.0).
+
+    Same locks as `complete`: the disk cache (keyed by the whole conversation, so a re-run
+    replays every turn for free), the worst-case budget check, the ledger and the call log.
+    Prompt caching: an explicit breakpoint on the system prompt caches tools + system, and
+    the top-level automatic breakpoint caches the growing conversation, so each turn pays
+    full price only for what it adds. `output_schema` constrains the final text answer; tool
+    turns are unaffected. The caller appends `content` unchanged to keep thinking valid.
+    """
+    s = get_settings()
+    model, effort = {
+        "extract": (s.lore_extract_model, s.lore_extract_effort),
+        "answer": (s.lore_answer_model, s.lore_answer_effort),
+        "judge": (s.lore_judge_model, s.lore_judge_effort),
+    }[role]
+    payload = {
+        "system": system,
+        "messages": messages,
+        "tools": tools,
+        "schema": output_schema,
+        "effort": effort,
+        "max": max_tokens,
+    }
+    key = request_key(model, payload)
+    cache = _cache() if use_cache else None
+    if cache is not None and (hit := cache.get(key)) is not None:
+        turn = Turn(**{**hit, "cached": True, "cost_usd": 0.0})
+        log_call(purpose, turn)
+        return turn
+
+    prompt_chars = len(system) + len(json.dumps(messages)) + len(json.dumps(tools))
+    check_budget(model, prompt_chars, max_tokens)
+    output_config: dict[str, Any] = {"effort": effort}
+    if output_schema is not None:
+        output_config["format"] = {"type": "json_schema", "schema": output_schema}
+    started = time.perf_counter()
+    response = client().messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+        tools=tools,
+        messages=messages,
+        output_config=output_config,
+        cache_control={"type": "ephemeral"},
+    )
+    elapsed_ms = (time.perf_counter() - started) * 1000
+
+    usage = response.usage
+    write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+    read = getattr(usage, "cache_read_input_tokens", 0) or 0
+    cost = cost_usd(model, usage.input_tokens, usage.output_tokens, write, read)
+    record_spend(cost)  # billed even when the turn is unusable
+
+    if response.stop_reason == "refusal":
+        raise Refused(f"{model} declined the request ({purpose}): {response.stop_details}")
+    if response.stop_reason == "max_tokens":
+        raise LLMError(f"{purpose}: turn cut off at max_tokens={max_tokens}; raise it")
+    turn = Turn(
+        content=[block_param(b) for b in response.content],
+        stop_reason=response.stop_reason,
+        model=model,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cache_read_tokens=read,
+        cache_write_tokens=write,
+        cost_usd=round(cost, 6),
+        cached=False,
+        request_id=getattr(response, "_request_id", None),
+    )
+    if cache is not None:
+        cache.set(key, {k: v for k, v in turn.__dict__.items() if k != "cached"})
+    log_call(purpose, turn, elapsed_ms)
+    return turn
+
+
+def log_call(purpose: str, r: LLMResult | Turn, elapsed_ms: float = 0.0) -> None:
     """Append one line per call to data/logs/llm_calls.jsonl (tokens and cost per answer, §7.2)."""
     path = get_settings().data_dir / "logs" / "llm_calls.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)

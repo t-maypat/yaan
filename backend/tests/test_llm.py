@@ -188,3 +188,82 @@ def test_baseline_accepts_quotes_from_the_title_and_shows_urls():
     assert not baseline_rag.quote_found("Revert PR# 29", source)
     block = baseline_rag.context_block([{**source, "url": "https://github.com/o/r/pull/1"}])
     assert 'url="https://github.com/o/r/pull/1"' in block
+
+
+# --- converse: the agent loop's multi-turn call (9.0) ---------------------------------------
+def turn_response(*blocks, stop="tool_use", inp=3000, out=150):
+    return SimpleNamespace(
+        content=list(blocks),
+        stop_reason=stop,
+        stop_details=None,
+        usage=SimpleNamespace(
+            input_tokens=inp,
+            output_tokens=out,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=0,
+        ),
+        _request_id="req_turn",
+    )
+
+
+THINK = SimpleNamespace(type="thinking", thinking="", signature="sig-1")
+CALL = SimpleNamespace(type="tool_use", id="tu_1", name="get_artifact", input={"id": "msg:1"})
+TOOLS = [{"name": "get_artifact", "description": "d", "input_schema": {"type": "object"}}]
+
+
+def test_converse_returns_blocks_ready_to_send_back(gateway):
+    gateway.replies.append(turn_response(THINK, CALL))
+    msgs = [{"role": "user", "content": "q"}]
+    turn = llm.converse(
+        role="answer",
+        system="s",
+        messages=msgs,
+        tools=TOOLS,
+        purpose="t",
+        output_schema={"type": "object"},
+    )
+    assert turn.content == [
+        {"type": "thinking", "thinking": "", "signature": "sig-1"},  # kept, unchanged
+        {"type": "tool_use", "id": "tu_1", "name": "get_artifact", "input": {"id": "msg:1"}},
+    ]
+    assert turn.tool_uses == [turn.content[1]] and turn.stop_reason == "tool_use"
+    call = gateway.calls[0]
+    assert call["cache_control"] == {"type": "ephemeral"}  # the growing tail
+    assert call["system"][0]["cache_control"] == {"type": "ephemeral"}  # tools + system
+    assert call["output_config"]["format"] == {"type": "json_schema", "schema": {"type": "object"}}
+    assert call["tools"] == TOOLS
+
+
+def test_converse_replays_a_whole_conversation_from_the_cache(gateway):
+    final = SimpleNamespace(type="text", text='{"answer": 1}')
+    gateway.replies += [turn_response(THINK, CALL), turn_response(final, stop="end_turn")]
+    msgs = [{"role": "user", "content": "q"}]
+
+    def run():
+        history = list(msgs)
+        first = llm.converse(role="answer", system="s", messages=history, tools=TOOLS, purpose="t")
+        history += [
+            {"role": "assistant", "content": first.content},
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "tu_1", "content": "x"}],
+            },
+        ]
+        return llm.converse(role="answer", system="s", messages=history, tools=TOOLS, purpose="t")
+
+    assert run().text == '{"answer": 1}' and len(gateway.calls) == 2
+    again = run()
+    assert again.cached and again.cost_usd == 0.0 and len(gateway.calls) == 2
+
+
+def test_converse_refusals_raise_and_are_billed(gateway):
+    gateway.replies.append(turn_response(stop="refusal"))
+    with pytest.raises(llm.Refused):
+        llm.converse(
+            role="answer",
+            system="s",
+            messages=[{"role": "user", "content": "q"}],
+            tools=TOOLS,
+            purpose="t",
+        )
+    assert llm.spent_today() > 0

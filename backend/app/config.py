@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=REPO_ROOT / ".env", extra="ignore")
 
     # FalkorDB
-    falkordb_host: str = "localhost"
+    falkordb_host: str = (
+        "127.0.0.1"  # not "localhost": on Windows it tries IPv6 first, +2 s per connection
+    )
     falkordb_port: int = 6379
     lore_graph: str = "lore_herb"
     lore_demo_graph: str = "lore_demo"

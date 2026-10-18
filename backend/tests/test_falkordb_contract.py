@@ -305,6 +305,36 @@ def test_a16_merge_with_a_different_label_set_creates_a_duplicate(empty_graph):
     assert read(empty_graph, "MATCH (p:Person {id: 'eid_x'}) RETURN count(p) LIMIT 1") == [[2]]
 
 
+def test_a18_a_pattern_predicate_then_match_needs_with_between(empty_graph):
+    """Found 13 Oct (D044). On 6.0.1, `WHERE (m)-[:R]->(:L)` directly followed by a MATCH that
+    binds a new variable errors ("'c' not defined"); in a larger query (issue_reports, first
+    draft) the same shape silently matched every Customer instead of the one mentioned. A WITH
+    between the two clauses gives the right answer. If this test fails, the engine changed:
+    re-check the lint rule in test_query_lint.py."""
+    writer(empty_graph).query(
+        "CREATE (m:Message {id: 'm1'})-[:MENTIONS]->(:Customer {id: 'c1'}), (:Customer {id: 'c2'})"
+    )
+    head = "MATCH (m:Message {id: 'm1'}) WHERE (m)-[:MENTIONS]->(:Customer) "
+    tail = "MATCH (m)-[:MENTIONS]->(c:Customer) RETURN count(c) LIMIT 1"
+    with pytest.raises(ResponseError, match="'c' not defined"):
+        read(empty_graph, head + tail)
+    assert read(empty_graph, head + "WITH m " + tail) == [[1]]
+
+
+def test_a19_aggregate_by_node_then_read_properties(empty_graph):
+    """Found 13 Oct (D045). On 6.0.1 this crashes the whole server (panic in reply_compact,
+    src/reply.rs:655, "unwrap() on a None value"), so it can't run here:
+        CREATE (:A {id: 'x'}), (:A {id: 'y', m1: 1})
+        MATCH (a:A {id: 'x'}) RETURN a.id, a.m1, count(a)
+    i.e. an aggregate grouped by a property that this node lacks but others have. The forms
+    Lore uses instead (lint rule A19 in test_query_lint.py) are pinned here."""
+    writer(empty_graph).query("CREATE (:A {id: 'x'}), (:A {id: 'y', m1: 1, m2: 2})")
+    by_node = "MATCH (a:A {id: 'x'}) WITH a, count(a) AS n RETURN a.id, a.m1, a.m2, n LIMIT 1"
+    assert read(empty_graph, by_node) == [["x", None, None, 1]]
+    keyed = "MATCH (a:A) RETURN coalesce(a.m1, 0) AS m1, count(a) ORDER BY m1 LIMIT 5"
+    assert read(empty_graph, keyed) == [[0, 1], [1, 1]]
+
+
 # --- A7 / A8 / A17: the server ------------------------------------------------------------------
 
 

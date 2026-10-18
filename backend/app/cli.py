@@ -155,16 +155,18 @@ def cmd_bench_search(args: argparse.Namespace) -> int:
 
 
 def cmd_ask(args: argparse.Namespace) -> int:
+    import json
+
     from app import llm
+    from app.agent import loop
     from app.eval import baseline_rag
 
-    if not args.baseline:
-        print("lore ask: the Lore agent arrives in Phase 9; use --baseline", file=sys.stderr)
-        return 2
+    question = " ".join(args.question)
     try:
-        out = baseline_rag.answer(
-            " ".join(args.question), product_id=args.product, graph=args.graph
-        )
+        if args.baseline:
+            out = baseline_rag.answer(question, product_id=args.product, graph=args.graph)
+        else:
+            out = loop.answer(question, product_id=args.product, graph=args.graph)
     except llm.LLMError as e:
         print(f"lore ask: {e}", file=sys.stderr)
         return 1
@@ -172,6 +174,11 @@ def cmd_ask(args: argparse.Namespace) -> int:
     for c in out["citations"]:
         mark = "ok" if c["quote_ok"] else "QUOTE NOT FOUND" if c["retrieved"] else "NOT RETRIEVED"
         print(f'[{c["n"]}] {c["artifact_id"]} ({mark}): "{c["quote"]}"')
+    for step in out.get("trace", []):
+        status = f"ERROR {step['error']}" if "error" in step else ", ".join(step.get("cypher", []))
+        print(f"  tool {step['tool']}({json.dumps(step['input'])}) {step['ms']} ms: {status}")
+    if out.get("validator", {}).get("dropped"):
+        print(f"  validator dropped: {out['validator']['dropped']}")
     if out["llm"]:
         u = out["llm"]
         cached = ", cached" if u["cached"] else ""
@@ -278,7 +285,7 @@ COMMANDS = {
     "health": ("print the graph-health report (S10)", cmd_health),
     "search": ("hybrid search over the graph's chunks (agent tool 1)", cmd_search),
     "bench-search": ("search hit@k / precision@k and latency on dev questions", cmd_bench_search),
-    "ask": ("answer a question: --baseline = hybrid RAG (Phase 4); the agent in Phase 9", cmd_ask),
+    "ask": ("answer a question with the Lore agent; --baseline = hybrid RAG", cmd_ask),
     "llm-check": ("one tiny LLM call: is the API key set and does it have credit?", cmd_llm_check),
     "eval": ("answer a split's HERB questions and score them (Phase 5)", cmd_eval),
     "eval-report": ("rebuild eval/results/table.md from the results files", cmd_eval_report),
@@ -314,7 +321,7 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
     ],
     "eval": [
-        ("--system", {"choices": ("baseline",), "default": "baseline"}),
+        ("--system", {"choices": ("baseline", "lore"), "default": "baseline"}),
         ("--split", {"choices": ("dev",), "default": "dev"}),
         ("--products", {"nargs": "+", "help": "a subset of the split's products"}),
         ("--limit", {"type": int, "help": "only the first N questions (a cheap smoke run)"}),

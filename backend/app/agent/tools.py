@@ -6,6 +6,7 @@ Spec: docs/CONTEXT.md §9.6 (tool table and design rules).
 """
 
 import re
+import threading
 import time
 from typing import Any, Literal
 
@@ -31,6 +32,7 @@ STOPWORDS = frozenset(
     will with would you your yours tell give list name show find please any was were""".split()
 )
 Mode = Literal["hybrid", "fulltext", "vector"]
+_EMBED_LOCK = threading.Lock()  # agent tools run in the eval's thread pool; one embedder
 
 
 def keywords(text: str) -> str:
@@ -81,7 +83,8 @@ def search_artifacts(
         used.append("search_fulltext.cypher")
     if mode in ("hybrid", "vector"):
         started = time.perf_counter()
-        vector = embed_query(query)
+        with _EMBED_LOCK:
+            vector = embed_query(query)
         timings["embed_ms"] = ms_since(started)
         started = time.perf_counter()
         # With a product, score that product's own chunks exactly: the index returns the
@@ -158,3 +161,237 @@ def fuse(
 
 def ms_since(started: float) -> float:
     return round((time.perf_counter() - started) * 1000, 2)
+
+
+# --- agent tools that need no extraction: slice A (9.0, D038) ------------------------------
+# Each returns compact JSON-ready data with the .cypher files it ran, so an answer can show
+# its work. Product-level tools list everything the product has (tens of rows): the model
+# reads the full set instead of trusting a top-k search not to miss one.
+LIST_TEXT_CHARS = 500  # per message or report in a list
+ARTIFACT_CHARS = 8000  # get_artifact; meetings run to ~10k characters
+DOC_WINDOW_MS = 7 * 86_400_000  # a doc discussion with no newer version shared ends here
+MAX_DOCS = 3
+
+
+def clip(text: str | None, limit: int) -> str | None:
+    if text is None or len(text) <= limit:
+        return text
+    return text[:limit] + f" … [{len(text) - limit} more characters: call get_artifact]"
+
+
+def resolve_entity(text: str, product_id: str | None = None, graph: str | None = None) -> dict:
+    """Tool 2: a name, codename or role -> ids. Questions say "CollaborateForce" and
+    "Engineering Lead"; the text says "abAIX" and people's names (D038 evidence)."""
+    words = " ".join(re.findall(r"\w+", text))  # full-text ANDs the words; no syntax passes
+    out: dict[str, Any] = {"text": text, "cypher": ["resolve_product.cypher"]}
+    out["products"] = db.run("resolve_product", {"text": text.strip()}, graph=graph).rows
+    names = []
+    if words:
+        params = {"q": words, "product_id": product_id, "k": 10}
+        names = db.run("resolve_names", params, graph=graph).rows
+        out["cypher"].append("resolve_names.cypher")
+    for kind, label in (("people", "Person"), ("customers", "Customer"), ("companies", "Company")):
+        out[kind] = [
+            {k: v for k, v in r.items() if k not in ("labels", "score") and v is not None}
+            for r in names
+            if label in r["labels"]
+        ]
+    if product_id:
+        params = {"product_id": product_id, "role": text.strip(), "k": 25}
+        out["people_with_role"] = db.run("people_by_role", params, graph=graph).rows
+        out["cypher"].append("people_by_role.cypher")
+    return out
+
+
+def get_artifact(artifact_id: str, graph: str | None = None) -> dict:
+    """Tool 3: one artifact's full text for quoting, plus the people around it."""
+    rows = db.run("get_artifact", {"id": artifact_id}, graph=graph).rows
+    if not rows:
+        return {"error": f"no artifact with id {artifact_id!r}"}
+    a = rows[0]
+    people = db.run("artifact_people_detail", {"id": artifact_id}, graph=graph).rows
+    return {
+        **{k: v for k, v in a.items() if k != "fields" and v is not None},
+        "text": clip(a["text"], ARTIFACT_CHARS),
+        "fields": [f for f in a["fields"] if f["field"]],
+        "people": people,
+        "cypher": ["get_artifact.cypher", "artifact_people_detail.cypher"],
+    }
+
+
+def doc_discussion(doc: str, product_id: str, graph: str | None = None) -> dict:
+    """Tool 15: a document's authors and its review: the Slack discussion after it was shared
+    (until a newer version is shared there) and the meetings that discussed its type.
+
+    Checked on the 5 dev "authors and key reviewers" questions: author + discussion +
+    meeting speakers held every person in HERB's answer (D038).
+    """
+    found = db.run("find_docs", {"product_id": product_id, "doc": doc}, graph=graph).rows
+    by_base: dict[str, list[dict[str, Any]]] = {}
+    for d in found:
+        by_base.setdefault(d["base_id"] or d["id"], []).append(d)
+    documents = []
+    for base, versions in list(by_base.items())[:MAX_DOCS]:
+        params = {"doc_id": base, "window_ms": DOC_WINDOW_MS, "limit": 60}
+        messages = db.run("doc_discussion", params, graph=graph).rows
+        meetings = db.run("doc_meetings", {"doc_id": base}, graph=graph).rows
+        documents.append(
+            {
+                "base_id": base,
+                "doc_type": versions[0]["doc_type"],
+                "versions": [
+                    {k: v[k] for k in ("id", "version", "title", "ts_iso", "url")} for v in versions
+                ],
+                "authors": sorted({p for v in versions for p in v["authors"]}),
+                "slack_discussion": [
+                    {**m, "text": clip(m["text"], LIST_TEXT_CHARS)} for m in messages
+                ],
+                "meetings": meetings,
+            }
+        )
+    return {
+        "doc": doc,
+        "product_id": product_id,
+        "documents": documents,
+        "note": None if documents else "no document of this product matches; try its type",
+        "cypher": ["find_docs.cypher", "doc_discussion.cypher", "doc_meetings.cypher"],
+    }
+
+
+def issue_reports(product_id: str, graph: str | None = None) -> dict:
+    """Tool 16: every customer issue report in the product's support channels, with the
+    customers' companies (MENTIONS Customer -> WORKS_AT -> Company) and the people mentioned
+    (usually the assignee). Slice B replaces it with Issue nodes and their status chains."""
+    rows = db.run("issue_reports", {"product_id": product_id, "limit": 150}, graph=graph).rows
+    return {
+        "product_id": product_id,
+        "reports": [{**r, "text": clip(r["text"], LIST_TEXT_CHARS)} for r in rows],
+        "cypher": ["issue_reports.cypher"],
+    }
+
+
+def list_prs(product_id: str, status: str | None = None, graph: str | None = None) -> dict:
+    """Tool 5, PR case: the product's own pull requests with their status chain from the PR
+    record and its reviews (D028). External PRs (HERB's distractors) are left out."""
+    params = {"product_id": product_id, "status": status, "limit": 200}
+    rows = db.run("product_prs", params, graph=graph).rows
+    for r in rows:
+        r["reviews"] = [rv for rv in r["reviews"] if rv["id"]]
+    return {"product_id": product_id, "prs": rows, "cypher": ["product_prs.cypher"]}
+
+
+def links_shared(product_id: str, graph: str | None = None) -> dict:
+    """Tool 9: links shared in the product's messages, who shared them and where."""
+    rows = db.run("links_shared", {"product_id": product_id, "limit": 150}, graph=graph).rows
+    return {"product_id": product_id, "links": rows, "cypher": ["links_shared.cypher"]}
+
+
+def agent_search(
+    query: str,
+    kinds: list[str] | None = None,
+    product_id: str | None = None,
+    k: int | None = None,
+    graph: str | None = None,
+) -> dict:
+    """Tool 1 as the agent sees it: hybrid search with authors and participants."""
+    out = search_artifacts(
+        query, kinds=kinds, product_id=product_id, k=min(k or 10, 20), people=True, graph=graph
+    )
+    return {key: out[key] for key in ("query", "keywords", "filters", "results", "cypher")}
+
+
+def _nullable(schema: dict[str, Any]) -> dict[str, Any]:
+    return {"anyOf": [schema, {"type": "null"}]}
+
+
+def _tool(name: str, description: str, properties: dict[str, Any]) -> dict[str, Any]:
+    """A strict tool spec: the API guarantees inputs match the schema exactly."""
+    return {
+        "name": name,
+        "description": description,
+        "strict": True,
+        "input_schema": {
+            "type": "object",
+            "properties": properties,
+            "required": list(properties),
+            "additionalProperties": False,
+        },
+    }
+
+
+KINDS = ["message", "meeting", "meeting_chat", "doc", "pr", "link"]
+PRODUCT = _nullable(
+    {"type": "string", "description": "a product id; null uses the question's product"}
+)
+TOOL_SPECS = [
+    _tool(
+        "search_artifacts",
+        "Keyword + semantic search over the text of Slack messages, meeting transcripts, "
+        "documents, pull requests and shared links of the product. Returns the best-matching "
+        "artifacts with a snippet, their authors and participants. Use it for questions about "
+        "content, and to find artifacts the other tools don't list.",
+        {
+            "query": {"type": "string", "description": "what to look for, in plain words"},
+            "kinds": _nullable({"type": "array", "items": {"type": "string", "enum": KINDS}}),
+            "k": _nullable({"type": "integer", "description": "results wanted, at most 20"}),
+            "product_id": PRODUCT,
+        },
+    ),
+    _tool(
+        "resolve_entity",
+        "Map a name to ids: a product name or codename (the text often uses codenames), a "
+        "person's name (several people can share one; the most active in the product come "
+        "first), a customer or company name, or a role such as 'Engineering Lead' (returns "
+        "the people with that role who worked on the product).",
+        {"text": {"type": "string"}, "product_id": PRODUCT},
+    ),
+    _tool(
+        "get_artifact",
+        "The full text of one artifact (message, meeting transcript, document, PR, link) and "
+        "the people around it: authors, attendees, speakers, reviewers with their review "
+        "state, people mentioned. Use it to read and quote an artifact.",
+        {"artifact_id": {"type": "string"}},
+    ),
+    _tool(
+        "doc_discussion",
+        "A document's authors and how it was reviewed: every Slack message in the channel "
+        "where it was shared, from the share until a newer version was shared (with each "
+        "author's id and role), and the meetings that discussed it (with speakers and roles). "
+        "Use it for who wrote or reviewed a document and what changes people suggested.",
+        {
+            "doc": {
+                "type": "string",
+                "description": "a document type such as 'Market Research Report', or its id",
+            },
+            "product_id": PRODUCT,
+        },
+    ),
+    _tool(
+        "issue_reports",
+        "Every customer-reported issue in the product's support channels: the report text "
+        "(issue title, affected component, impact), the customers with their companies, and "
+        "the people mentioned (usually who it was assigned to).",
+        {"product_id": PRODUCT},
+    ),
+    _tool(
+        "list_prs",
+        "The product's own pull requests with number, title, url, current status and the "
+        "status history (open, approved, changes_requested, merged, closed), author and "
+        "reviewers. 'Approved but not merged' PRs show status 'approved'.",
+        {
+            "status": _nullable(
+                {
+                    "type": "string",
+                    "enum": ["open", "approved", "changes_requested", "merged", "closed"],
+                }
+            ),
+            "product_id": PRODUCT,
+        },
+    ),
+    _tool(
+        "links_shared",
+        "Links shared in the product's Slack messages (demos, competitor sites, documents), "
+        "with their description, who shared each and in which message.",
+        {"product_id": PRODUCT},
+    ),
+]
