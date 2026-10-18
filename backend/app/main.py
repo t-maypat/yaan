@@ -29,7 +29,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app import __version__, db, mcp_server
@@ -50,18 +50,28 @@ ASK_PER_MINUTE = 6  # per IP; the LLM gateway's daily spend cap is the second gu
 
 
 class RateLimiter:
-    """A sliding one-minute window per key (client IP). In memory: one API process."""
+    """A sliding window (one minute by default) per key, usually the client IP. In memory: one
+    API process. A swarm of many IPs grows the table, so expired keys are swept now and then."""
 
-    def __init__(self, per_minute: int):
-        self.per_minute = per_minute
+    SWEEP_EVERY = 5_000  # calls between sweeps of keys whose window has emptied
+
+    def __init__(self, per_minute: int, window: float = 60):
+        self.per_minute = per_minute  # the limit per window (per day for a 24 h window)
+        self.window = window
         self.hits: dict[str, deque[float]] = defaultdict(deque)
         self.lock = threading.Lock()
+        self.calls = 0
 
     def allow(self, key: str, now: float | None = None) -> bool:
         now = time.monotonic() if now is None else now
         with self.lock:
+            self.calls += 1
+            if self.calls % self.SWEEP_EVERY == 0:
+                stale = [k for k, h in self.hits.items() if not h or now - h[-1] > self.window]
+                for k in stale:
+                    del self.hits[k]
             hits = self.hits[key]
-            while hits and now - hits[0] > 60:
+            while hits and now - hits[0] > self.window:
                 hits.popleft()
             if len(hits) >= self.per_minute:
                 return False
@@ -69,7 +79,26 @@ class RateLimiter:
             return True
 
 
+_s = get_settings()
 ask_limiter = RateLimiter(ASK_PER_MINUTE)
+# D081: guards for a public deployment, where an agent swarm can come from many IPs at once.
+ask_daily_limiter = RateLimiter(_s.lore_ask_per_ip_per_day, window=86_400)
+ask_global_limiter = RateLimiter(_s.lore_ask_global_per_minute)  # one key for everyone
+ask_slots = threading.BoundedSemaphore(_s.lore_ask_concurrency)
+request_limiter = RateLimiter(_s.lore_requests_per_ip_per_minute)
+UNLIMITED_PATHS = {"/health"}
+
+
+@app.middleware("http")
+async def limit_requests(request: Request, call_next):
+    """Every route but /health: a per-IP budget, so a scraper or a swarm can't flood FalkorDB."""
+    if request.url.path not in UNLIMITED_PATHS and not request_limiter.allow(client_ip(request)):
+        return JSONResponse(
+            {"detail": "too many requests from this address; wait a minute"},
+            status_code=429,
+            headers={"Retry-After": "60"},
+        )
+    return await call_next(request)
 DEMO_PER_MINUTE = 6  # per IP: injections, resets, approvals and dismissals
 demo_limiter = RateLimiter(DEMO_PER_MINUTE)
 demo_lock = threading.Lock()  # one demo write at a time: a fold rebuild must not interleave
@@ -119,8 +148,15 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
     """Answer a question, streaming the tool trace, the answer, citations and evidence."""
     from app.agent import loop
 
-    if not ask_limiter.allow(client_ip(request)):
+    ip = client_ip(request)
+    if not ask_limiter.allow(ip):
         raise HTTPException(429, f"at most {ASK_PER_MINUTE} questions per minute")
+    if not ask_daily_limiter.allow(ip):
+        raise HTTPException(429, "this address has asked its questions for today")
+    if not ask_global_limiter.allow("*"):
+        raise HTTPException(429, "Lore is answering many questions right now; try in a minute")
+    if not ask_slots.acquire(blocking=False):
+        raise HTTPException(503, "Lore is busy answering; try again shortly", {"Retry-After": "10"})
     events: queue.Queue = queue.Queue()
 
     def work() -> None:
@@ -136,6 +172,7 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
         except Exception as e:  # shown to the viewer as an error event, never a fake answer
             events.put(("error", {"error": type(e).__name__, "message": str(e)[:500]}))
         finally:
+            ask_slots.release()
             events.put(None)
 
     threading.Thread(target=work, daemon=True).start()

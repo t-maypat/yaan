@@ -2,7 +2,9 @@
 endpoints (step 2, D058). No LLM, no DB: the Sentinel functions are faked."""
 
 import json
+import threading
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app import main
@@ -72,6 +74,71 @@ def test_ask_is_rate_limited_per_ip(monkeypatch):
     codes = [client.post("/ask", json={"question": "Which bugs?"}).status_code for _ in range(3)]
     assert codes == [200, 200, 429]
     assert main.RateLimiter(1).allow("ip", now=0) and main.RateLimiter(1).allow("ip", now=61)
+
+
+@pytest.fixture(autouse=True)
+def fresh_limits(monkeypatch):
+    """Each test starts with empty windows, so the module-wide guards (D081) don't leak."""
+    monkeypatch.setattr(main, "ask_daily_limiter", main.RateLimiter(1000, window=86_400))
+    monkeypatch.setattr(main, "ask_global_limiter", main.RateLimiter(1000))
+    monkeypatch.setattr(main, "ask_slots", threading.BoundedSemaphore(4))
+    monkeypatch.setattr(main, "request_limiter", main.RateLimiter(1000))
+
+
+def test_ask_has_a_daily_cap_per_ip(monkeypatch):
+    monkeypatch.setattr(loop, "answer", fake_answer)
+    monkeypatch.setattr(main, "ask_limiter", main.RateLimiter(10))
+    monkeypatch.setattr(main, "ask_daily_limiter", main.RateLimiter(2, window=86_400))
+    client = TestClient(main.app)
+    codes = [client.post("/ask", json={"question": "Which bugs?"}).status_code for _ in range(3)]
+    assert codes == [200, 200, 429]
+    day = main.RateLimiter(1, window=86_400)
+    assert day.allow("ip", now=0) and not day.allow("ip", now=3_600) and day.allow("ip", now=86_401)
+
+
+def test_ask_has_a_global_cap_across_all_ips(monkeypatch):
+    """A swarm spread over many addresses still shares one per-minute budget."""
+    monkeypatch.setattr(loop, "answer", fake_answer)
+    monkeypatch.setattr(main, "ask_limiter", main.RateLimiter(10))
+    monkeypatch.setattr(main, "ask_global_limiter", main.RateLimiter(2))
+    ips = iter(["1.1.1.1", "1.1.1.1", "2.2.2.2", "2.2.2.2", "3.3.3.3", "3.3.3.3"])
+    monkeypatch.setattr(main, "client_ip", lambda request: next(ips))  # middleware, then /ask
+    client = TestClient(main.app)
+    codes = [client.post("/ask", json={"question": "Which bugs?"}).status_code for _ in range(3)]
+    assert codes == [200, 200, 429]
+
+
+def test_ask_refuses_beyond_the_concurrency_slots(monkeypatch):
+    monkeypatch.setattr(loop, "answer", fake_answer)
+    monkeypatch.setattr(main, "ask_limiter", main.RateLimiter(10))
+    slots = threading.BoundedSemaphore(1)
+    monkeypatch.setattr(main, "ask_slots", slots)
+    client = TestClient(main.app)
+    assert slots.acquire(blocking=False)  # another answer is in flight
+    r = client.post("/ask", json={"question": "Which bugs?"})
+    assert r.status_code == 503 and r.headers["retry-after"] == "10"
+    slots.release()
+    assert client.post("/ask", json={"question": "Which bugs?"}).status_code == 200
+    assert slots.acquire(blocking=False)  # the finished answer gave its slot back
+
+
+def test_every_route_but_health_has_a_per_ip_budget(monkeypatch):
+    monkeypatch.setattr(main, "request_limiter", main.RateLimiter(2))
+    client = TestClient(main.app)
+    codes = [client.get("/query/product_issues.cypher").status_code for _ in range(3)]
+    assert codes == [200, 200, 429]
+    r = client.get("/query/product_issues.cypher")
+    assert r.status_code == 429 and r.headers["retry-after"] == "60"
+    assert client.get("/health").status_code != 429
+
+
+def test_the_limiter_sweeps_expired_keys(monkeypatch):
+    lim = main.RateLimiter(5)
+    monkeypatch.setattr(lim, "SWEEP_EVERY", 3)
+    lim.allow("a", now=0)
+    lim.allow("b", now=1)
+    lim.allow("c", now=200)  # third call sweeps: a and b expired long ago
+    assert set(lim.hits) == {"c"}
 
 
 def test_query_returns_the_file_a_tool_ran_and_nothing_else():

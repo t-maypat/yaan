@@ -94,6 +94,19 @@ def test_a_call_is_billed_logged_and_cached(gateway):
     assert len(log) == 2 and '"cached": true' in log[1]
 
 
+def test_cache_only_replays_cached_calls_and_never_reaches_the_api(gateway, monkeypatch):
+    llm.complete(role="answer", system="s", user="cached", purpose="t")  # warm one answer
+    public = gateway.settings.model_copy(update={"lore_llm_cache_only": True})
+    monkeypatch.setattr(llm, "get_settings", lambda: public)
+    assert llm.complete(role="answer", system="s", user="cached", purpose="t").cached
+    with pytest.raises(llm.CacheOnly, match="replays answers"):
+        llm.complete(role="answer", system="s", user="new question", purpose="t")
+    with pytest.raises(llm.CacheOnly):
+        llm.converse(role="answer", system="s", messages=[{"role": "user", "content": "new"}],
+                     tools=[], purpose="t")
+    assert len(gateway.calls) == 1  # only the warm-up call went out
+
+
 def test_requests_use_the_role_settings_and_cache_the_system_prompt(gateway):
     llm.complete(role="extract", system="rules", user="text", purpose="t")
     call = gateway.calls[0]

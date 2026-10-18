@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     lore_judge_model: str = "claude-haiku-5-5"
     lore_judge_effort: str = "low"
     lore_daily_spend_cap_usd: float = 2.0  # llm.py refuses a call that could cross it
+    # Public deployment guards (D081). Cache-only: replay cached answers, never call the API.
+    lore_llm_cache_only: bool = False
+    lore_ask_per_ip_per_day: int = 60  # /ask, per client IP, rolling 24 h
+    lore_ask_global_per_minute: int = 30  # /ask, all clients together: a swarm of many IPs
+    lore_ask_concurrency: int = 4  # answers in flight at once; more get 503
+    lore_requests_per_ip_per_minute: int = 300  # every route but /health
 
     # Embeddings
     lore_embed_model: str = "BAAI/bge-small-en-v1.5"

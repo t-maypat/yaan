@@ -62,6 +62,19 @@ class Refused(LLMError):
     pass
 
 
+class CacheOnly(LLMError):
+    """LORE_LLM_CACHE_ONLY is on (a public demo) and this call isn't cached: no API call."""
+
+
+def refuse_uncached() -> None:
+    """A public deployment replays cached answers only, so strangers can't spend the key."""
+    if get_settings().lore_llm_cache_only:
+        raise CacheOnly(
+            "This public demo replays answers Lore has already worked out, and this question "
+            "isn't one of them. Pick a suggested question, or run Lore yourself to ask anything."
+        )
+
+
 @dataclass(frozen=True)
 class LLMResult:
     text: str
@@ -195,6 +208,7 @@ def complete(
         log_call(purpose, result)
         return result
 
+    refuse_uncached()
     check_budget(model, len(system) + len(user), max_tokens)
     kwargs: dict[str, Any] = {
         "model": model,
@@ -327,6 +341,7 @@ def converse(
         log_call(purpose, turn)
         return turn
 
+    refuse_uncached()
     prompt_chars = len(system) + len(json.dumps(messages)) + len(json.dumps(tools))
     check_budget(model, prompt_chars, max_tokens)
     output_config: dict[str, Any] = {"effort": effort}
