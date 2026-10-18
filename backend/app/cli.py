@@ -10,7 +10,6 @@ import sys
 
 # command -> (docs/PLAN.md phase that builds it, help text)
 PENDING: dict[str, tuple[str, str]] = {
-    "normalize": ("Phase 2", "HERB products -> data/normalized/<product>/artifacts.jsonl"),
     "ingest": ("Phase 3", "load normalized products into a graph (stages S2-S10)"),
     "health": ("Phase 3", "print the graph-health report"),
     "ask": ("Phase 4", "answer a question (baseline RAG in Phase 4, Lore agent in Phase 9)"),
@@ -69,17 +68,35 @@ def cmd_split(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_normalize(args: argparse.Namespace) -> int:
+    from app.eval.split import read_split
+    from app.ingest.normalize import KINDS, normalize
+
+    products = args.products or read_split()["dev"]
+    report = normalize(products)
+    print(f"{'product':<22}" + "".join(f"{k:>14}" for k in KINDS) + f"{'dup links':>11}")
+    for name, row in report.items():
+        counts = "".join(f"{row['counts'][k]:>14}" for k in KINDS)
+        print(f"{name:<22}{counts}{row['duplicate_links_dropped']:>11}")
+    print(f"\nwrote data/normalized/<product>/artifacts.jsonl for {len(report)} products")
+    return 0
+
+
 # command -> (help text, handler)
 COMMANDS = {
     "schema": ("create and verify the indexes for a graph (queries/00_schema.cypher)", cmd_schema),
     "fetch-herb": ("download the HERB dataset (pinned revision) into data/herb", cmd_fetch_herb),
     "rank-dev": ("rank products by change signals to pick the dev products (D017)", cmd_rank_dev),
+    "normalize": ("HERB products -> data/normalized/<product>/artifacts.jsonl (S1)", cmd_normalize),
     "split": ("draw the held-out test products once (seeded) into eval/split.json", cmd_split),
 }
 
 # command -> [(flag, argparse options)]
 OPTIONS: dict[str, list[tuple[str, dict]]] = {
     "schema": [("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"})],
+    "normalize": [
+        ("--products", {"nargs": "+", "help": "product names (default: the dev products)"})
+    ],
 }
 
 

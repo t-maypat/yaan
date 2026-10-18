@@ -1,0 +1,70 @@
+{
+  "team": ["eid_secret01"],
+  "customers": ["CUST-SECRET"],
+  "answerable_questions": [{"question": "SECRET QUESTION", "ground_truth": ["x"], "citations": [], "type": "content"}],
+  "unanswerable_questions": ["SECRET UNANSWERABLE"],
+  "slack": [
+    {
+      "Channel": {"name": "planning-Widget", "channelID": "ch-wdai-aaa111"},
+      "Message": {"User": {"userId": "slack_admin_bot", "timestamp": "2026-05-01T09:00:00", "text": "@eid_aaaa0001 created this channel on 2026-05-01 09:00:00. This is the very beginning of the planning-wdAI channel.", "utterranceID": "20260501-0-aaaaa"}, "Reactions": []},
+      "ThreadReplies": [],
+      "id": "20260501-0-aaaaa"
+    },
+    {
+      "Channel": {"name": "develop-annlee-Widget", "channelID": "ch-force-bbb222"},
+      "Message": {"User": {"userId": "eid_aaaa0002", "timestamp": "2026-05-03T10:00:00", "text": "Hi team, please check my PR: <https://github.com/salesforce/Widget/pull/1|PR 1>", "utterranceID": "20260430-0-bbbbb"}, "Reactions": []},
+      "ThreadReplies": [],
+      "id": "20260430-0-bbbbb"
+    },
+    {
+      "Channel": {"name": "planning-Widget", "channelID": "ch-wdai-aaa111"},
+      "Message": {"User": {"userId": "eid_aaaa0001", "timestamp": "2026-05-02T08:00:00", "text": "Let's put the export feature on hold.", "utterranceID": "20260501-1-ccccc"}, "Reactions": []},
+      "ThreadReplies": [],
+      "id": "20260501-1-ccccc"
+    },
+    {
+      "Channel": {"name": "planning-Widget", "channelID": "ch-wdai-aaa111"},
+      "Message": {"User": {"userId": "eid_aaaa0003", "timestamp": "2026-05-02T08:00:00", "text": "Agreed, hold it.", "utterranceID": "20260501-2-ddddd"}, "Reactions": []},
+      "ThreadReplies": [],
+      "id": "20260501-2-ddddd"
+    },
+    {
+      "sender": "eid_aaaa0003",
+      "message": "Flat-shape message from the dataset card.",
+      "timestamp": "2026-05-04T12:00:00",
+      "id": "flat-0001",
+      "channel": "planning-Widget"
+    }
+  ],
+  "documents": [
+    {"content": "Executive Summary: Widget v2.", "date": "2026-05-06T10:00:00", "author": "eid_aaaa0001", "document_link": "https://sf-internal.slack.com/archives/docs/final_wdai_vision_document", "type": "Product Vision Document", "id": "final_wdai_vision_document", "feedback": "- Add numbers."},
+    {"content": "Executive Summary: Widget.", "date": "2026-05-05T10:00:00", "author": "eid_aaaa0001", "document_link": "https://sf-internal.slack.com/archives/docs/wdai_vision_document", "type": "Product Vision Document", "id": "wdai_vision_document"}
+  ],
+  "meeting_transcripts": [
+    {"transcript": "Attendees\nAnn Lee, Bo Chen\nTranscript\nAnn Lee: Let's review the doc.\nBo Chen: Looks good.", "date": "2026-05-07T15:30:00", "document_type": "Product Vision Document", "participants": ["eid_aaaa0002", "eid_aaaa0003"], "id": "wdAI_planning_1"}
+  ],
+  "meeting_chats": [
+    {"text": "2026-05-07T15:30:00\nAnn Lee: https://sf-internal.slack.com/archives/docs/final_wdai_vision_document", "id": "wdAI_planning_1_chat"}
+  ],
+  "urls": [
+    {"id": "github_com_example_lib", "link": "https://github.com/example/lib", "description": "An open-source library."},
+    {"id": "github_com_example_lib_", "link": "https://GitHub.com/example/lib/", "description": "Same library, written differently."},
+    {"id": "sf-internal_slack_com_archives_Widget_demo_1", "link": "https://sf-internal.slack.com/archives/Widget/demo_1", "description": "Demo recording."}
+  ],
+  "prs": [
+    {
+      "id": "github_com_salesforce_Widget_pull_1", "title": "Add export", "summary": "Adds CSV export.", "link": "https://github.com/salesforce/Widget/pull/1",
+      "mergeable": "True", "merged": "False", "number": "1", "state": "open", "user": {"login": "eid_aaaa0002"}, "created_at": "2026-05-03T10:00:00",
+      "reviews": [
+        {"state": "CHANGES_REQUESTED", "user": {"login": "eid_aaaa0003"}, "comment": "Needs tests.", "submitted_at": "2026-05-03T09:15:00"}
+      ]
+    },
+    {
+      "id": "github_com_apache_kafka_pull_77", "title": "Add export", "summary": "Adds export to Kafka.", "link": "https://github.com/apache/kafka/pull/77",
+      "mergeable": "True", "merged": "True", "number": "77", "state": "closed", "user": {"login": "EMP_123456789"}, "created_at": "2024-02-01T00:00:00",
+      "reviews": [
+        {"state": "APPROVED", "user": {"login": "EMP_987654321"}, "comment": "Looks good.", "submitted_at": "2024-02-02T00:00:00"}
+      ]
+    }
+  ]
+}
