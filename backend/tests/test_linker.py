@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from app import db
-from app.ingest import health, link, structural
+from app.ingest import health, linker, structural
 from app.ingest.herb_loader import load_product
 from app.ingest.normalize import Artifact, normalize_product
 
@@ -55,11 +55,11 @@ def edges(rows, name, key="entity_id"):
 # --- pure rules ------------------------------------------------------------------------------
 def test_slack_markup_and_punctuation_are_cut_from_urls():
     text = "see <https://github.com/o/r/pull/1|PR 1>, and https://x.example/a/."
-    assert link.urls(text) == ["https://github.com/o/r/pull/1", "https://x.example/a"]
+    assert linker.urls(text) == ["https://github.com/o/r/pull/1", "https://x.example/a"]
 
 
 def test_widget_links_shares_mentions_and_speakers(meta, widget):
-    rows, unresolved = link.build_rows(meta, {"Widget": widget})
+    rows, unresolved = linker.build_rows(meta, {"Widget": widget})
     shares = edges(rows, "link_shares", "target_id")
     assert ("msg:20260430-0-bbbbb", PR_OPEN) in shares  # <url|PR 1> in a Slack message
     assert ("chat:wdAI_planning_1_chat", "doc:final_wdai_vision_document") in shares
@@ -77,7 +77,7 @@ def test_widget_links_shares_mentions_and_speakers(meta, widget):
 
 def test_a_renamed_product_is_found_by_its_codename(meta, widget):
     extra = art("msg:codename", "The wdAI rollout slips a week.", channel_id="ch-wdai-aaa111")
-    rows, _ = link.build_rows(meta, {"Widget": [*widget, extra]})
+    rows, _ = linker.build_rows(meta, {"Widget": [*widget, extra]})
     found = {r["artifact_id"]: r for r in rows["link_mentions_product"]}
     assert found["msg:codename"]["entity_id"] == "Widget"
     assert found["msg:codename"]["surfaces"] == ["wdAI"]
@@ -88,7 +88,7 @@ def test_a_cross_product_pr_reference_is_a_share_not_delivery(meta, widget):
         "pr:gadget_1", "Gadget export.", kind="pr", url="https://github.com/s/Gadget/pull/9"
     )
     msg = art("msg:xref", "Same bug as Gadget's https://github.com/s/Gadget/pull/9 and Widget.")
-    rows, _ = link.build_rows(meta, {"Widget": [*widget, msg], "Gadget": [gadget_pr]})
+    rows, _ = linker.build_rows(meta, {"Widget": [*widget, msg], "Gadget": [gadget_pr]})
     assert ("msg:xref", "pr:gadget_1") in edges(rows, "link_shares", "target_id")
     products = edges(rows, "link_mentions_product")
     assert ("msg:xref", "Widget") in products and ("msg:xref", "Gadget") in products
@@ -97,7 +97,7 @@ def test_a_cross_product_pr_reference_is_a_share_not_delivery(meta, widget):
 
 def test_customers_companies_and_unknown_ids(meta, widget):
     msg = art("msg:cust", "CUST-0002 at Blue Wave reported it; CUST-9999 too. Dee Fox agrees.")
-    rows, unresolved = link.build_rows(meta, {"Widget": [*widget, msg]})
+    rows, unresolved = linker.build_rows(meta, {"Widget": [*widget, msg]})
     assert edges(rows, "link_mentions_customer") >= {
         ("msg:cust", "CUST-0002"),
         ("msg:cust", "CUST-0001"),
@@ -113,19 +113,19 @@ def test_customers_companies_and_unknown_ids(meta, widget):
 
 
 def test_speakers_outside_the_participants_use_the_directory_then_activity(meta, widget):
-    d = link.dictionaries(meta, {"Widget": widget})
+    d = linker.dictionaries(meta, {"Widget": widget})
     # Bo Chen is unique in the directory
-    assert link.resolve_speaker("Bo Chen", [], d, "Widget") == (
+    assert linker.resolve_speaker("Bo Chen", [], d, "Widget") == (
         "eid_aaaa0003",
         "directory",
         ["eid_aaaa0003"],
     )
     # two Ann Lees; both authored Widget artifacts, so no tiebreak: unresolved
-    eid, method, pool = link.resolve_speaker("Ann Lee", [], d, "Widget")
+    eid, method, pool = linker.resolve_speaker("Ann Lee", [], d, "Widget")
     assert (eid, method, pool) == (None, "unresolved", ["eid_aaaa0001", "eid_aaaa0002"])
     # in a product where only one of them is active, activity breaks the tie
-    d2 = link.dictionaries(meta, {"Gadget": [art("msg:g", "hi", author_eid="eid_aaaa0001")]})
-    assert link.resolve_speaker("Ann Lee", [], d2, "Gadget")[:2] == (
+    d2 = linker.dictionaries(meta, {"Gadget": [art("msg:g", "hi", author_eid="eid_aaaa0001")]})
+    assert linker.resolve_speaker("Ann Lee", [], d2, "Gadget")[:2] == (
         "eid_aaaa0001",
         "directory+activity",
     )
@@ -133,27 +133,27 @@ def test_speakers_outside_the_participants_use_the_directory_then_activity(meta,
 
 def test_meeting_turns_count_people_not_headers():
     text = "Attendees\nAnn Lee, Bo Chen\nTranscript\nAnn Lee: Hi.\nNote: skip\nAnn Lee: Bye."
-    assert link.speaker_turns(text) == {"Ann Lee": 2}
+    assert linker.speaker_turns(text) == {"Ann Lee": 2}
 
 
 def test_every_link_query_has_a_file():
     queries = Path(__file__).resolve().parents[1] / "queries"
-    assert all((queries / f"{name}.cypher").is_file() for name in link.LOAD_ORDER)
+    assert all((queries / f"{name}.cypher").is_file() for name in linker.LOAD_ORDER)
 
 
 # --- graph -----------------------------------------------------------------------------------
 @pytest.fixture
 def linked(empty_graph, meta, widget):
     structural.load(structural.build_rows(meta, {"Widget": widget}, 1), empty_graph)
-    rows, _ = link.build_rows(meta, {"Widget": widget})
-    return empty_graph, rows, link.load(rows, empty_graph)
+    rows, _ = linker.build_rows(meta, {"Widget": widget})
+    return empty_graph, rows, linker.load(rows, empty_graph)
 
 
 @pytest.mark.db
 def test_link_load_is_idempotent_and_reported_in_health(linked):
     graph, rows, first = linked
     assert first["link_shares"]["relationships_created"] == len(rows["link_shares"])
-    again = link.load(rows, graph)
+    again = linker.load(rows, graph)
     assert sum(r["relationships_created"] for r in again.values()) == 0
     r = health.report(graph)
     assert (
@@ -178,7 +178,7 @@ def test_the_meeting_speaker_is_the_right_ann_lee(linked):
 
 
 @pytest.mark.db
-@pytest.mark.parametrize("name", link.LOAD_ORDER)
+@pytest.mark.parametrize("name", linker.LOAD_ORDER)
 def test_link_queries_find_nodes_by_index(empty_graph, name):
     plan = " / ".join(db.explain(name, {"rows": [{}]}, graph=empty_graph))
     assert "Node By Index Scan" in plan

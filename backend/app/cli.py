@@ -85,7 +85,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     from app import schema
     from app.config import get_settings
     from app.eval.split import read_split
-    from app.ingest import chunk_embed, health, link, structural
+    from app.ingest import chunk_embed, health, linker, structural
     from app.ingest.normalize import normalized_dir, read_jsonl
 
     graph = args.graph or get_settings().lore_graph
@@ -109,9 +109,9 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     if "lexical" in args.stages:
         report["upsert_chunks"] = chunk_embed.load(chunk_embed.chunk_products(artifacts), graph)
     if "link" in args.stages:
-        rows, unresolved = link.build_rows(structural.load_metadata(), artifacts)
-        report |= link.load(rows, graph)
-        log = link.write_unresolved(unresolved)
+        rows, unresolved = linker.build_rows(structural.load_metadata(), artifacts)
+        report |= linker.load(rows, graph)
+        log = linker.write_unresolved(unresolved)
         print(f"unresolved mentions: {len(unresolved)} -> {log}", file=sys.stderr)
     print(f"{'query':<24}{'rows':>8}{'nodes+':>9}{'edges+':>9}{'props set':>11}")
     for query, r in report.items():
