@@ -10,16 +10,21 @@
 <meta property="og:description" content="A time-aware graph of people, work and decisions. Every sentence cites a verbatim source. Built on FalkorDB.">
 <meta property="og:image" content="assets/img/inbox-radius.png">
 <link rel="icon" href="assets/favicon.svg?v=yaan" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=Schibsted+Grotesk:wght@400..700&display=swap" rel="stylesheet">
+<link rel="preload" href="assets/fonts/newsreader-normal-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/schibsted-grotesk-normal-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="fonts.css">
+<link rel="preload" href="assets/icons/color/github.svg" as="image" type="image/svg+xml">
 <link rel="stylesheet" href="styles.css">
 <script>
-  // Theme before first paint: ?theme=, then a saved choice, else light (the default).
+  // Before first paint, so nothing changes once the page shows:
+  // the theme (?theme=, a saved choice, else light), reduced motion ("calm"; ?motion=full overrides),
+  // and "fonts-wait", which holds the hero's entrance until its fonts are in (see the end of <body>).
   (function () {
-    var t = null;
-    try { t = new URLSearchParams(location.search).get('theme') || localStorage.getItem('lore-theme'); } catch (e) {}
-    document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+    var d = document.documentElement, t = null, q = location.search;
+    try { t = new URLSearchParams(q).get('theme') || localStorage.getItem('lore-theme'); } catch (e) {}
+    d.dataset.theme = t === 'dark' ? 'dark' : 'light';
+    if (!/[?&]motion=full\b/.test(q) && window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) d.classList.add('calm');
+    if (document.fonts && document.fonts.load) d.classList.add('fonts-wait');
   })();
 </script>
 </head>
@@ -891,6 +896,19 @@
   <div class="dlg-body"><img src="assets/diagrams/data-model.svg" alt="Yaan's graph data model: what is true and since when (Alert, Claim, Decision, Issue, Area), who (Person, Team, Customer, Company), and what was said (Artifact, Channel, Chunk, Product), with their relationships" loading="lazy"></div>
 </dialog>
 
+<script>
+  // The hero starts its entrance once its two fonts have loaded (preloaded above), or after 1.2 s at
+  // most, so the headline never fades in with a fallback font and then jumps to Newsreader.
+  (function () {
+    var d = document.documentElement;
+    if (!d.classList.contains('fonts-wait')) return;
+    var go = function () { d.classList.remove('fonts-wait'); };
+    Promise.race([
+      Promise.all([document.fonts.load('400 1em "Newsreader"'), document.fonts.load('500 1em "Schibsted Grotesk"')]),
+      new Promise(function (r) { setTimeout(r, 1200); })
+    ]).then(go, go);
+  })();
+</script>
 <script src="main.js" defer></script>
 </body>
 </html>

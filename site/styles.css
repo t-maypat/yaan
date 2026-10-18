@@ -191,7 +191,8 @@ p { margin: 0; }
   mask: radial-gradient(ellipse 70% 60% at 50% 38%, #000 10%, transparent 75%);
   opacity: .55;
 }
-.hero-graph { position: absolute; inset: -80px 0 0; width: 100%; height: calc(100% + 80px); z-index: -1; }
+.hero-graph { position: absolute; inset: -80px 0 0; width: 100%; height: calc(100% + 80px); z-index: -1; opacity: 0; transition: opacity 1s ease; }
+.hero-graph.on { opacity: 1; }
 .hero-shade { position: absolute; inset: -80px 0 0; width: 100%; height: calc(100% + 80px); z-index: -3; pointer-events: none; opacity: 0; transition: opacity 1.6s ease; }
 .hero-shade.on { opacity: 1; }
 .hero-fade { /* keeps the headline on clean paper while the graph runs in the margins */
@@ -221,7 +222,11 @@ p { margin: 0; }
 .hero-built span { margin: 0 6px; opacity: .6; }
 
 /* load sequence: one orchestrated entrance */
-.hero-title, .hero-sub, .hero-ctas, .hero-built, .console { animation: rise .9s var(--ease) both; }
+.powered, .hero-title, .hero-sub, .hero-ctas, .console { animation: rise .9s var(--ease) both; }
+/* held at their first frame until the fonts are in (fonts-wait is set before first paint) */
+.fonts-wait .powered, .fonts-wait .hero-title, .fonts-wait .hero-sub, .fonts-wait .hero-ctas, .fonts-wait .console { animation-play-state: paused; }
+.nav-inner { transition: opacity .3s ease; }
+.fonts-wait .nav-inner { opacity: 0; }
 .hero-sub { animation-delay: .08s; }
 .hero-ctas { animation-delay: .16s; }
 .hero-built { animation-delay: .22s; }
@@ -1311,7 +1316,7 @@ p { margin: 0; }
 /* Reduced motion keeps what changes in place (typing, highlighting, fades, color) and drops what
    travels across the screen. main.js sets .calm on <html>; ?motion=full overrides it. */
 .calm { scroll-behavior: auto; }
-.calm .hero-title, .calm .hero-sub, .calm .hero-ctas, .calm .hero-built, .calm .console { animation-name: fadein; }
+.calm .powered, .calm .hero-title, .calm .hero-sub, .calm .hero-ctas, .calm .console { animation-name: fadein; }
 .calm .pk, .calm .lane-line::after { display: none; }
 .calm .pipe-stages li, .calm .dot-warn { animation: none; }
 .calm .scene, .calm .tour-img, .calm .poster-shot img, .calm .poster-play { transform: none !important; }

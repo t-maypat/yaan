@@ -309,6 +309,7 @@
     function redrawIfIdle() { if (!running) frame(performance.now()); }
 
     refreshColors(); layout();
+    requestAnimationFrame(() => canvas.classList.add('on'));  // fade in, never pop in
     new ResizeObserver(() => { layout(); redrawIfIdle(); }).observe(hero);
     new IntersectionObserver(([e]) => (e.isIntersecting ? start() : stop())).observe(hero);
     document.fonts && document.fonts.ready.then(redrawIfIdle);
