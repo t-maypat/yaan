@@ -1,0 +1,12 @@
+%% What the server does with a query under our limits (Phase 1.10, D014, A17).
+flowchart LR
+  Q["A query arrives"]:::code --> K{"Does it<br/>write?"}:::guard
+  K -- "yes: CREATE, MERGE,<br/>SET, DELETE" --> WB["Write budget<br/>TIMEOUT_DEFAULT 10 s<br/>its own timeout is ignored"]:::code
+  WB -- "finishes in time" --> OK["Committed"]:::store
+  WB -- "runs over 10 s" --> RB["Timed out<br/>rolled back in full"]:::guard
+  K -- "no: a read" --> RT{"Did it ask for<br/>a timeout?"}:::guard
+  RT -- "no" --> D2["Gets TIMEOUT_DEFAULT<br/>10 s"]:::code
+  RT -- "yes, up to 120 s" --> D3["Gets its own timeout<br/>agent tools ask 2 s"]:::code
+  RT -- "yes, over 120 s" --> ER["Error: exceeds<br/>TIMEOUT_MAX"]:::guard
+  D2 --> RS["Every row returned<br/>no silent cap; LIMIT<br/>in the query bounds it"]:::store
+  D3 --> RS

@@ -1,0 +1,9 @@
+%% How a write reaches disk, and what a crash can lose (Phase 1.2, D013).
+flowchart LR
+  W["A write<br/>GRAPH.QUERY … CREATE"]:::code --> RAM[("Graph in memory<br/>Redis RAM")]:::store
+  RAM -- "within 60 s of any change<br/>rule: save 60 1" --> SNAP["Background snapshot"]:::code
+  RAM -- "clean stop<br/>docker compose down" --> FINAL["Final save<br/>before exiting"]:::code
+  SNAP --> RDB[("dump.rdb<br/>on the Docker volume")]:::store
+  FINAL --> RDB
+  RDB -- "next start" --> NEXT["Loaded back into memory<br/>nothing lost"]:::human
+  RAM -. "crash or hard kill<br/>no final save" .-> LOST["Lost: writes since the<br/>last snapshot, at most ~60 s"]:::guard
