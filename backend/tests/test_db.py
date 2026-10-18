@@ -147,7 +147,7 @@ def test_a_failed_batch_names_the_query_graph_and_rows(fake):
     with pytest.raises(db.QueryError) as caught:
         db.run("upsert_people", {"rows": [{"id": i} for i in range(1201)]}, readonly=False)
     message = str(caught.value)
-    assert "upsert_people" in message and "g_test" in message and "rows 500–999 of 1201" in message
+    assert "upsert_people" in message and "g_test" in message and "rows 500-999 of 1201" in message
     assert not isinstance(caught.value, db.QueryTimeout)
     assert len(fake[False].calls) == 2  # stops at the failed batch
 

@@ -35,6 +35,9 @@ def test_header_names_file_and_purpose(path):
 def test_no_unsupported_syntax(path):
     text = code(path)
     assert "=~" not in text, "regex =~ is unsupported; use STARTS WITH / CONTAINS / toLower()"
+    assert "db.idx.fulltext.createNodeIndex" not in text, (
+        "the 4.x full-text procedure fails on 6.0; use CREATE FULLTEXT INDEX in 00_schema.cypher"
+    )
     assert not LABEL_ALTERNATION.search(text), (
         "label alternation (n:A|B) is unsupported; use an umbrella label or UNION"
     )

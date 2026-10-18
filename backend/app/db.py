@@ -122,9 +122,35 @@ def run(
     commits on its own, so a failure stops at that batch and earlier ones stay: write queries
     MERGE, so rerunning the whole call is safe.
     """
-    text = load_query(name)
+    return run_text(
+        load_query(name),
+        params,
+        label=name,
+        graph=graph,
+        readonly=readonly,
+        timeout_ms=timeout_ms,
+        batch_rows=batch_rows,
+    )
+
+
+def run_text(
+    text: str,
+    params: dict[str, Any] | None = None,
+    *,
+    label: str,
+    graph: str | None = None,
+    readonly: bool = True,
+    timeout_ms: int | None = None,
+    batch_rows: int = WRITE_BATCH_ROWS,
+) -> Result:
+    """`run` for a statement that isn't a query file; `label` names it in errors.
+
+    For the schema's DDL lines (1.5) and, later, the agent's checked Cypher (Phase 9).
+    Everything else uses `run`, so the queries the product depends on stay in files.
+    """
     graph = graph or get_settings().lore_graph
     params = params or {}
+    name = label
 
     if readonly:
         timeout = get_settings().query_timeout_ms if timeout_ms is None else timeout_ms
@@ -150,7 +176,7 @@ def run(
     for start in range(0, len(rows), batch_rows):
         batch_params = {**params, "rows": rows[start : start + batch_rows]}
         end = min(start + batch_rows, len(rows))
-        label = f"rows {start}–{end - 1} of {len(rows)}"
+        label = f"rows {start}-{end - 1} of {len(rows)}"
         results.append(_execute(name, graph, label, lambda p=batch_params: g.query(text, p)))
     return _collect(results)
 

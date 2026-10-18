@@ -1,0 +1,11 @@
+%% lore schema: declare, apply, verify (Phase 1.5, D019).
+flowchart LR
+  F["00_schema.cypher<br/>16 index statements<br/>one per line"]:::file --> A["Apply each line<br/>as lore_writer"]:::code
+  A -- "succeeds" --> C["created"]:::code
+  A -- "Attribute 'x' is<br/>already indexed" --> E["exists<br/>(the only error tolerated)"]:::code
+  A -- "any other error" --> X["Stop with the error"]:::guard
+  C --> V{"Verify against the server<br/>list_indexes.cypher:<br/>kind, vector options, status"}:::guard
+  E --> V
+  V -- "missing, wrong kind or<br/>old vector options" --> FAIL["Exit 1<br/>names each mismatch"]:::guard
+  V -- "still building" --> W["Wait up to 60 s,<br/>then check again"]:::code
+  V -- "all match, all<br/>OPERATIONAL" --> OK[("Graph ready<br/>for bulk loads")]:::store
