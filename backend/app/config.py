@@ -41,6 +41,27 @@ class Settings(BaseSettings):
     jira_project: str | None = None
     notion_token: str | None = None
     notion_page_id: str | None = None
+    # Experimental connectors (D090): off unless all of a connector's settings are set. Google
+    # and Zoom take an access token you already hold; the OAuth flow is not built.
+    linear_api_key: str | None = None
+    linear_team: str | None = None
+    gitlab_token: str | None = None
+    gitlab_project: str | None = None
+    gitlab_base_url: str | None = None  # optional, default https://gitlab.com
+    confluence_base_url: str | None = None
+    confluence_email: str | None = None
+    confluence_api_token: str | None = None
+    confluence_space_id: str | None = None
+    google_drive_access_token: str | None = None
+    google_drive_folder_id: str | None = None
+    gmail_access_token: str | None = None
+    gmail_label: str | None = None
+    google_meet_access_token: str | None = None
+    google_meet_space: str | None = None
+    zoom_access_token: str | None = None
+    zoom_user_id: str | None = None  # optional, default "me"
+    discord_bot_token: str | None = None
+    discord_channel_id: str | None = None
     query_timeout_ms: int = 2000  # default timeout for reads (agent tools); writes can't take one
     # Redis ACL users (Phase 1.4, D018), created by docker-compose.yml from the same .env.
     falkordb_writer_user: str = "lore_writer"

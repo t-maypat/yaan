@@ -16,6 +16,21 @@ from app.connectors.base import Connector, ConnectorError, labeled
 from app.sentinel import live
 
 STATE = "connectors.json"
+# the sources whose items carry `:synthetic-<source>-` ids; the last eight are experimental (D090)
+SOURCES = (
+    "slack",
+    "github",
+    "jira",
+    "notion",
+    "linear",
+    "gitlab",
+    "confluence",
+    "gdrive",
+    "gmail",
+    "gmeet",
+    "zoom",
+    "discord",
+)
 
 
 def load_state(graph: str) -> dict[str, Any]:
@@ -133,13 +148,72 @@ def configured(graph: str) -> list[Connector]:
         from app.connectors.notion import NotionConnector
 
         out.append(NotionConnector(st.notion_token, st.notion_page_id, graph))
+    out.extend(experimental(graph, st))
+    return out
+
+
+def experimental(graph: str, st: Any) -> list[Connector]:
+    """The experimental connectors (D090, not run against live APIs): each only when ALL its
+    required settings are set, so an unchanged .env adds nothing."""
+    out: list[Connector] = []
+    if st.linear_api_key and st.linear_team:
+        from app.connectors.linear import LinearConnector
+
+        out.append(LinearConnector(st.linear_api_key, st.linear_team, graph))
+    if st.gitlab_token and st.gitlab_project:
+        from app.connectors.gitlab import GitLabConnector
+
+        out.append(
+            GitLabConnector(
+                st.gitlab_token, st.gitlab_project, graph, base_url=st.gitlab_base_url or None
+            )
+        )
+    if (
+        st.confluence_base_url
+        and st.confluence_email
+        and st.confluence_api_token
+        and st.confluence_space_id
+    ):
+        from app.connectors.confluence import ConfluenceConnector
+
+        out.append(
+            ConfluenceConnector(
+                st.confluence_base_url,
+                st.confluence_email,
+                st.confluence_api_token,
+                st.confluence_space_id,
+                graph,
+            )
+        )
+    if st.google_drive_access_token and st.google_drive_folder_id:
+        from app.connectors.gdrive import GoogleDriveConnector
+
+        out.append(
+            GoogleDriveConnector(st.google_drive_access_token, st.google_drive_folder_id, graph)
+        )
+    if st.gmail_access_token and st.gmail_label:
+        from app.connectors.gmail import GmailConnector
+
+        out.append(GmailConnector(st.gmail_access_token, st.gmail_label, graph))
+    if st.google_meet_access_token and st.google_meet_space:
+        from app.connectors.gmeet import GoogleMeetConnector
+
+        out.append(GoogleMeetConnector(st.google_meet_access_token, st.google_meet_space, graph))
+    if st.zoom_access_token:
+        from app.connectors.zoom import ZoomConnector
+
+        out.append(ZoomConnector(st.zoom_access_token, graph, user_id=st.zoom_user_id or None))
+    if st.discord_bot_token and st.discord_channel_id:
+        from app.connectors.discord import DiscordConnector
+
+        out.append(DiscordConnector(st.discord_bot_token, st.discord_channel_id, graph))
     return out
 
 
 def from_connector(alert: dict[str, Any]) -> bool:
     """An alert raised by an item a connector brought in (not by HERB's batch data)."""
     aid = alert.get("artifact_id") or ""
-    return any(f":synthetic-{s}-" in aid for s in ("slack", "github", "jira", "notion"))
+    return any(f":synthetic-{s}-" in aid for s in SOURCES)
 
 
 def run_forever(graph: str | None = None, every_s: float = 30, say=print) -> None:
