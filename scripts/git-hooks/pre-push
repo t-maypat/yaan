@@ -1,0 +1,34 @@
+#!/bin/sh
+# Pre-push guard for Graph Hacks (docs/decisions.md D010).
+# The organizers allow pre-event local work, but every pushed commit must be stamped after the
+# event start: 2026-10-15 00:01 IST = 1792002660 Unix time. This refuses any push containing an
+# older commit (author or committer date). Fix by re-creating the history at kickoff
+# (docs/PLAN.md > Git & commits), never by faking dates.
+# Enable once per clone: git config core.hooksPath scripts/git-hooks
+
+cutoff=1792002660
+zero=0000000000000000000000000000000000000000
+status=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ "$local_sha" = "$zero" ] && continue # deleting a remote branch
+    if [ "$remote_sha" = "$zero" ]; then
+        range="$local_sha --not --remotes" # new branch: everything not on a remote yet
+    else
+        range="$remote_sha..$local_sha"
+    fi
+    # $range is deliberately split into arguments.
+    log=$(git log --format='%at %ct %h %s' $range) || {
+        echo "pre-push: could not list the commits for $remote_ref; refusing." >&2
+        exit 1
+    }
+    bad=$(printf '%s\n' "$log" | awk -v c="$cutoff" 'NF && ($1 < c || $2 < c)')
+    if [ -n "$bad" ]; then
+        echo "pre-push: $remote_ref has commits dated before 2026-10-15 00:01 IST:" >&2
+        printf '%s\n' "$bad" | cut -d' ' -f3- | sed 's/^/  /' >&2
+        status=1
+    fi
+done
+
+[ "$status" -eq 0 ] || echo "pre-push: refused. Re-create pre-event commits at kickoff (docs/PLAN.md > Git & commits)." >&2
+exit "$status"

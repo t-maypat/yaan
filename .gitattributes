@@ -1,0 +1,7 @@
+# LF everywhere: shell hooks, the Makefile and Python break with CRLF (this box has core.autocrlf=true).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.gif binary
+*.zip binary
+*.rdb binary

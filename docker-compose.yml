@@ -1,0 +1,21 @@
+# Local stack: FalkorDB + Browser. Phase 1 pins the image, verifies the data path and adds
+# ACL users; Phase 15 adds the api, web and TLS proxy services for deployment.
+name: lore
+
+services:
+  falkordb:
+    image: "falkordb/falkordb:${FALKORDB_TAG:?set FALKORDB_TAG in .env to a pinned release (docs/PLAN.md Phase 1)}"
+    ports:
+      - "127.0.0.1:${FALKORDB_PORT:-6379}:6379"
+      - "127.0.0.1:3000:3000" # FalkorDB Browser: local only, never public
+    volumes:
+      - falkordb-data:/var/lib/falkordb/data # ASSUMPTION A7: confirm with CONFIG GET dir
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  falkordb-data:

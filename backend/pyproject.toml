@@ -1,0 +1,44 @@
+[project]
+name = "lore"
+version = "0.1.0"
+description = "Lore: a time-aware company brain on FalkorDB"
+requires-python = ">=3.11"
+# Runtime deps arrive with the phase that first needs them (`uv add --project backend <pkg>`):
+# huggingface_hub (Phase 2), fastembed + diskcache (4), rapidfuzz (8), mcp (14).
+dependencies = [
+    "anthropic>=1.0",
+    "falkordb>=1.0",
+    "fastapi>=0.110",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "uvicorn[standard]>=0.29",
+]
+
+[project.scripts]
+lore = "app.cli:main"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.27",
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = ["db: needs a running FalkorDB (docker compose up -d)"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
