@@ -1,4 +1,4 @@
-"""Mechanical guardrails for backend/queries/*.cypher (FalkorDB is not Neo4j; see CLAUDE.md).
+"""Mechanical guardrails for backend/queries/*.cypher (FalkorDB is not Neo4j).
 
 Each query's behavior is covered by its fixture test; this only catches syntax that fails, or
 silently misbehaves, on the pinned server. Every rule cites the contract test that proved it

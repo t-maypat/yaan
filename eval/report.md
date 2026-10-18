@@ -1,6 +1,6 @@
 # Lore evaluation report
 
-What we measured, how, and what the numbers do and don't show. Every figure here comes from a results file in [`eval/results/`](results/) (the table: [`results/table.md`](results/table.md), rebuilt by `lore eval-report`) or a decision entry in [`docs/decisions.md`](../docs/decisions.md).
+What we measured, how, and what the numbers do and don't show. Every figure here comes from a results file in [`eval/results/`](results/) (the table: [`results/table.md`](results/table.md), rebuilt by `lore eval-report`).
 
 > **Status (18 Oct, final):** the held-out run is done, once, for all three systems (§3a; `eval/heldout_runs.log` has one opening per system). §3 keeps the dev results the system was built against.
 

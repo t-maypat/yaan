@@ -302,14 +302,14 @@ docker compose --profile app run --rm api yaan seed --from https://github.com/t-
 
 - To ask questions, put `ANTHROPIC_API_KEY=` in `.env` and restart the `api` service. Without a key, `/ask` says so instead of answering.
 - **MCP for Claude Code:** `claude mcp add yaan -- uv run --project backend yaan mcp`, or open the repo in Claude Code and accept `.mcp.json`.
-- **Connectors:** setup and the cross-tool story are in [docs/connectors.md](docs/connectors.md).
+- **Connectors:** setup and the cross-tool story are in [backend/app/connectors/README.md](backend/app/connectors/README.md).
 - **Development:** `uv sync --project backend`, `uv run --project backend pytest backend` (1,000+ tests), `npm --prefix frontend run dev`. The `Makefile` wraps the same commands on Linux and macOS.
 
 ## Data and license
 **Code:** Apache-2.0 ([LICENSE](LICENSE)). **Data:** [HERB](https://huggingface.co/datasets/Salesforce/HERB) by Salesforce AI Research, a public **synthetic** enterprise dataset, licensed **CC BY-NC 4.0** ([paper](https://arxiv.org/abs/2506.23139)). Yaan uses no real company's or person's data. Demo and connector items are synthetic too and labeled `[synthetic demo …]`. The snapshot redistributes HERB-derived data under the same license, with attribution.
 
 ## Evaluation methodology
-See [eval/report.md](eval/report.md): the dev/held-out split and its guard, the systems (each one change apart), the judge, the drift set, the error analysis, the declared deviations, and the reproduction commands. Decisions and verified facts are logged in [docs/decisions.md](docs/decisions.md); beginner-level guides to every part are in [docs/learn/](docs/learn/README.md).
+See [eval/report.md](eval/report.md): the dev/held-out split and its guard, the systems (each one change apart), the judge, the drift set, the error analysis, the declared deviations, and the reproduction commands.
 
 ## Limitations
 - **Held-out is 20 points below dev** (63.6 vs 83.2): fixes found on dev questions carried over only partly. The held-out products also share HERB's question templates, so even that run measures new products, not new kinds of question.
@@ -321,7 +321,7 @@ See [eval/report.md](eval/report.md): the dev/held-out split and its guard, the 
 - **Extraction covers bug and develop channels.** Feature-level planning events are out of scope.
 
 ## AI usage
-Planning notes were prepared with an AI assistant before the event, as rule 8 allows. During the event, code was written with Claude Code as a coding assistant. Every query, schema decision and evaluation was reviewed, tested and is explainable by the author. Runtime LLM use: event extraction and answer generation (Claude Haiku 5.5; see `.env.example`). Log: [docs/ai-usage.md](docs/ai-usage.md).
+Planning notes were prepared with an AI assistant before the event, as rule 8 allows. During the event, code was written with Claude Code as a coding assistant. Every query, schema decision and evaluation was reviewed, tested and is explainable by the author. Runtime LLM use: event extraction and answer generation (Claude Haiku 5.5; see `.env.example`). Every commit made with Claude carries a `Co-Authored-By` trailer.
 
 ## What's next
 - Close the dev → held-out gap with a fresh dev split, then measure on new question types.

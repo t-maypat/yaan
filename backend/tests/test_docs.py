@@ -1,4 +1,4 @@
-"""Docs guardrails: diagrams display everywhere and stay fresh; learning guides keep up.
+"""Docs guardrails: diagrams display everywhere and stay fresh; the README lists every query.
 
 Raw ```mermaid blocks show up as plain syntax in VS Code's preview, so the docs embed
 SVGs rendered by scripts/render_diagrams.py. These tests fail on a raw Mermaid block, a
@@ -51,21 +51,6 @@ def test_markdown_renders_everywhere(doc):
     for target in IMAGE_LINK.findall(text):
         if "://" not in target:
             assert (doc.parent / target).resolve().is_file(), f"broken image link: {target}"
-
-
-def test_every_started_phase_has_a_learning_guide():
-    plan = (DOCS / "PLAN.md").read_text(encoding="utf-8")
-    started = re.findall(r"^\| (\d+) \|.*\| (?:✅|🔄) \|$", plan, re.MULTILINE)
-    assert started, "no started phases found in the PLAN.md overview table"
-    for phase in started:
-        guides = list((DOCS / "learn").glob(f"{int(phase):02d}-*.md"))
-        assert guides, f"Phase {phase} has started but docs/learn/{int(phase):02d}-*.md is missing"
-
-
-def test_learning_guides_are_indexed():
-    index = (DOCS / "learn" / "README.md").read_text(encoding="utf-8")
-    for guide in sorted((DOCS / "learn").glob("[0-9][0-9]-*.md")):
-        assert f"({guide.name})" in index, f"add {guide.name} to docs/learn/README.md"
 
 
 def test_the_readme_lists_every_query():

@@ -5,7 +5,7 @@ name: lore
 
 services:
   falkordb:
-    image: "falkordb/falkordb:${FALKORDB_TAG:?set FALKORDB_TAG in .env to a pinned release (docs/PLAN.md Phase 1)}"
+    image: "falkordb/falkordb:${FALKORDB_TAG:?set FALKORDB_TAG in .env to a pinned release}"
     environment:
       # Graph-module limits (D014), set on purpose instead of the image's defaults (verified A17):
       # - TIMEOUT_DEFAULT is the write budget. Writes ignore the per-query TIMEOUT and are rolled

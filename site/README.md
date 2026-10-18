@@ -1,6 +1,6 @@
 # Yaan landing page
 
-A static page (`index.html`, `styles.css`, `main.js`, `assets/`) with no build step and no backend. It never calls Yaan's API. Content follows [docs/landing-brief.md](../docs/landing-brief.md).
+A static page (`index.html`, `styles.css`, `main.js`, `assets/`) with no build step and no backend. It never calls Yaan's API.
 
 ## Preview locally
 ```

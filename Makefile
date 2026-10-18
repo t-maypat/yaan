@@ -1,5 +1,5 @@
 # Thin wrappers for Linux/macOS (and judges). Each recipe is the exact command to run
-# by hand where make isn't installed (the Windows dev box): see CLAUDE.md > Commands.
+# by hand where make isn't installed (the Windows dev box): see the README Quickstart.
 RUN      := uv run --project backend
 GRAPH    ?= lore_herb
 PRODUCTS ?=

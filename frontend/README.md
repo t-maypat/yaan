@@ -1,6 +1,6 @@
 # frontend/
 
-Lore's web UI (Phase 12): Vite + React 19 + TypeScript + Tailwind 4 + Cytoscape.js. How it works: [docs/learn/12-web-ui.md](../docs/learn/12-web-ui.md); decisions: D052.
+Lore's web UI (Phase 12): Vite + React 19 + TypeScript + Tailwind 4 + Cytoscape.js.
 
 ## Run it (from the repo root)
 1. API: `uv run --project backend uvicorn app.main:app --reload` (port 8000; FalkorDB up).
