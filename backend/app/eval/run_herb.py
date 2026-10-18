@@ -125,6 +125,7 @@ def run(
             "citations": out.get("citations", []),
             "retrieved": out.get("retrieved", []),
             "llm": out.get("llm"),
+            **{k: out[k] for k in ("trace", "validator") if k in out},  # the agent's work
             "search_ms": round(search_ms, 1),
             "answer_ms": round(search_ms + (time.perf_counter() - started) * 1000, 1),
             "error": error,

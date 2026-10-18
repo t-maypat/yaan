@@ -1,6 +1,6 @@
 // doc_discussion.cypher — the Slack discussion of a document: messages in the channel where it was first shared, until a newer version is shared there (or $window_ms)
-MATCH (d:Doc {id: $doc_id})
-MATCH (v:Doc) WHERE v.base_id = d.base_id
+MATCH (d:Artifact {id: $doc_id})-[:IN_PRODUCT]->(:Product)<-[:IN_PRODUCT]-(v:Doc)
+WHERE v.base_id = d.base_id
 MATCH (s:Message)-[:SHARES]->(v)
 WITH s ORDER BY s.ts_ms
 WITH collect(s) AS shares

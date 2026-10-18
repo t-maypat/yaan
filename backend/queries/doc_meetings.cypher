@@ -1,5 +1,5 @@
 // doc_meetings.cypher — the product's meetings whose transcript names the document's type, with who spoke in each
-MATCH (d:Doc {id: $doc_id})-[:IN_PRODUCT]->(prod:Product)
+MATCH (d:Artifact {id: $doc_id})-[:IN_PRODUCT]->(prod:Product)
 MATCH (prod)<-[:IN_PRODUCT]-(m:Meeting)
 WHERE toLower(m.text) CONTAINS toLower(d.doc_type)
 OPTIONAL MATCH (p:Person)-[s:SPOKE_IN]->(m)

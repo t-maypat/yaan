@@ -1,0 +1,12 @@
+%% The answer agent, slice A (9.0): tool turns, then a JSON answer that code checks before anyone sees it.
+flowchart LR
+  Q["Question<br/>+ product scope"]:::human --> T1["Model turn<br/>picks tools<br/>(Haiku 5.5, thinking on)"]:::ext
+  T1 --> TOOLS["7 read-only tools<br/>13 Cypher queries<br/>in FalkorDB"]:::store
+  TOOLS --> TN["Next model turns<br/>read results, call more<br/>at most 8 calls"]:::ext
+  TN --> J["Final turn<br/>JSON answer:<br/>text + [n] citations"]:::ext
+  J --> V{"Validator in code<br/>1 cited id came from a tool<br/>2 quote is word for word<br/>3 every sentence cited"}:::guard
+  V -->|passes| A["Answer with<br/>verified citations"]:::file
+  V -->|fails| R["One repair turn<br/>problems listed"]:::ext
+  R --> C["Clean-up in code<br/>drop what still fails"]:::guard
+  C -->|something cited is left| A
+  C -->|nothing left| N["Abstain:<br/>Not found in Lore's graph"]:::file

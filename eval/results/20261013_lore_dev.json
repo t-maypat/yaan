@@ -1,0 +1,63 @@
+{
+ "run_id": "20261013T1441Z_lore_dev",
+ "system": "lore",
+ "split": "dev",
+ "products": [
+  "CollaborateForce",
+  "ExplainabilityForce",
+  "VizForce"
+ ],
+ "questions": {
+  "answerable": 96,
+  "unanswerable": 104
+ },
+ "categories": {
+  "content": {
+   "n": 32,
+   "score": 70.12
+  },
+  "person": {
+   "n": 19,
+   "score": 62.57
+  },
+  "company": {
+   "n": 11,
+   "score": 66.67
+  },
+  "url": {
+   "n": 34,
+   "score": 47.16
+  }
+ },
+ "avg": 61.63,
+ "unanswerable": 85.58,
+ "herb_script_avg": 23.74,
+ "abstain_rate_answerable": 7.29,
+ "errors": 0,
+ "citations": {
+  "total": 477,
+  "retrieved_pct": 100.0,
+  "quote_ok_pct": 100.0
+ },
+ "latency_s": {
+  "n_uncached": 195,
+  "p50": 11.82,
+  "p95": 24.19,
+  "search_p50_ms": 0.0
+ },
+ "tokens_per_answer": 2010.9,
+ "cost_usd": {
+  "answers_this_run": 0.5572,
+  "judge_this_run": 0.0242
+ },
+ "models": {
+  "answer": "claude-haiku-5-5",
+  "answer_effort": "medium",
+  "judge": "claude-haiku-5-5",
+  "judge_effort": "low"
+ },
+ "deviations": [
+  "judge claude-haiku-5-5 instead of gpt-4o (D035)",
+  "dev split: 3 products, product-scoped retrieval"
+ ]
+}
