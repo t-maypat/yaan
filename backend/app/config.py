@@ -20,7 +20,12 @@ class Settings(BaseSettings):
     falkordb_port: int = 6379
     lore_graph: str = "lore_herb"
     lore_demo_graph: str = "lore_demo"
-    query_timeout_ms: int = 2000
+    query_timeout_ms: int = 2000  # default timeout for reads (agent tools); writes can't take one
+    # Redis ACL users (Phase 1.4). Unset = Redis's default user.
+    falkordb_writer_user: str | None = None
+    falkordb_writer_password: str | None = None
+    falkordb_reader_user: str | None = None
+    falkordb_reader_password: str | None = None
 
     # LLM (Anthropic)
     anthropic_api_key: str | None = None

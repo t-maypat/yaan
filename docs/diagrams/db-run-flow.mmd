@@ -1,0 +1,12 @@
+%% How app/db.py runs a named query (Phase 1.3; limits from D014, A17).
+flowchart LR
+  C["Caller<br/>run('find_people', params)"]:::code --> F["Load the query file<br/>queries/find_people.cypher<br/>read once, then cached"]:::file
+  F --> K{"readonly?<br/>(default: yes)"}:::guard
+  K -- "yes: a read" --> T{"Timeout<br/>1 ms … 120 s?"}:::guard
+  T -- "no" --> VE["ValueError<br/>nothing is sent"]:::guard
+  T -- "yes (default 2 s)" --> R["Reader client<br/>GRAPH.RO_QUERY<br/>the server refuses writes"]:::code
+  K -- "no: a write" --> B["Writer client<br/>GRAPH.QUERY, no timeout<br/>one statement per 500 rows"]:::code
+  R --> DB[("FalkorDB")]:::store
+  B --> DB
+  DB -- "success" --> OK["Result<br/>columns, rows as dicts,<br/>change counts, server ms"]:::code
+  DB -- "server error" --> QE["QueryError / QueryTimeout<br/>names the query, graph<br/>and failed batch"]:::guard
