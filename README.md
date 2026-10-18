@@ -317,7 +317,7 @@ See [eval/report.md](eval/report.md): the dev/held-out split and its guard, the 
 - **Some HERB labels contradict each other.** 7 of Lore's 13 "answered an unanswerable" cases are questions HERB's own answerable ground truth answers (eval report §6).
 - **Graph-computed counts ignore permissions**, and the permission policy is synthetic.
 - **The content judge is noisy:** the same answer scored 90 in one run and 40 in the next.
-- **The connectors are tested on recorded API payloads** and end to end on a scratch graph. Our sandbox workspaces hold only the labeled demo story.
+- **Slack, Jira and GitHub ran live on our sandbox workspaces** (ticket → fix PR → customer re-report in Slack → regression card in 11 s). Notion is tested on recorded API payloads only. The sandboxes hold only the labeled demo story, connectors poll every 30 s, and tokens are pasted into `.env`: there's no OAuth install yet.
 - **Extraction covers bug and develop channels.** Feature-level planning events are out of scope.
 
 ## AI usage

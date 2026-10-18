@@ -14,6 +14,7 @@ Each step prints what it created; a failing call stops the act loudly.
 """
 
 import base64
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -131,22 +132,23 @@ def jira_done(http: httpx.Client, key: str, pr_url: str, say: Callable[[str], No
 def github_fix(http: httpx.Client, repo: str, say: Callable[[str], None]) -> str:
     base = check(http.get(f"/repos/{repo}"), "GitHub repo")["default_branch"]
     sha = check(http.get(f"/repos/{repo}/git/ref/heads/{base}"), "GitHub ref")["object"]["sha"]
-    branch = "lore-demo/csv-export-chunks"
+    # One branch per take, so the story can be seeded again after `lore demo reset`.
+    branch = f"lore-demo/csv-export-chunks-{int(time.time())}"
     check(
         http.post(f"/repos/{repo}/git/refs", json={"ref": f"refs/heads/{branch}", "sha": sha}),
         "GitHub branch",
     )
-    check(
-        http.put(
-            f"/repos/{repo}/contents/export/csv_stream.py",
-            json={
-                "message": "[synthetic demo] Stream the CSV export in chunks",
-                "content": base64.b64encode(FIX_CODE.encode()).decode(),
-                "branch": branch,
-            },
-        ),
-        "GitHub commit",
-    )
+    path = f"/repos/{repo}/contents/export/csv_stream.py"
+    commit = {
+        "message": "[synthetic demo] Stream the CSV export in chunks",
+        "content": base64.b64encode(FIX_CODE.encode()).decode(),
+        "branch": branch,
+    }
+    # An earlier take merged the file: GitHub updates a file only when told its current sha.
+    old = http.get(path, params={"ref": branch})
+    if old.status_code == 200 and old.json().get("sha"):
+        commit["sha"] = old.json()["sha"]
+    check(http.put(path, json=commit), "GitHub commit")
     pr = check(
         http.post(
             f"/repos/{repo}/pulls",

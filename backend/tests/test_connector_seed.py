@@ -114,3 +114,21 @@ def test_regression_posts_a_message_the_slack_connector_will_read():
     s = Slack()
     assert seed.regression(s, "C1", say=lambda m: None) == "1.2"
     assert s.sent[1].startswith(SEEDED) and seed.TITLE in s.sent[1]
+
+
+def test_a_second_take_updates_the_merged_file_on_a_new_branch():
+    """After an earlier take merged export/csv_stream.py, GitHub needs the file's sha."""
+    calls, gh = recorder(
+        {
+            ("GET", "/repos/acme/sandbox"): {"default_branch": "main"},
+            ("GET", "/git/ref/heads/main"): {"object": {"sha": "abc"}},
+            ("GET", "/contents/export/csv_stream.py"): {"sha": "old-file"},
+            ("POST", "/pulls"): {"number": 2, "html_url": "https://github.com/acme/sandbox/pull/2"},
+        }
+    )
+    url = seed.github_fix(client("https://api.github.com", gh), "acme/sandbox", lambda m: None)
+    assert url.endswith("/pull/2")
+    ref = next(b for m, p, b in calls if p.endswith("/git/refs"))
+    put = next(b for m, p, b in calls if m == "PUT" and p.endswith("csv_stream.py"))
+    assert ref["ref"].startswith("refs/heads/lore-demo/csv-export-chunks-")
+    assert put["sha"] == "old-file" and put["branch"] == ref["ref"].removeprefix("refs/heads/")
