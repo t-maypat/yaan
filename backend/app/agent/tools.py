@@ -116,6 +116,7 @@ def fuse(
             "artifact_id": row["artifact_id"],
             "kind": row["kind"],
             "title": row["title"],
+            "url": row.get("url"),
             "ts_iso": row["ts_iso"],
             "product_id": row["product_id"],
             "chunk_id": chunk,

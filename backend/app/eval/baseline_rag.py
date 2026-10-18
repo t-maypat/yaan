@@ -52,9 +52,15 @@ def fence(text: str) -> str:
 def context_block(results: list[dict[str, Any]]) -> str:
     return "\n\n".join(
         f'<artifact id="{r["artifact_id"]}" kind="{r["kind"]}" date="{r["ts_iso"]}"'
-        f' title="{fence(r["title"] or "")}">\n{fence(r["text"])}\n</artifact>'
+        f' title="{fence(r["title"] or "")}" url="{r.get("url") or ""}">'
+        f"\n{fence(r['text'])}\n</artifact>"
         for r in results
     )
+
+
+def quote_found(quote: str, source: dict[str, Any]) -> bool:
+    """The quote is in the chunk text or the title: the two texts the model was shown."""
+    return any(llm.quote_in(quote, part) for part in (source["text"], source["title"] or ""))
 
 
 def answer(
@@ -82,7 +88,7 @@ def answer(
             {
                 **c,
                 "retrieved": source is not None,
-                "quote_ok": source is not None and llm.quote_in(c["quote"], source["text"]),
+                "quote_ok": source is not None and quote_found(c["quote"], source),
             }
         )
     return {

@@ -7,7 +7,7 @@ WHERE ($kinds IS NULL OR node.kind IN $kinds)
 MATCH (a:Artifact)-[:HAS_CHUNK]->(node)
 WHERE $product_id IS NULL OR (a)-[:IN_PRODUCT]->(:Product {id: $product_id})
 RETURN node.id AS chunk_id, node.text AS text, node.field AS field, a.id AS artifact_id,
-       a.kind AS kind, a.title AS title, a.ts_iso AS ts_iso, a.product_id AS product_id,
+       a.kind AS kind, a.title AS title, a.url AS url, a.ts_iso AS ts_iso, a.product_id AS product_id,
        score
 ORDER BY score DESC
 LIMIT $k

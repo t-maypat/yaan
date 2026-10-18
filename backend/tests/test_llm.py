@@ -173,3 +173,11 @@ def test_baseline_abstains_without_calling_when_search_is_empty(gateway, monkeyp
     monkeypatch.setattr(baseline_rag, "search_artifacts", lambda *a, **kw: {"results": []})
     out = baseline_rag.answer("anything")
     assert out["abstain"] and gateway.calls == []
+
+
+def test_baseline_accepts_quotes_from_the_title_and_shows_urls():
+    source = {**hit("pr:1", "Reverts the change."), "title": "Revert PR# 28: Fix rendering"}
+    assert baseline_rag.quote_found("Revert PR# 28", source)
+    assert not baseline_rag.quote_found("Revert PR# 29", source)
+    block = baseline_rag.context_block([{**source, "url": "https://github.com/o/r/pull/1"}])
+    assert 'url="https://github.com/o/r/pull/1"' in block
