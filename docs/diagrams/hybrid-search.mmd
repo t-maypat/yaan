@@ -1,0 +1,9 @@
+%% Agent tool 1, search_artifacts: two searches inside FalkorDB, fused by rank (Phase 4.5, D032).
+flowchart LR
+  Q["Question<br/>Who put the export<br/>feature on hold?"]:::human --> KW["keywords()<br/>drop stopwords<br/>put | export | feature | hold"]:::code
+  Q --> EMB["embed_query()<br/>bge-small on the CPU<br/>384 numbers"]:::code
+  KW --> FT["search_fulltext.cypher<br/>full-text index on Chunk.text<br/>higher score = better"]:::store
+  EMB --> VEC["search_vector.cypher<br/>vector index on Chunk.embedding<br/>lower distance = closer"]:::store
+  FT --> RRF["fuse(): reciprocal rank fusion<br/>1 / (60 + rank) from each list<br/>best chunk per artifact"]:::code
+  VEC --> RRF
+  RRF --> OUT["Top k artifacts<br/>snippet, ranks, evidence_ids,<br/>the .cypher files used"]:::file

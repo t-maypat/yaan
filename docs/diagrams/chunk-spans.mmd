@@ -1,0 +1,7 @@
+%% How artifacts become search chunks: verbatim spans of one field each (Phase 4.1, D030).
+flowchart LR
+  A["Artifact<br/>a message, meeting, doc,<br/>PR, meeting chat or link"]:::file --> F["Pick searchable fields<br/>PR: title, summary, each review<br/>doc: sections, feedback<br/>meeting: speaker turns"]:::code
+  F --> S["Cut into spans of at most 800 chars<br/>at a line, sentence end or space"]:::code
+  S --> C["Chunk node<br/>text = exact span<br/>field, start_char, end_char<br/>(Artifact)-[:HAS_CHUNK]->(Chunk)"]:::store
+  C --> H["Embedding input<br/>context header + text<br/>(header never stored)"]:::code
+  H --> V["vecf32 embedding<br/>on the Chunk node"]:::store
