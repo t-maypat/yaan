@@ -6,6 +6,7 @@ it's missing.
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -79,6 +80,12 @@ class Settings(BaseSettings):
     # The eval judge stands in for HERB's gpt-4o judge (Phase 5, D035).
     lore_judge_model: str = "claude-haiku-5-5"
     lore_judge_effort: str = "low"
+    # Optional LiteLLM provider (D091, experimental): "anthropic" (default) is the SDK path with
+    # the original cache keys; "litellm" sends every call through litellm, one model per role.
+    lore_llm_provider: Literal["anthropic", "litellm"] = "anthropic"
+    lore_litellm_model_extract: str | None = None
+    lore_litellm_model_answer: str | None = None
+    lore_litellm_model_judge: str | None = None
     lore_daily_spend_cap_usd: float = 2.0  # llm.py refuses a call that could cross it
     # Public deployment guards (D081). Cache-only: replay cached answers, never call the API.
     lore_llm_cache_only: bool = False

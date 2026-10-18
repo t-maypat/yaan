@@ -192,6 +192,18 @@ def complete(
 ) -> LLMResult:
     """One LLM call through the gateway. `purpose` names it in the call log (e.g. "baseline")."""
     s = get_settings()
+    if s.lore_llm_provider == "litellm":  # optional, off by default (D091); lazy import
+        from app import llm_litellm
+
+        return llm_litellm.complete(
+            role=role,
+            system=system,
+            user=user,
+            purpose=purpose,
+            output=output,
+            max_tokens=max_tokens,
+            use_cache=use_cache,
+        )
     model, effort = {
         "extract": (s.lore_extract_model, s.lore_extract_effort),
         "answer": (s.lore_answer_model, s.lore_answer_effort),
@@ -321,6 +333,19 @@ def converse(
     turns are unaffected. The caller appends `content` unchanged to keep thinking valid.
     """
     s = get_settings()
+    if s.lore_llm_provider == "litellm":  # optional, off by default (D091); lazy import
+        from app import llm_litellm
+
+        return llm_litellm.converse(
+            role=role,
+            system=system,
+            messages=messages,
+            tools=tools,
+            purpose=purpose,
+            output_schema=output_schema,
+            max_tokens=max_tokens,
+            use_cache=use_cache,
+        )
     model, effort = {
         "extract": (s.lore_extract_model, s.lore_extract_effort),
         "answer": (s.lore_answer_model, s.lore_answer_effort),
