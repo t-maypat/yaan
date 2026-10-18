@@ -98,10 +98,16 @@ code, kbd, pre, .font-mono {
   border-bottom: 1px solid var(--rule);
 }
 .brand { display: inline-flex; align-items: center; gap: 9px; font: 500 23px/1 var(--font-serif); letter-spacing: -.01em; }
-.brand svg { width: 26px; height: 26px; }
+.brand svg { width: 28px; height: 28px; }
 .bm-edge { fill: none; stroke: var(--link); stroke-width: 1.6; stroke-linejoin: round; }
 .bm-node { fill: var(--link); }
 .bm-cite { fill: var(--mark); stroke: var(--ink); stroke-width: 1.3; }
+/* the Yaan mark: two sources converge into one stem */
+.ym-arm { fill: none; stroke: var(--link); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.ym-stem { fill: none; stroke: var(--ink); stroke-width: 3.6; stroke-linecap: round; }
+.ym-node { fill: var(--ink); stroke: var(--paper); stroke-width: 1.6; }
+.ym-cite { fill: var(--mark); stroke: var(--ink); stroke-width: 1.3; }
+.ym-src { fill: var(--link); }
 .tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--paper-2); border: 1px solid var(--rule); }
 .tab { padding: 6px 13px; border-radius: 8px; font-size: 14.5px; font-weight: 500; color: var(--muted); transition: color .2s, background-color .2s, box-shadow .2s; white-space: nowrap; }
 .tab:hover { color: var(--ink); }

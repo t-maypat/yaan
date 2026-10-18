@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lore · the company brain that knows what's still true</title>
-<meta name="description" content="Lore turns your team's Slack, meetings, pull requests, tickets and docs into a time-aware FalkorDB graph of people, work and decisions, with a word-for-word source for every sentence.">
+<title>Yaan · the company brain that knows what's still true</title>
+<meta name="description" content="Yaan turns your team's Slack, meetings, pull requests, tickets and docs into a time-aware FalkorDB graph of people, work and decisions, with a word-for-word source for every sentence.">
 <meta name="theme-color" content="#f1f3f5">
-<meta property="og:title" content="Lore: the company brain that knows what's still true">
+<meta property="og:title" content="Yaan: the company brain that knows what's still true">
 <meta property="og:description" content="A time-aware graph of people, work and decisions. Every sentence cites a verbatim source. Built on FalkorDB.">
 <meta property="og:image" content="assets/img/inbox-radius.png">
-<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/favicon.svg?v=yaan" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=Schibsted+Grotesk:wght@400..700&display=swap" rel="stylesheet">
@@ -28,14 +28,9 @@
 
 <header class="nav" id="nav">
   <div class="nav-inner">
-    <a class="brand" href="#top" aria-label="Lore, back to top">
-      <svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true">
-        <path class="bm-edge" d="M7 20 L14 8 L21 18 Z" />
-        <circle class="bm-node" cx="7" cy="20" r="3.2" />
-        <circle class="bm-node" cx="21" cy="18" r="3.2" />
-        <rect class="bm-cite" x="10.6" y="4.6" width="6.8" height="6.8" rx="1.6" />
-      </svg>
-      <span>Lore</span>
+    <a class="brand" href="#top" aria-label="Yaan, back to top">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="ym-arm" d="M7 6 L16 17 L25 6"/><path class="ym-stem" d="M16 17 V27"/><circle class="ym-node" cx="16" cy="17" r="3.3"/><rect class="ym-cite" x="3.4" y="2.4" width="7.2" height="7.2" rx="1.7"/><circle class="ym-src" cx="25" cy="6" r="3.3"/></svg>
+      <span>Yaan</span>
     </a>
     <nav class="nav-links" aria-label="Sections">
       <a href="#how">How it works</a>
@@ -48,7 +43,7 @@
         <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>
         <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.3 8.3 0 0 1 9.4 4a8.3 8.3 0 1 0 10.6 10.6Z"/></svg>
       </button>
-      <a class="icon-btn" href="{REPO_URL}" aria-label="Lore on GitHub"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span></a>
+      <a class="icon-btn" href="{REPO_URL}" aria-label="Yaan on GitHub"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span></a>
       <a class="btn btn-line btn-sm nav-app" href="{APP_URL}">Open the app</a>
       <a class="btn btn-ink btn-sm" href="{VIDEO_URL}">Watch the demo</a>
     </div>
@@ -63,8 +58,9 @@
   <div class="hero-fade" aria-hidden="true"></div>
 
   <div class="hero-copy">
+    <p class="powered">Powered by <span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></p>
     <h1 class="hero-title">The company brain that knows what’s still true.</h1>
-    <p class="hero-sub">Lore turns your team’s Slack, meetings, pull requests, tickets and docs into a time-aware graph of people, work and decisions. Ask what’s true now, what was true then, why, and who knows, with a word-for-word source for every sentence.</p>
+    <p class="hero-sub">Yaan turns your team’s Slack, meetings, pull requests, tickets and docs into a time-aware graph of people, work and decisions. Ask what’s true now, what was true then, why, and who knows, with a word-for-word source for every sentence.</p>
     <div class="hero-ctas">
       <a class="btn btn-ink" href="{VIDEO_URL}">
         <svg class="play" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9.2"/><path d="M8.2 6.6v6.8l5.4-3.4z"/></svg>
@@ -74,8 +70,8 @@
     </div>
   </div>
 
-  <!-- The console replays three real questions against Lore's graph (HERB, ExplainabilityForce). -->
-  <div class="console" id="console" role="region" aria-label="Lore answering questions, replayed from its graph">
+  <!-- The console replays three real questions against Yaan's graph (HERB, ExplainabilityForce). -->
+  <div class="console" id="console" role="region" aria-label="Yaan answering questions, replayed from its graph">
     <div class="c-top">
       <div class="c-scope">
         <span class="scope"><span class="scope-k">product</span> ExplainabilityForce</span>
@@ -106,7 +102,7 @@
 
     <div class="c-body">
       <div class="c-trace">
-        <p class="c-h">How Lore found it</p>
+        <p class="c-h">How Yaan found it</p>
         <ol class="trace" id="cTrace"></ol>
       </div>
       <div class="c-answer">
@@ -126,7 +122,7 @@
       <div class="meter meter-hide-sm"><span class="m-k">State</span><span class="m-v" id="mState">idle</span></div>
     </div>
   </div>
-  <p class="console-note">Replayed from Lore’s tool output on ExplainabilityForce, a synthetic company from Salesforce AI Research’s enterprise benchmark (the <a href="https://arxiv.org/abs/2506.23139">HERB paper</a>). Tool times are the measured p50 per tool.</p>
+  <p class="console-note">Replayed from Yaan’s tool output on ExplainabilityForce, a synthetic company from Salesforce AI Research’s enterprise benchmark (the <a href="https://arxiv.org/abs/2506.23139">HERB paper</a>). Tool times are the measured p50 per tool.</p>
 </section>
 
 <!-- ============ LOGO STRIP ============ -->
@@ -149,7 +145,7 @@
           <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/zoom.svg)"></span><span class="mq-n">Zoom</span></li>
           <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span><span class="mq-n">Cursor</span></li>
           <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/discord.svg)"></span><span class="mq-n">Discord</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span><span class="mq-n">Claude Desktop</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/openai.svg)"></span><span class="mq-n">Codex</span></li>
           <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/gmail.svg)"></span><span class="mq-n">Gmail</span></li>
       </ul>
       <ul class="mq-set" aria-hidden="true">
@@ -167,7 +163,7 @@
           <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/zoom.svg)"></span><span class="mq-n">Zoom</span></li>
           <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span><span class="mq-n">Cursor</span></li>
           <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/discord.svg)"></span><span class="mq-n">Discord</span></li>
-          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span><span class="mq-n">Claude Desktop</span></li>
+          <li class="mq-item"><span class="glyph" style="--icon:url(assets/icons/openai.svg)"></span><span class="mq-n">Codex</span></li>
           <li class="mq-item is-planned"><span class="glyph" style="--icon:url(assets/icons/gmail.svg)"></span><span class="mq-n">Gmail</span></li>
       </ul>
     </div>
@@ -178,7 +174,7 @@
 <section class="section how" id="how">
   <div class="wrap">
     <div class="sec-head">
-      <h2>Connect your tools. Lore remembers what changed. You act on it.</h2>
+      <h2>Connect your tools. Yaan remembers what changed. You act on it.</h2>
       <p class="sec-lede">Three steps, one pipeline. Every source goes through the same path, so an answer about a Slack thread and an answer about a pull request rest on the same graph.</p>
     </div>
 
@@ -199,89 +195,82 @@
         <li class="step" data-step="2">
           <span class="step-n">3</span>
           <h3>Act</h3>
-          <p>Ask in Slack, the web app or any AI agent over MCP. When new talk contradicts a decision, Lore raises an alert with its blast radius and a drafted fix. One click on <strong>Approve</strong> posts it back to Jira and GitHub.</p>
+          <p>Ask from Claude Code, Codex, Cursor or Slack. When new talk contradicts a decision, Yaan raises an alert with its blast radius and a drafted fix. One click on <strong>Approve</strong> posts it back to Jira and GitHub.</p>
           <div class="stage-inline" data-inline="2"></div>
         </li>
       </ol>
 
       <div class="stage" id="stage">
-        <!-- Scene 1: connect -->
+        <!-- Scene 1: connect. Four sources narrow into one pipeline that feeds one service. -->
         <div class="scene scene-connect is-active" data-scene="0">
-          <div class="lanes">
-            <div class="lane"><span class="lane-src"><span class="glyph" style="--icon:url(assets/icons/slack.svg)"></span>Slack</span><span class="lane-line"><i class="pk" style="--d:0s">msg:20270226-0-1bc7a</i><i class="pk" style="--d:2.1s">msg:20270224-0-ca81d</i></span></div>
-            <div class="lane"><span class="lane-src"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span>GitHub</span><span class="lane-line"><i class="pk" style="--d:.7s">pr:…ExplainabilityForce_pull_53</i><i class="pk" style="--d:2.9s">pr:…pull_55</i></span></div>
-            <div class="lane"><span class="lane-src"><span class="glyph" style="--icon:url(assets/icons/jira.svg)"></span>Jira</span><span class="lane-line"><i class="pk" style="--d:1.4s">ticket reopened</i></span></div>
-            <div class="lane"><span class="lane-src"><span class="glyph" style="--icon:url(assets/icons/notion.svg)"></span>Notion</span><span class="lane-line"><i class="pk" style="--d:2.4s">doc: design review</i></span></div>
+          <div class="hg">
+            <div class="hg-cols"><div class="hg-col"><span class="hg-src"><span class="glyph" style="--icon:url(assets/icons/slack.svg)"></span>Slack</span><span class="hg-lane"><i class="drop" style="--d:0.00s">msg:…1bc7a</i><i class="drop" style="--d:1.45s">msg:…ca81d</i><i class="drop" style="--d:2.90s">msg:…47b0c</i></span></div><div class="hg-col"><span class="hg-src"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span>GitHub</span><span class="hg-lane"><i class="drop" style="--d:0.55s">PR #53</i><i class="drop" style="--d:2.00s">PR #55</i><i class="drop" style="--d:3.45s">review</i></span></div><div class="hg-col"><span class="hg-src"><span class="glyph" style="--icon:url(assets/icons/jira.svg)"></span>Jira</span><span class="hg-lane"><i class="drop" style="--d:1.10s">ticket reopened</i><i class="drop" style="--d:2.55s">KAN-1</i></span></div><div class="hg-col"><span class="hg-src"><span class="glyph" style="--icon:url(assets/icons/notion.svg)"></span>Notion</span><span class="hg-lane"><i class="drop" style="--d:1.65s">design review</i><i class="drop" style="--d:3.10s">spec v2</i></span></div></div>
+            <svg class="hg-funnel" viewBox="0 0 600 96" aria-hidden="true"><path id="hgp0" d="M75 0 C75 52, 296 40, 296 96"/><path id="hgp1" d="M225 0 C225 50, 298 46, 298 96"/><path id="hgp2" d="M375 0 C375 50, 302 46, 302 96"/><path id="hgp3" d="M525 0 C525 52, 304 40, 304 96"/><circle r="4" class="hg-dot"><animateMotion dur="1.8s" begin="0.00s" repeatCount="indefinite" rotate="auto"><mpath href="#hgp0"/></animateMotion></circle><circle r="4" class="hg-dot"><animateMotion dur="1.8s" begin="0.45s" repeatCount="indefinite" rotate="auto"><mpath href="#hgp1"/></animateMotion></circle><circle r="4" class="hg-dot"><animateMotion dur="1.8s" begin="0.90s" repeatCount="indefinite" rotate="auto"><mpath href="#hgp2"/></animateMotion></circle><circle r="4" class="hg-dot"><animateMotion dur="1.8s" begin="1.35s" repeatCount="indefinite" rotate="auto"><mpath href="#hgp3"/></animateMotion></circle></svg>
+            <div class="hg-neck" aria-hidden="true"><i></i></div>
+            <div class="hg-core">
+              <div class="hg-core-head">
+                <span class="hg-name"><svg class="hg-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="ym-arm" d="M7 6 L16 17 L25 6"/><path class="ym-stem" d="M16 17 V27"/><circle class="ym-node" cx="16" cy="17" r="3.3"/><rect class="ym-cite" x="3.4" y="2.4" width="7.2" height="7.2" rx="1.7"/><circle class="ym-src" cx="25" cy="6" r="3.3"/></svg>Yaan</span>
+                <span class="hg-on">running on <span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></span>
+              </div>
+              <div class="ticker" aria-label="One pipeline, seven steps">
+                <ol class="tk-list"><li class="tk-i" data-k="0"><span class="tk-n">1</span><span class="tk-t">Normalize<em>every source into one shape</em></span></li><li class="tk-i" data-k="1"><span class="tk-n">2</span><span class="tk-t">Structural graph<em>people, teams, channels, PR chains</em></span></li><li class="tk-i" data-k="2"><span class="tk-n">3</span><span class="tk-t">Chunks + vectors<em>local embeddings, in the graph</em></span></li><li class="tk-i" data-k="3"><span class="tk-n">4</span><span class="tk-t">Link ids, URLs, names<em>deterministic, no AI</em></span></li><li class="tk-i" data-k="4"><span class="tk-n">5</span><span class="tk-t">Extract events<em>every quote checked against its message</em></span></li><li class="tk-i" data-k="5"><span class="tk-n">6</span><span class="tk-t">Fold decisions<em>who may change what</em></span></li><li class="tk-i" data-k="6"><span class="tk-n">7</span><span class="tk-t">Expertise, communities, PageRank<em>who knows, who connects</em></span></li></ol>
+              </div>
+              <p class="graphcount"><span class="gc-n">38,535</span> nodes <span class="gc-n">96,047</span> edges, one graph</p>
+            </div>
           </div>
-          <div class="pipe">
-            <span class="pipe-k">One pipeline</span>
-            <ol class="pipe-stages">
-              <li>Normalize</li>
-              <li>Structural graph</li>
-              <li>Chunks + vectors</li>
-              <li>Link ids, URLs, names</li>
-              <li>Extract events <em>quotes verified</em></li>
-              <li>Fold decisions <em>who may change what</em></li>
-              <li>Expertise, communities, PageRank</li>
-            </ol>
-          </div>
-          <div class="graphcount"><span class="gc-n">38,535</span> nodes <span class="gc-n">96,047</span> edges in FalkorDB</div>
         </div>
 
-        <!-- Scene 2: remember -->
+        <!-- Scene 2: remember. A fact has a lifespan: a new one closes the old one's window. -->
         <div class="scene scene-remember" data-scene="1">
           <p class="sc-title">Issue <strong>Inefficient Caching Strategy</strong></p>
-          <ol class="chain">
-            <li class="dec">
-              <div class="dec-win"><span class="win-bar" style="--w:118px"></span><span class="win-t">6 Feb 20:40 <span class="to">until</span> 24 Feb 15:31</span></div>
-              <p class="dec-v">reported <span>by Bob Davis, Engineering Lead</span></p>
-              <blockquote class="q"><p><mark>This is impacting customer CUST-0011.</mark></p><footer><code>msg:20270206-1-47b0c</code></footer></blockquote>
-            </li>
-            <li class="sup" aria-hidden="true">SUPERSEDES</li>
-            <li class="dec">
-              <div class="dec-win"><span class="win-bar" style="--w:14px"></span><span class="win-t">24 Feb 15:31 <span class="to">until</span> 26 Feb 20:17</span></div>
-              <p class="dec-v">resolved <span>by Hannah Johnson, assignee</span></p>
-              <blockquote class="q"><p><mark>the bug titled ‘Inefficient Caching Strategy’ has been resolved.</mark></p><footer><code>msg:20270224-0-ca81d</code></footer></blockquote>
-            </li>
-            <li class="sup" aria-hidden="true">SUPERSEDES</li>
-            <li class="dec dec-now">
-              <div class="dec-win"><span class="win-bar" style="--w:96px"></span><span class="win-t">26 Feb 20:17 <span class="to">until</span> <b>still in force</b></span></div>
-              <p class="dec-v">reopened <span>by Bob Davis, Engineering Lead</span></p>
-              <blockquote class="q"><p><mark>the customer has reopened the bug titled ‘Inefficient Caching Strategy’</mark></p><footer><code>msg:20270226-0-1bc7a</code></footer></blockquote>
-            </li>
-          </ol>
+          <div class="rm-chart" id="rmChart">
+            <div class="rm-row" data-k="0"><span class="rm-lab">reported</span><span class="rm-track"><i class="rm-bar b-rep"></i></span></div>
+            <div class="rm-row" data-k="1"><span class="rm-lab">resolved</span><span class="rm-track"><i class="rm-bar b-res"></i></span></div>
+            <div class="rm-row" data-k="2"><span class="rm-lab">reopened</span><span class="rm-track"><i class="rm-bar b-reo"></i></span></div>
+            <div class="rm-axis"><span style="--x:15.2">6 Feb</span><span style="--x:69.7">24 Feb</span><span style="--x:75.8" class="r">26 Feb</span><span style="--x:100" class="e">now</span></div>
+            <span class="rm-head" id="rmHead"><b>now</b></span>
+          </div>
+          <div class="rm-card" id="rmCard" aria-live="polite"></div>
+          <p class="rm-foot">Nothing is deleted. A new fact closes the old one’s window and both stay in the graph, so “what was true on 25 Feb?” is one lookup.</p>
         </div>
 
-        <!-- Scene 3: act -->
+        <!-- Scene 3: act. The alert reaches the AI tool the team already uses. -->
         <div class="scene scene-act" data-scene="2">
-          <article class="alert">
-            <p class="alert-k"><span class="dot-warn"></span>Regression in ExplainabilityForce</p>
-            <h4>‘Inefficient Caching Strategy’ was marked resolved on 24 Feb 2027 and reopened on 26 Feb 2027.</h4>
-            <div class="radius">
-              <p class="radius-k">Blast radius</p>
-              <ul>
-                <li><span class="shape s-pr"></span>PR #53 <em>the fix</em></li>
-                <li><span class="shape s-person"></span>Hannah Johnson <em>wrote the fix</em></li>
-                <li><span class="shape s-cust"></span>CUST-0011 <em>reported it</em></li>
-                <li><span class="shape s-co"></span>DataSolutions <em>their company</em></li>
-                <li><span class="shape s-area"></span>Backend Processing Engine <em>component</em></li>
-              </ul>
+          <div class="cw">
+            <div class="cw-bar">
+              <span class="cw-tab on"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span>Claude Code</span>
+              <span class="cw-tab"><span class="glyph" style="--icon:url(assets/icons/openai.svg)"></span>Codex</span>
+              <span class="cw-tab"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span>Cursor</span>
+              <span class="cw-mcp">via MCP</span>
             </div>
-            <div class="draft">
-              <p class="radius-k">Drafted follow-up</p>
-              <p class="draft-t">The customer reopened ‘Inefficient Caching Strategy’ two days after PR #53 resolved it. Quoting Bob Davis: “the customer has reopened the bug titled ‘Inefficient Caching Strategy’”.</p>
+            <div class="cw-body">
+              <p class="cw-user"><span>›</span> anything break overnight?</p>
+              <p class="cw-tool"><i></i>yaan · open_alerts <span>12 ms</span></p>
+              <div class="cw-ai">
+                <p><span class="dot-warn"></span><b>One regression.</b> ‘Inefficient Caching Strategy’ was marked resolved on 24 Feb 2027 and reopened on 26 Feb 2027.</p>
+                <ul class="cw-radius">
+                  <li><span class="shape s-pr"></span>PR #53, the fix</li>
+                  <li><span class="shape s-person"></span>Hannah Johnson, wrote it</li>
+                  <li><span class="shape s-cust"></span>CUST-0011</li>
+                  <li><span class="shape s-co"></span>DataSolutions</li>
+                </ul>
+                <p class="cw-draft">Yaan drafted a follow-up for the Jira ticket and PR #53, quoting Bob Davis: <mark>“the customer has reopened the bug titled ‘Inefficient Caching Strategy’”</mark></p>
+              </div>
+              <div class="alert">
+                <div class="alert-actions">
+                  <button class="btn btn-ink btn-sm" data-approve type="button">Approve</button>
+                  <button class="btn btn-line btn-sm" data-dismiss type="button">Dismiss</button>
+                  <span class="replay-note">A replay: nothing is sent from this page.</span>
+                </div>
+                <ol class="delivery" aria-live="polite">
+                  <li><span class="glyph" style="--icon:url(assets/icons/jira.svg)"></span>Comment posted on the Jira ticket</li>
+                  <li><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span>Comment posted on PR #53</li>
+                  <li><span class="shape s-dec"></span>Your approval recorded as a decision</li>
+                </ol>
+              </div>
             </div>
-            <div class="alert-actions">
-              <button class="btn btn-ink btn-sm" data-approve type="button">Approve</button>
-              <button class="btn btn-line btn-sm" data-dismiss type="button">Dismiss</button>
-              <span class="replay-note">A replay: nothing is sent from this page.</span>
-            </div>
-            <ol class="delivery" aria-live="polite">
-              <li><span class="glyph" style="--icon:url(assets/icons/jira.svg)"></span>Comment posted on the Jira ticket</li>
-              <li><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span>Comment posted on PR #53</li>
-              <li><span class="shape s-dec"></span>Your approval recorded as a Decision, so next time Lore can say what you did</li>
-            </ol>
-          </article>
+          </div>
+          <p class="cw-alt">Claude Code shown. Codex, Cursor and any MCP client see the same alerts; Slack and the Yaan inbox carry the same Approve button.</p>
         </div>
       </div>
     </div>
@@ -296,7 +285,7 @@
     <div class="mx-side">
       <div class="mx-side-in">
         <h2>Benchmarks</h2>
-        <p class="mx-lede">Scored on Salesforce AI Research’s enterprise benchmark, from their <a href="https://arxiv.org/abs/2506.23139">HERB paper</a> (EMNLP 2025): 399 questions from 7 products we never looked at while building, run once. Lore runs on Claude Haiku 5.5.</p>
+        <p class="mx-lede">Scored on Salesforce AI Research’s enterprise benchmark, from their <a href="https://arxiv.org/abs/2506.23139">HERB paper</a> (EMNLP 2025): 399 questions from 7 products we never looked at while building, run once. Yaan runs on Claude Haiku 5.5.</p>
         <div class="mx-tabs" role="tablist" aria-label="Benchmarks" aria-orientation="vertical">
           <button role="tab" class="mx-tab" aria-selected="true" aria-controls="mxPlot" data-i="0">
             <span class="mx-t">Against Salesforce AI (GPT-4o)</span>
@@ -304,7 +293,7 @@
           </button>
           <button role="tab" class="mx-tab" aria-selected="false" aria-controls="mxPlot" data-i="1">
             <span class="mx-t">Answer quality</span>
-            <span class="mx-d"><b>2.6×</b> the same agent without its FalkorDB graph, and <b>6.6×</b> plain RAG. On customer questions, only Lore scores at all.</span>
+            <span class="mx-d"><b>2.6×</b> the same agent without its FalkorDB graph, and <b>6.6×</b> plain RAG. On customer questions, only Yaan scores at all.</span>
           </button>
           <button role="tab" class="mx-tab" aria-selected="false" aria-controls="mxPlot" data-i="2">
             <span class="mx-t">Fresh answers</span>
@@ -331,13 +320,13 @@
           <tr><th scope="col">System</th><th scope="col">Avg score, held-out</th><th scope="col">Customer questions</th><th scope="col">Quotes verified</th><th scope="col">Avg on the 3 dev products we built on</th></tr>
         </thead>
         <tbody>
-          <tr class="rt-lore"><th scope="row">Lore</th><td><span class="cell-bar" style="--v:63.6"></span>63.6</td><td>54.2</td><td>100%</td><td class="dev">83.2</td></tr>
+          <tr class="rt-lore"><th scope="row">Yaan</th><td><span class="cell-bar" style="--v:63.6"></span>63.6</td><td>54.2</td><td>100%</td><td class="dev">83.2</td></tr>
           <tr class="rt-ref"><th scope="row">Salesforce AI Research agent (GPT-4o) <span>best agent in their HERB paper; different setup</span></th><td><span class="cell-bar" style="--v:43.4"></span>43.4</td><td>n/a</td><td>n/a</td><td class="dev">n/a</td></tr>
-          <tr><th scope="row">Lore without the FalkorDB graph<sup>*</sup></th><td><span class="cell-bar" style="--v:24.2"></span>24.2</td><td>0.0</td><td>100%</td><td class="dev">25.0</td></tr>
+          <tr><th scope="row">Yaan without the FalkorDB graph<sup>*</sup></th><td><span class="cell-bar" style="--v:24.2"></span>24.2</td><td>0.0</td><td>100%</td><td class="dev">25.0</td></tr>
           <tr><th scope="row">Plain RAG</th><td><span class="cell-bar" style="--v:9.6"></span>9.6</td><td>0.0</td><td>98.5%</td><td class="dev">14.7</td></tr>
         </tbody>
       </table>
-      <p class="table-note"><strong>Lore scores lower on products it has never seen (63.6) than on the ones it was built on (83.2). We report both.</strong> Scores are judged answers out of 100, not accuracy. <sup>*</sup>The same agent with search and read only: it keeps the vector and full-text search, and loses every graph query. Stale answers, on 24 hand-labeled questions about status now and on a past date: plain RAG 6.7%, search only 8.7%, Lore 0%. Method and footnotes in <a href="{REPO_URL}/blob/main/eval/report.md">eval/report.md</a>.</p>
+      <p class="table-note"><strong>Yaan scores lower on products it has never seen (63.6) than on the ones it was built on (83.2). We report both.</strong> Scores are judged answers out of 100, not accuracy. <sup>*</sup>The same agent with search and read only: it keeps the vector and full-text search, and loses every graph query. Stale answers, on 24 hand-labeled questions about status now and on a past date: plain RAG 6.7%, search only 8.7%, Yaan 0%. Method and footnotes in <a href="{REPO_URL}/blob/main/eval/report.md">eval/report.md</a>.</p>
     </div>
 
     <div class="figs3">
@@ -345,6 +334,34 @@
       <div class="f3"><span class="f3-n">~$0.003</span><span class="f3-l">per answer, about 1.7k tokens.</span></div>
       <div class="f3"><span class="f3-n">100%</span><span class="f3-l">of 1,009 citations quote their source word for word, checked in code.</span></div>
     </div>
+  </div>
+</section>
+
+<!-- ============ 7. INTEGRATIONS ============ -->
+<section class="section works" id="works">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Works where your team works</h2>
+      <p class="sec-lede">Connectors for Slack, GitHub, Jira and Notion; an MCP server for any AI agent.</p>
+    </div>
+    <div class="byo">
+      <div class="byo-icons" aria-hidden="true">
+        <span class="byo-ic"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span></span>
+        <span class="byo-ic"><span class="glyph" style="--icon:url(assets/icons/openai.svg)"></span></span>
+        <span class="byo-ic"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span></span>
+      </div>
+      <div class="byo-copy">
+        <h3>Use the Claude, Codex or Cursor subscription you already pay for.</h3>
+        <p>Connect it to Yaan over MCP and ask from where you already work. Your AI does the talking; Yaan’s graph tools hand it the facts, each with its source, and those graph lookups cost no AI tokens on Yaan’s side.</p>
+      </div>
+    </div>
+    <ul class="logos">
+      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/slack.svg)"></span><span class="lg-n">Slack</span><span class="lg-d">Messages in. Answers, alerts and Approve out.</span></li>
+      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/github.svg)"></span><span class="lg-n">GitHub</span><span class="lg-d">PRs and reviews in. Comments on the PR out.</span></li>
+      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/jira.svg)"></span><span class="lg-n">Jira</span><span class="lg-d">Tickets in. Comments on the ticket out.</span></li>
+      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/notion.svg)"></span><span class="lg-n">Notion</span><span class="lg-d">Pages in.</span></li>
+      <li class="lg-mcp"><span class="glyph glyph-lg" style="--icon:url(assets/icons/modelcontextprotocol.svg)"></span><span class="lg-n">MCP</span><span class="lg-d">Yaan’s tools inside <span class="inl"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span>Claude</span>, <span class="inl"><span class="glyph" style="--icon:url(assets/icons/openai.svg)"></span>Codex</span> and <span class="inl"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span>Cursor</span>.</span></li>
+    </ul>
   </div>
 </section>
 
@@ -399,7 +416,7 @@
 
         <article class="ans ans-lore" id="ansLore">
           <header class="ans-h">
-            <span class="ans-who"><svg class="mini-mark" viewBox="0 0 28 28" aria-hidden="true"><path class="bm-edge" d="M7 20 L14 8 L21 18 Z"/><circle class="bm-node" cx="7" cy="20" r="3.2"/><circle class="bm-node" cx="21" cy="18" r="3.2"/><rect class="bm-cite" x="10.6" y="4.6" width="6.8" height="6.8" rx="1.6"/></svg>Lore</span>
+            <span class="ans-who"><svg class="mini-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="ym-arm" d="M7 6 L16 17 L25 6"/><path class="ym-stem" d="M16 17 V27"/><circle class="ym-node" cx="16" cy="17" r="3.3"/><rect class="ym-cite" x="3.4" y="2.4" width="7.2" height="7.2" rx="1.7"/><circle class="ym-src" cx="25" cy="6" r="3.3"/></svg>Yaan</span>
             <span class="stamp stamp-ok">Current</span>
           </header>
           <p class="ans-text" id="loreText"></p>
@@ -412,7 +429,7 @@
         <p class="ds-cap">Stale answers on our drift test, built on Salesforce AI Research’s enterprise data</p>
         <div class="ds-row">
           <div class="ds"><span class="ds-n">8.7%</span><span class="ds-l">Search only: the same agent without its graph tools</span></div>
-          <div class="ds ds-lore"><span class="ds-n">0%</span><span class="ds-l">Lore, reading the decision in force</span></div>
+          <div class="ds ds-lore"><span class="ds-n">0%</span><span class="ds-l">Yaan, reading the decision in force</span></div>
         </div>
       </div>
     </div>
@@ -424,7 +441,7 @@
   <div class="wrap">
     <div class="sec-head">
       <h2>What it does, in the product as it runs today</h2>
-      <p class="sec-lede">Screens from Lore’s web app, running on Salesforce AI Research’s synthetic enterprise data (from their HERB paper). Pick one to look closer.</p>
+      <p class="sec-lede">Screens from Yaan’s web app, running on Salesforce AI Research’s synthetic enterprise data (from their HERB paper). Pick one to look closer.</p>
     </div>
 
     <div class="tour" id="tour">
@@ -446,7 +463,7 @@
         </button>
         <button role="tab" class="tour-tab" id="tt3" aria-controls="tp" aria-selected="false" data-i="3">
           <span class="tt-title">Catches contradictions</span>
-          <span class="tt-line">A customer re-reports a “fixed” bug and Lore flags the regression, who it affects and what to do, in about 2 seconds.</span>
+          <span class="tt-line">A customer re-reports a “fixed” bug and Yaan flags the regression, who it affects and what to do, in about 2 seconds.</span>
           <span class="tt-progress"><i></i></span>
         </button>
         <button role="tab" class="tour-tab" id="tt4" aria-controls="tp" aria-selected="false" data-i="4">
@@ -480,13 +497,13 @@
 <section class="section falkor" id="falkordb">
   <div class="wrap">
     <div class="sec-head">
-      <h2>Why FalkorDB</h2>
-      <p class="sec-lede">Lore’s answers live in the links between people, work and decisions, so the engine that holds those links decides how fast, and how right, an answer is. Lore runs on FalkorDB: an in-memory graph database on Redis that stores adjacency as sparse matrices and runs traversals as linear algebra.</p>
-      <p class="rust"><span class="glyph rust-mark" style="--icon:url(assets/icons/rust.svg)" aria-hidden="true"></span>Rust-based, by the way. Lore pins FalkorDB 6.0.1, the new Rust engine.</p>
+      <h2 class="why-fk">Why <span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></h2>
+      <p class="sec-lede">Yaan’s answers live in the links between people, work and decisions, so the engine that holds those links decides how fast, and how right, an answer is. Yaan runs on FalkorDB: an in-memory graph database on Redis that stores adjacency as sparse matrices and runs traversals as linear algebra.</p>
+      <p class="rust"><span class="glyph rust-mark" style="--icon:url(assets/icons/rust.svg)" aria-hidden="true"></span>Rust-based, by the way. Yaan pins <span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span> 6.0.1, the new Rust engine.</p>
     </div>
 
     <ul class="proof">
-      <li><span class="pf-n">2.6×</span><span class="pf-l">Lore’s score with the FalkorDB graph versus without it, held-out (63.6 vs 24.2)</span><span class="pf-src us">Measured by us</span></li>
+      <li><span class="pf-n">2.6×</span><span class="pf-l">Yaan’s score with the FalkorDB graph versus without it, held-out (63.6 vs 24.2)</span><span class="pf-src us">Measured by us</span></li>
       <li><span class="pf-n">3–28 ms</span><span class="pf-l">p50 per graph query, on 38,535 nodes and 96,047 edges</span><span class="pf-src us">Measured by us</span></li>
       <li><span class="pf-n">496×</span><span class="pf-l">lower p99 latency than Neo4j: 83 ms against 41,157 ms</span><span class="pf-src">FalkorDB’s benchmark</span></li>
       <li><span class="pf-n">6×</span><span class="pf-l">less memory than Neo4j: 100 MB against 600 MB</span><span class="pf-src">FalkorDB’s benchmark</span></li>
@@ -494,10 +511,10 @@
 
     <div class="engine">
       <div class="stack" id="stack">
-        <p class="stack-k">What Lore stands on</p>
+        <p class="stack-k">What Yaan stands on</p>
         <ol class="layers">
           <li class="layer l-lore" data-use="17 read-only agent tools and the Change Sentinel, all as parameterized Cypher in backend/queries/.">
-            <span class="ly-t">Lore</span><span class="ly-d">166 Cypher queries · 17 agent tools · the Sentinel</span>
+            <span class="ly-t">Yaan</span><span class="ly-d">166 Cypher queries · 17 agent tools · the Sentinel</span>
           </li>
           <li class="layer" data-use="Decision windows, SUPERSEDES chains, counts over REPORTED_BY and WORKS_AT, bounded paths: every answer that needs a link.">
             <span class="ly-t">Cypher</span><span class="ly-d">patterns, bounded paths, aggregates, UNION</span>
@@ -508,13 +525,13 @@
             <span class="ly-cell" data-use="Who knows what: PageRank, betweenness and label-propagation communities over who works with whom; shortestPath from a listed owner to the real expert."><span class="ly-t">Algorithms</span><span class="ly-d">PageRank, betweenness, communities</span></span>
           </li>
           <li class="layer l-core" data-use="Adjacency as sparse matrices, traversals as linear algebra: the reason a 3-hop blast radius comes back in milliseconds.">
-            <span class="ly-t">FalkorDB 6 engine</span><span class="ly-d">Rust · sparse adjacency matrices · linear-algebra traversal</span>
+            <span class="ly-t"><span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span> 6 engine</span><span class="ly-d">Rust · sparse adjacency matrices · linear-algebra traversal</span>
           </li>
           <li class="layer l-redis" data-use="A read-only ACL user for agent-generated Cypher (GRAPH.RO_QUERY), per-query timeouts, GRAPH.COPY for the resettable demo graph, DUMP/RESTORE for the snapshot.">
             <span class="ly-t">Redis 8</span><span class="ly-d">in memory · ACL users · persistence · many graphs per server</span>
           </li>
         </ol>
-        <p class="stack-use" id="stackUse" aria-live="polite">Point at a layer to see what Lore uses it for.</p>
+        <p class="stack-use" id="stackUse" aria-live="polite">Point at a layer to see what Yaan uses it for.</p>
       </div>
 
       <figure class="tail" aria-labelledby="tailCap">
@@ -530,7 +547,7 @@
           <caption>Graph algorithms on 820K nodes and 9.8M edges, same source</caption>
           <thead><tr><th scope="col">Algorithm</th><th scope="col">FalkorDB</th><th scope="col">Neo4j</th></tr></thead>
           <tbody>
-            <tr><th scope="row">PageRank <span>Lore ranks who connects teams with it</span></th><td>18.5 ms</td><td>417.3 ms</td></tr>
+            <tr><th scope="row">PageRank <span>Yaan ranks who connects teams with it</span></th><td>18.5 ms</td><td>417.3 ms</td></tr>
             <tr><th scope="row">Weakly connected components</th><td>17.8 ms</td><td>1,324.3 ms</td></tr>
           </tbody>
         </table>
@@ -547,7 +564,7 @@
       </div>
       <div class="cmp-panel" id="cmpP0" role="tabpanel" aria-labelledby="cmpT0">
             <table class="cmp-t">
-              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f">FalkorDB</th><th scope="col" class="c-o">Neo4j</th></tr></thead>
+              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f"><span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></th><th scope="col" class="c-o">Neo4j</th></tr></thead>
               <tbody>
               <tr class="win"><th scope="row">Written in</th><td class="c-f">C and Rust</td><td class="c-o">Java</td></tr>
               <tr class="win"><th scope="row">Data storage</th><td class="c-f">In memory</td><td class="c-o">On disk</td></tr>
@@ -560,7 +577,7 @@
             </table>
           </div><div class="cmp-panel" id="cmpP1" role="tabpanel" aria-labelledby="cmpT1" hidden>
             <table class="cmp-t">
-              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f">FalkorDB</th><th scope="col" class="c-o">AWS Neptune</th></tr></thead>
+              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f"><span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></th><th scope="col" class="c-o">AWS Neptune</th></tr></thead>
               <tbody>
               <tr class="win"><th scope="row">Latency</th><td class="c-f">Fast</td><td class="c-o">Poor</td></tr>
               <tr class="win"><th scope="row">Memory efficiency</th><td class="c-f">Highly efficient</td><td class="c-o">Poor</td></tr>
@@ -571,7 +588,7 @@
             </table>
           </div><div class="cmp-panel" id="cmpP2" role="tabpanel" aria-labelledby="cmpT2" hidden>
             <table class="cmp-t">
-              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f">FalkorDB</th><th scope="col" class="c-o">TigerGraph</th></tr></thead>
+              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f"><span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></th><th scope="col" class="c-o">TigerGraph</th></tr></thead>
               <tbody>
               <tr class="win"><th scope="row">Latency</th><td class="c-f">Fast</td><td class="c-o">Adequate</td></tr>
               <tr class="win"><th scope="row">Memory efficiency</th><td class="c-f">Highly efficient</td><td class="c-o">Moderate</td></tr>
@@ -581,7 +598,7 @@
             </table>
           </div><div class="cmp-panel" id="cmpP3" role="tabpanel" aria-labelledby="cmpT3" hidden>
             <table class="cmp-t">
-              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f">FalkorDB</th><th scope="col" class="c-o">ArangoDB</th></tr></thead>
+              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f"><span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></th><th scope="col" class="c-o">ArangoDB</th></tr></thead>
               <tbody>
               <tr class="win"><th scope="row">Latency</th><td class="c-f">Fast</td><td class="c-o">Poor</td></tr>
               <tr class="win"><th scope="row">Memory efficiency</th><td class="c-f">Highly efficient</td><td class="c-o">Moderate</td></tr>
@@ -702,29 +719,12 @@
   </div>
 </section>
 
-<!-- ============ 7. INTEGRATIONS ============ -->
-<section class="section works" id="works">
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>Works where your team works</h2>
-      <p class="sec-lede">Connectors for Slack, GitHub, Jira and Notion; an MCP server for any AI agent.</p>
-    </div>
-    <ul class="logos">
-      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/slack.svg)"></span><span class="lg-n">Slack</span><span class="lg-d">Messages in. Answers, alerts and Approve out.</span></li>
-      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/github.svg)"></span><span class="lg-n">GitHub</span><span class="lg-d">PRs and reviews in. Comments on the PR out.</span></li>
-      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/jira.svg)"></span><span class="lg-n">Jira</span><span class="lg-d">Tickets in. Comments on the ticket out.</span></li>
-      <li><span class="glyph glyph-lg" style="--icon:url(assets/icons/notion.svg)"></span><span class="lg-n">Notion</span><span class="lg-d">Pages in.</span></li>
-      <li class="lg-mcp"><span class="glyph glyph-lg" style="--icon:url(assets/icons/modelcontextprotocol.svg)"></span><span class="lg-n">MCP</span><span class="lg-d">Lore’s tools inside <span class="inl"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span>Claude Code</span>, <span class="inl"><span class="glyph" style="--icon:url(assets/icons/claude.svg)"></span>Claude Desktop</span> and <span class="inl"><span class="glyph" style="--icon:url(assets/icons/cursor.svg)"></span>Cursor</span>.</span></li>
-    </ul>
-  </div>
-</section>
-
 <!-- ============ 8. ROADMAP ============ -->
 <section class="section next" id="next">
   <div class="wrap next-grid">
     <div>
       <h2>Coming next</h2>
-      <p class="sec-lede">Today Lore runs from the repo on your machine, and the demo app runs on a shared synthetic graph. There is no sign-in yet. These come next.</p>
+      <p class="sec-lede">Today Yaan runs from the repo on your machine, and the demo app runs on a shared synthetic graph. There is no sign-in yet. These come next.</p>
     </div>
     <ul class="next-list">
       <li><span class="nx-state">Planned</span><span class="nx-t">One-click install (OAuth) and a hosted version.</span></li>
@@ -741,7 +741,7 @@
       <span class="poster-copy">
         <span class="poster-play" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M7 4.8v10.4l8.2-5.2z"/></svg></span>
         <span class="poster-t">See a regression caught live, in three minutes.</span>
-        <span class="poster-d">A customer re-reports a fixed bug. Lore flags it, draws who it touches, and posts the follow-up on Approve.</span>
+        <span class="poster-d">A customer re-reports a fixed bug. Yaan flags it, draws who it touches, and posts the follow-up on Approve.</span>
         <span class="poster-len">Watch the 3-minute demo</span>
       </span>
       <span class="poster-shot" aria-hidden="true"><img src="assets/img/inbox-radius.png" alt="" width="1020" height="1040" loading="lazy"></span>
@@ -758,7 +758,7 @@
 <footer class="foot">
   <div class="wrap foot-grid">
     <div class="foot-brand">
-      <a class="brand" href="#top"><svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true"><path class="bm-edge" d="M7 20 L14 8 L21 18 Z"/><circle class="bm-node" cx="7" cy="20" r="3.2"/><circle class="bm-node" cx="21" cy="18" r="3.2"/><rect class="bm-cite" x="10.6" y="4.6" width="6.8" height="6.8" rx="1.6"/></svg><span>Lore</span></a>
+      <a class="brand" href="#top"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="ym-arm" d="M7 6 L16 17 L25 6"/><path class="ym-stem" d="M16 17 V27"/><circle class="ym-node" cx="16" cy="17" r="3.3"/><rect class="ym-cite" x="3.4" y="2.4" width="7.2" height="7.2" rx="1.7"/><circle class="ym-src" cx="25" cy="6" r="3.3"/></svg><span>Yaan</span></a>
       <p>The company brain that knows what’s still true.</p>
     </div>
     <nav class="foot-links" aria-label="Footer">
@@ -774,11 +774,11 @@
 
 <dialog class="dlg" id="dlgArch" aria-labelledby="dlgArchT">
   <div class="dlg-head"><h3 id="dlgArchT">How the pieces fit</h3><button class="icon-btn" type="button" data-close aria-label="Close">×</button></div>
-  <div class="dlg-body"><img src="assets/diagrams/lore-overview.svg" alt="Lore's big picture: company data flows through the ingestion pipeline into the FalkorDB graph, which feeds the answer agent and the Change Sentinel, which feed the web UI" loading="lazy"></div>
+  <div class="dlg-body"><img src="assets/diagrams/lore-overview.svg" alt="Yaan's big picture: company data flows through the ingestion pipeline into the FalkorDB graph, which feeds the answer agent and the Change Sentinel, which feed the web UI" loading="lazy"></div>
 </dialog>
 <dialog class="dlg" id="dlgModel" aria-labelledby="dlgModelT">
   <div class="dlg-head"><h3 id="dlgModelT">The graph data model</h3><button class="icon-btn" type="button" data-close aria-label="Close">×</button></div>
-  <div class="dlg-body"><img src="assets/diagrams/data-model.svg" alt="Lore's graph data model: what is true and since when (Alert, Claim, Decision, Issue, Area), who (Person, Team, Customer, Company), and what was said (Artifact, Channel, Chunk, Product), with their relationships" loading="lazy"></div>
+  <div class="dlg-body"><img src="assets/diagrams/data-model.svg" alt="Yaan's graph data model: what is true and since when (Alert, Claim, Decision, Issue, Area), who (Person, Team, Customer, Company), and what was said (Artifact, Channel, Chunk, Product), with their relationships" loading="lazy"></div>
 </dialog>
 
 <script src="main.js" defer></script>

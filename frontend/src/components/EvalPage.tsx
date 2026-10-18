@@ -5,9 +5,9 @@ import { type EvalLatest, getEvalLatest, type SystemResult } from "../api";
 // One series (Avg per system), so one hue and no legend; HERB's published result is a reference line.
 
 const SYSTEM_WORDS: Record<string, string> = {
-  lore: "Lore",
-  "lore-unvalidated": "Lore's first answers, as written (no validator, no abstention line)",
-  "lore-search": "Lore without graph tools (search and read only)",
+  lore: "Yaan",
+  "lore-unvalidated": "Yaan's first answers, as written (no validator, no abstention line)",
+  "lore-search": "Yaan without graph tools (search and read only)",
   baseline: "Plain RAG baseline",
 };
 const CATS: [string, string][] = [
@@ -50,16 +50,16 @@ export function EvalPage() {
       </h1>
       <p className="text-muted mt-2 max-w-[64ch]">
         {test.length
-          ? "Held-out questions from HERB, Salesforce AI Research's enterprise benchmark (EMNLP 2025): 7 products never read while building Lore, run once"
+          ? "Held-out questions from HERB, Salesforce AI Research's enterprise benchmark (EMNLP 2025): 7 products never read while building Yaan, run once"
           : "Dev questions from HERB, Salesforce AI Research's enterprise benchmark (EMNLP 2025)"}{" "}
         (
         {lore ? `${lore.questions.answerable} answerable, ${lore.questions.unanswerable} unanswerable` : `${mainWord} split`}
-        ), scored with HERB's own judge prompts. Each row is one change away from Lore, so the gap between rows is what that part
+        ), scored with HERB's own judge prompts. Each row is one change away from Yaan, so the gap between rows is what that part
         is worth.
       </p>
       {lore && base && (
         <p className="mt-5 text-[1.1rem] max-w-[64ch]">
-          Lore scores <span className="font-semibold">{num(lore.avg)}</span> against the baseline's{" "}
+          Yaan scores <span className="font-semibold">{num(lore.avg)}</span> against the baseline's{" "}
           <span className="font-semibold">{num(base.avg)}</span>, and every quote it shows was checked word for word (
           {num(lore.citations?.quote_ok_pct, 0)}%).
         </p>
@@ -129,7 +129,7 @@ export function EvalPage() {
           <dt className="font-semibold">How to read it</dt>
           <dd className="text-muted mt-0.5">
             Content is a 0–100 judge score; People, Customer and Artifact are F1 × 100; Avg is their mean. Unanswerable is the
-            share of unanswerable questions left unanswered. Drift is Lore's hand-labeled set of 24 questions about what was
+            share of unanswerable questions left unanswered. Drift is Yaan's hand-labeled set of 24 questions about what was
             true now and then; stale = answered with a state that no longer held.
           </dd>
         </div>
@@ -137,7 +137,7 @@ export function EvalPage() {
           <div>
             <dt className="font-semibold">Who knows a component ({data.experts.questions} questions, no LLM)</dt>
             <dd className="text-muted mt-0.5">
-              Lore's expertise ranking puts a right engineer first {num(100 * (data.experts.mean.lore?.["hit@1"] ?? 0), 0)}% of
+              Yaan's expertise ranking puts a right engineer first {num(100 * (data.experts.mean.lore?.["hit@1"] ?? 0), 0)}% of
               the time; "whoever posted most" does {num(100 * (data.experts.mean.naive?.["hit@1"] ?? 0), 0)}%.
             </dd>
           </div>
@@ -145,7 +145,7 @@ export function EvalPage() {
         <div>
           <dt className="font-semibold">Limits</dt>
           <dd className="text-muted mt-0.5">
-            One run per system: a rerun moves Avg by a few points. The judge is Claude Haiku 5.5 standing in for GPT-4o. Lore
+            One run per system: a rerun moves Avg by a few points. The judge is Claude Haiku 5.5 standing in for GPT-4o. Yaan
             was built looking at dev products only; held-out is the honest number. The held-out products share HERB's question
             templates with dev.
           </dd>

@@ -220,15 +220,16 @@ export default function App() {
               window.location.hash = "ask";
             }}
             className="brand"
-            aria-label="Lore, back to the start"
+            aria-label="Yaan, back to the start"
           >
-            <svg viewBox="0 0 28 28" aria-hidden="true">
-              <path className="bm-edge" d="M7 20 L14 8 L21 18 Z" />
-              <circle className="bm-node" cx="7" cy="20" r="3.2" />
-              <circle className="bm-node" cx="21" cy="18" r="3.2" />
-              <rect className="bm-cite" x="10.6" y="4.6" width="6.8" height="6.8" rx="1.6" />
+            <svg viewBox="0 0 32 32" aria-hidden="true">
+              <path className="ym-arm" d="M7 6 L16 17 L25 6" />
+              <path className="ym-stem" d="M16 17 V27" />
+              <circle className="ym-node" cx="16" cy="17" r="3.3" />
+              <rect className="ym-cite" x="3.4" y="2.4" width="7.2" height="7.2" rx="1.7" />
+              <circle className="ym-src" cx="25" cy="6" r="3.3" />
             </svg>
-            Lore
+            Yaan
           </button>
           <nav aria-label="Views" className="tabs mr-auto overflow-x-auto max-w-full">
             {VIEWS.map((v) => (
@@ -257,7 +258,7 @@ export default function App() {
           <ThemeToggle />
           {SITE_URL && (
             <a href={SITE_URL} className="btn btn-line btn-sm hidden sm:inline-flex">
-              About Lore
+              About Yaan
             </a>
           )}
         </div>
@@ -303,8 +304,8 @@ function Opening({ form, onPick, products }: { form: ReactNode; onPick: (s: Sugg
         What's true at the company, and who said so.
       </h1>
       <p className="mt-5 text-[1.08rem] text-muted max-w-[58ch] leading-relaxed">
-        Lore answers from a graph of Slack messages, meetings, documents and pull requests. Each sentence of an answer
-        links to a quote you can check against its source. When nothing supports an answer, Lore says so.
+        Yaan answers from a graph of Slack messages, meetings, documents and pull requests. Each sentence of an answer
+        links to a quote you can check against its source. When nothing supports an answer, Yaan says so.
       </p>
       {form}
       <div className="mt-14">
@@ -400,7 +401,7 @@ function RunView(props: {
     <div className="grid gap-5 pt-6 items-start lg:grid-cols-[16rem_minmax(0,1fr)_22rem]">
       <section aria-labelledby="h-walk" className="order-3 lg:order-1 card card-pad lg:sticky lg:top-20">
         <h2 id="h-walk" className="card-h">
-          How Lore found it
+          How Yaan found it
         </h2>
         <Walk steps={run.steps} running={run.running && !run.answer} />
         {llm && (
@@ -418,7 +419,7 @@ function RunView(props: {
         {run.asOfMs !== null && (
           <p className="-mt-4 mb-5 text-sm">
             <span className="bg-mark text-mark-ink px-1.5 py-0.5 rounded font-semibold">As of {when(new Date(run.asOfMs).toISOString())}</span>{" "}
-            <span className="text-muted">Lore answers for the state in force at that moment.</span>
+            <span className="text-muted">Yaan answers for the state in force at that moment.</span>
           </p>
         )}
         {run.error && (
@@ -429,7 +430,7 @@ function RunView(props: {
               {run.error.startsWith("CacheOnly")
                 ? "This deployment answers its suggested questions only; it never spends on new ones."
                 : run.error.startsWith("429") || run.error.startsWith("503")
-                  ? "Lore is limiting requests right now. Wait a minute and ask again."
+                  ? "Yaan is limiting requests right now. Wait a minute and ask again."
                   : "Ask again, or check the API log for the cause."}
             </p>
           </div>
@@ -447,7 +448,7 @@ function RunView(props: {
             </h2>
             <p className="text-sm text-muted mt-0.5 mb-3 max-w-[68ch]">
               The cited sources and what they connect to: authors, the product, customers and their companies, and the
-              claims and decisions Lore extracted from them.
+              claims and decisions Yaan extracted from them.
             </p>
             <EvidenceGraph
               graph={run.subgraph}
@@ -469,7 +470,7 @@ function RunView(props: {
               How it changed over time
             </h2>
             <p className="text-sm text-muted mt-0.5 mb-4 max-w-[68ch]">
-              Each state holds from one moment until the next one replaces it. Lore never deletes a replaced state; it
+              Each state holds from one moment until the next one replaces it. Yaan never deletes a replaced state; it
               closes its window. Move the slider to see what was true then, and ask the question again as of that moment.
             </p>
             <Timeline

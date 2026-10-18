@@ -710,14 +710,14 @@
   (() => {
     const bars = $('#mxBars'); if (!bars) return;
     const ICON = {
-      lore: '<svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><path d="M7 20 L14 8 L21 18 Z" stroke="currentColor" stroke-width="2"/><circle cx="7" cy="20" r="3.4" fill="currentColor"/><circle cx="21" cy="18" r="3.4" fill="currentColor"/><rect x="10.4" y="4.4" width="7.2" height="7.2" rx="1.6" fill="currentColor"/></svg>',
+      lore: '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M7 6 L16 17 L25 6" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17 V27" stroke="currentColor" stroke-width="3.8" stroke-linecap="round"/><circle cx="16" cy="17" r="3.4" fill="currentColor"/></svg>',
       search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></svg>',
       rag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M9 11h6M9 15h6"/></svg>',
       paper: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h7a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M20 5h-7a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h7z"/></svg>',
     };
     const S = {
-      lore: { name: 'Lore', icon: 'lore' },
-      search: { name: 'Lore without the FalkorDB graph', icon: 'search' },
+      lore: { name: 'Yaan', icon: 'lore' },
+      search: { name: 'Yaan without the FalkorDB graph', icon: 'search' },
       rag: { name: 'Plain RAG', icon: 'rag' },
       paper: { name: 'Salesforce AI Research agent (GPT-4o)', icon: 'paper' },
     };
@@ -725,7 +725,7 @@
       {
         ylab: 'Score / share (0–100)', max: 100, ticks: [0, 25, 50, 75, 100], series: ['lore', 'paper'],
         groups: [['Average score', [63.6, 43.4], ''], ['Unanswerable questions declined', [76.7, 29.3], '%']],
-        cap: 'Salesforce AI Research’s best product-specific agent is GPT-4o with ReAct, as published in their HERB paper (EMNLP 2025). Lore runs Claude Haiku 5.5, scored with the paper’s own judge prompts. Different model and setup: shown for context.',
+        cap: 'Salesforce AI Research’s best product-specific agent is GPT-4o with ReAct, as published in their HERB paper (EMNLP 2025). Yaan runs Claude Haiku 5.5, scored with the paper’s own judge prompts. Different model and setup: shown for context.',
       },
       {
         ylab: 'Judged score (0–100)', max: 80, ticks: [0, 20, 40, 60, 80], unit: '', series: ['lore', 'search', 'rag'],
@@ -735,7 +735,7 @@
       {
         ylab: 'Answers right (%)', max: 100, ticks: [0, 25, 50, 75, 100], unit: '%', series: ['lore', 'search', 'rag'],
         groups: [['All drift questions', [95.8, 70.8, 54.2]], ['Current status', [100, 54.5, 54.5]], ['As of a date', [100, 80, 60]]],
-        cap: 'Our drift test: 24 hand-labeled questions on Salesforce AI Research’s enterprise data about status now and on a past date, ground truth read from the raw messages, all systems on Claude Haiku 5.5. Stale answers: Lore 0%, search only 8.7%, plain RAG 6.7%.',
+        cap: 'Our drift test: 24 hand-labeled questions on Salesforce AI Research’s enterprise data about status now and on a past date, ground truth read from the raw messages, all systems on Claude Haiku 5.5. Stale answers: Yaan 0%, search only 8.7%, plain RAG 6.7%.',
       },
     ];
     const fmt = (v, unit) => (Number.isInteger(v) && unit === '%' ? v : v.toFixed(1)) + unit;
@@ -841,6 +841,57 @@
       });
     });
     show(0);
+  })();
+
+  /* =====================================================================
+     How it works, live parts: the pipeline ticker (Connect) and the
+     decision windows (Remember). Each runs only while its scene shows.
+     ===================================================================== */
+  (() => {
+    const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.bottom > 0 && r.top < innerHeight && getComputedStyle(el.closest('.scene')).opacity > .5; };
+
+    // Connect: one step in focus, the one before fading out above, the next fading in below
+    $$('.ticker').forEach((tk) => {
+      const list = $('.tk-list', tk), items = $$('.tk-i', tk);
+      let i = 0;
+      const show = () => {
+        items.forEach((it, k) => { it.classList.toggle('on', k === i); it.classList.toggle('near', Math.abs(k - i) === 1); });
+        list.style.transform = `translateY(${56 - i * 56}px)`;  // the focused row sits in the middle of three
+      };
+      show();
+      setInterval(() => { if (!visible(tk) || document.hidden) return; i = (i + 1) % items.length; show(); }, reduced ? 2600 : 1500);
+    });
+
+    // Remember: three facts arrive in turn; each new one closes the window of the one before
+    const STEPS = [
+      { x: .152, k: 0, cls: 'st-rep', state: 'reported', who: 'Bob Davis', role: 'Engineering Lead', init: 'BD', when: '6 Feb 2027', quote: 'This is impacting customer CUST-0011.', id: 'msg:20270206-1-47b0c', kept: null },
+      { x: .697, k: 1, cls: 'st-res', state: 'resolved', who: 'Hannah Johnson', role: 'assignee', init: 'HJ', when: '24 Feb 2027', quote: 'the bug titled ‘Inefficient Caching Strategy’ has been resolved.', id: 'msg:20270224-0-ca81d', kept: '“reported” closed on 24 Feb, kept in the graph' },
+      { x: .758, k: 2, cls: 'st-reo', state: 'reopened', who: 'Bob Davis', role: 'Engineering Lead', init: 'BD', when: '26 Feb 2027', quote: 'the customer has reopened the bug titled ‘Inefficient Caching Strategy’', id: 'msg:20270226-0-1bc7a', kept: '“resolved” closed on 26 Feb, kept in the graph' },
+    ];
+    const ENDS = [69.7, 75.8, 100];
+    $$('.scene-remember').forEach((sc) => {
+      const bars = $$('.rm-bar', sc), rows = $$('.rm-row', sc), head = $('.rm-head', sc), card = $('.rm-card', sc);
+      let step = 0;
+      const render = () => {
+        const S = STEPS[Math.min(step, 2)];
+        bars.forEach((b, k) => {
+          const a = [15.2, 69.7, 75.8][k];
+          if (k > S.k) { b.style.width = '0'; b.className = b.className.replace(/ (open|closed)/g, ''); return; }
+          const closed = k < S.k;
+          b.style.width = ((closed ? ENDS[k] : 100) - a) + '%';
+          b.classList.toggle('closed', closed); b.classList.toggle('open', !closed);
+        });
+        rows.forEach((r, k) => r.classList.toggle('on', k === S.k));
+        head.style.setProperty('--x', S.x);
+        $('b', head).textContent = S.when.replace(' 2027', '');
+        card.innerHTML = `<div class="rm-who"><span class="rm-av">${S.init}</span><span><b>${S.who}</b> <span class="rm-role">${S.role}, ${S.when}</span></span><span class="rm-state ${S.cls}">in force: ${S.state}</span></div>
+          <blockquote class="q"><p><mark>${S.quote}</mark></p><footer><code>${S.id}</code></footer></blockquote>
+          ${S.kept ? `<p class="rm-kept">${S.kept}</p>` : '<p class="rm-kept">the first fact about this bug</p>'}`;
+        card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
+      };
+      render();
+      setInterval(() => { if (!visible(sc) || document.hidden) return; step = (step + 1) % 4; if (step < 3) render(); }, reduced ? 3600 : 2600);
+    });
   })();
 
   /* ---------------- links filled at launch ----------------

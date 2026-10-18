@@ -360,7 +360,7 @@ function Computed({ alert }: { alert: Alert }) {
   return (
     <div className="mt-5 border-l-2 border-link pl-4 max-w-[68ch] text-[0.95rem]">
       <p>
-        No message raised this. Lore computed it from the graph: who made the deliveries in each area (degree of
+        No message raised this. Yaan computed it from the graph: who made the deliveries in each area (degree of
         authorship over bug fixes and pull requests), then the truck factor, which removes the person holding the most
         areas until more than half of a product's areas have no author left.
       </p>

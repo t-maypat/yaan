@@ -22,7 +22,7 @@ export function Answer({ answer, citations, active, setActive }: Props) {
   const hidden = answer.hidden_sources ? (
     <p className="text-sm mt-2">
       <span className="font-semibold">{plural(answer.hidden_sources, "source")} hidden</span>
-      <span className="text-muted">: the person you're viewing as can't see them, so Lore didn't read them.</span>
+      <span className="text-muted">: the person you're viewing as can't see them, so Yaan didn't read them.</span>
     </p>
   ) : null;
   if (answer.abstain) {
@@ -31,7 +31,7 @@ export function Answer({ answer, citations, active, setActive }: Props) {
         <p className="font-semibold text-warn">No answer</p>
         <p className="font-serif text-lg mt-1">{answer.answer_markdown}</p>
         <p className="text-sm text-muted mt-2">
-          Lore abstains when no source it read supports an answer, rather than guess.
+          Yaan abstains when no source it read supports an answer, rather than guess.
         </p>
         {hidden}
       </div>
