@@ -39,8 +39,8 @@
     </a>
     <nav class="nav-links" aria-label="Sections">
       <a href="#how">How it works</a>
+      <a href="#results">Benchmarks</a>
       <a href="#features">Features</a>
-      <a href="#results">Results</a>
       <a href="#falkordb">Why FalkorDB</a>
     </nav>
     <div class="nav-actions">
@@ -72,7 +72,6 @@
       </a>
       <a class="btn btn-line" href="{REPO_URL}"><span class="glyph" style="--icon:url(assets/icons/github.svg)"></span>View on GitHub</a>
     </div>
-    <p class="hero-built">Built on FalkorDB <span aria-hidden="true">/</span> Graph Hacks 2026 <span aria-hidden="true">/</span> Track 03 Company Brain + Track 01</p>
   </div>
 
   <!-- The console replays three real questions against Lore's graph (HERB, ExplainabilityForce). -->
@@ -127,7 +126,7 @@
       <div class="meter meter-hide-sm"><span class="m-k">State</span><span class="m-v" id="mState">idle</span></div>
     </div>
   </div>
-  <p class="console-note">Replayed from Lore’s tool output on ExplainabilityForce, a synthetic company in <a href="https://arxiv.org/abs/2506.23139">HERB</a>, Salesforce AI Research’s enterprise benchmark. Tool times are the measured p50 per tool.</p>
+  <p class="console-note">Replayed from Lore’s tool output on ExplainabilityForce, a synthetic company from Salesforce AI Research’s enterprise benchmark (the <a href="https://arxiv.org/abs/2506.23139">HERB paper</a>). Tool times are the measured p50 per tool.</p>
 </section>
 
 <!-- ============ LOGO STRIP ============ -->
@@ -179,7 +178,7 @@
 <section class="section how" id="how">
   <div class="wrap">
     <div class="sec-head">
-      <h2>From scattered talk to facts with dates on them</h2>
+      <h2>Connect your tools. Lore remembers what changed. You act on it.</h2>
       <p class="sec-lede">Three steps, one pipeline. Every source goes through the same path, so an answer about a Slack thread and an answer about a pull request rest on the same graph.</p>
     </div>
 
@@ -291,6 +290,64 @@
   </div>
 </section>
 
+<!-- ============ 5. RESULTS ============ -->
+<section class="section results" id="results">
+  <div class="mx" id="mx">
+    <div class="mx-side">
+      <div class="mx-side-in">
+        <h2>Benchmarks</h2>
+        <p class="mx-lede">Scored on Salesforce AI Research’s enterprise benchmark, from their <a href="https://arxiv.org/abs/2506.23139">HERB paper</a> (EMNLP 2025): 399 questions from 7 products we never looked at while building, run once. Lore runs on Claude Haiku 5.5.</p>
+        <div class="mx-tabs" role="tablist" aria-label="Benchmarks" aria-orientation="vertical">
+          <button role="tab" class="mx-tab" aria-selected="true" aria-controls="mxPlot" data-i="0">
+            <span class="mx-t">Against Salesforce AI (GPT-4o)</span>
+            <span class="mx-d"><b>+47%</b> higher score than the best agent in Salesforce AI Research’s HERB paper, and <b>2.6×</b> better at saying “not found” when the answer isn’t there.</span>
+          </button>
+          <button role="tab" class="mx-tab" aria-selected="false" aria-controls="mxPlot" data-i="1">
+            <span class="mx-t">Answer quality</span>
+            <span class="mx-d"><b>2.6×</b> the same agent without its FalkorDB graph, and <b>6.6×</b> plain RAG. On customer questions, only Lore scores at all.</span>
+          </button>
+          <button role="tab" class="mx-tab" aria-selected="false" aria-controls="mxPlot" data-i="2">
+            <span class="mx-t">Fresh answers</span>
+            <span class="mx-d"><b>0%</b> stale answers, and right <b>100%</b> of the time on “as of a date” questions. It reads the decision in force, not the last message that matched.</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <figure class="mx-chart" id="mxPlot" role="tabpanel" aria-live="polite">
+      <div class="mx-legend" id="mxLegend"></div>
+      <div class="mx-area">
+        <span class="mx-ylab" id="mxYlab">Judged score</span>
+        <div class="mx-plot" id="mxBars"></div>
+      </div>
+      <figcaption class="mx-cap" id="mxCap"></figcaption>
+    </figure>
+  </div>
+
+  <div class="wrap">
+    <div class="table-wrap">
+      <table class="rt">
+        <caption class="sr-only">Results on HERB (Salesforce AI Research): held-out products, with the dev products for comparison</caption>
+        <thead>
+          <tr><th scope="col">System</th><th scope="col">Avg score, held-out</th><th scope="col">Customer questions</th><th scope="col">Quotes verified</th><th scope="col">Avg on the 3 dev products we built on</th></tr>
+        </thead>
+        <tbody>
+          <tr class="rt-lore"><th scope="row">Lore</th><td><span class="cell-bar" style="--v:63.6"></span>63.6</td><td>54.2</td><td>100%</td><td class="dev">83.2</td></tr>
+          <tr class="rt-ref"><th scope="row">Salesforce AI Research agent (GPT-4o) <span>best agent in their HERB paper; different setup</span></th><td><span class="cell-bar" style="--v:43.4"></span>43.4</td><td>n/a</td><td>n/a</td><td class="dev">n/a</td></tr>
+          <tr><th scope="row">Lore without the FalkorDB graph<sup>*</sup></th><td><span class="cell-bar" style="--v:24.2"></span>24.2</td><td>0.0</td><td>100%</td><td class="dev">25.0</td></tr>
+          <tr><th scope="row">Plain RAG</th><td><span class="cell-bar" style="--v:9.6"></span>9.6</td><td>0.0</td><td>98.5%</td><td class="dev">14.7</td></tr>
+        </tbody>
+      </table>
+      <p class="table-note"><strong>Lore scores lower on products it has never seen (63.6) than on the ones it was built on (83.2). We report both.</strong> Scores are judged answers out of 100, not accuracy. <sup>*</sup>The same agent with search and read only: it keeps the vector and full-text search, and loses every graph query. Stale answers, on 24 hand-labeled questions about status now and on a past date: plain RAG 6.7%, search only 8.7%, Lore 0%. Method and footnotes in <a href="{REPO_URL}/blob/main/eval/report.md">eval/report.md</a>.</p>
+    </div>
+
+    <div class="figs3">
+      <div class="f3"><span class="f3-n">3–28 ms</span><span class="f3-l">per graph query, p50. The seconds in an answer are the model’s turns.</span></div>
+      <div class="f3"><span class="f3-n">~$0.003</span><span class="f3-l">per answer, about 1.7k tokens.</span></div>
+      <div class="f3"><span class="f3-n">100%</span><span class="f3-l">of 1,009 citations quote their source word for word, checked in code.</span></div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ 2. PROBLEM ============ -->
 <section class="section problem" id="problem">
   <div class="wrap">
@@ -352,7 +409,7 @@
       </div>
 
       <div class="drift-stat">
-        <p class="ds-cap">Stale answers on our drift test, built on Salesforce AI Research’s HERB data</p>
+        <p class="ds-cap">Stale answers on our drift test, built on Salesforce AI Research’s enterprise data</p>
         <div class="ds-row">
           <div class="ds"><span class="ds-n">8.7%</span><span class="ds-l">Search only: the same agent without its graph tools</span></div>
           <div class="ds ds-lore"><span class="ds-n">0%</span><span class="ds-l">Lore, reading the decision in force</span></div>
@@ -367,7 +424,7 @@
   <div class="wrap">
     <div class="sec-head">
       <h2>What it does, in the product as it runs today</h2>
-      <p class="sec-lede">Screens from Lore’s web app, running on HERB, Salesforce AI Research’s synthetic enterprise data. Pick one to look closer.</p>
+      <p class="sec-lede">Screens from Lore’s web app, running on Salesforce AI Research’s synthetic enterprise data (from their HERB paper). Pick one to look closer.</p>
     </div>
 
     <div class="tour" id="tour">
@@ -415,64 +472,6 @@
           <img class="tour-img" src="assets/img/viewer-hidden.png" alt="An answer viewed as a specific person, noting how many sources were hidden from that viewer" width="1440" height="900" loading="lazy" data-i="5" data-path="lore / ask / view as">
         </div>
       </figure>
-    </div>
-  </div>
-</section>
-
-<!-- ============ 5. RESULTS ============ -->
-<section class="section results" id="results">
-  <div class="mx" id="mx">
-    <div class="mx-side">
-      <div class="mx-side-in">
-        <h2>Measured, not claimed</h2>
-        <p class="mx-lede">Scored on <a href="https://arxiv.org/abs/2506.23139">HERB</a>, Salesforce AI Research’s enterprise benchmark (EMNLP 2025): 399 questions from 7 products we never looked at while building, run once.</p>
-        <div class="mx-tabs" role="tablist" aria-label="Metrics" aria-orientation="vertical">
-          <button role="tab" class="mx-tab" aria-selected="true" aria-controls="mxPlot" data-i="0">
-            <span class="mx-t">Answer quality</span>
-            <span class="mx-d"><b>2.6×</b> the same agent without its FalkorDB graph and <b>6.6×</b> plain RAG. On customer questions, only Lore scores at all.</span>
-          </button>
-          <button role="tab" class="mx-tab" aria-selected="false" aria-controls="mxPlot" data-i="1">
-            <span class="mx-t">Against the HERB paper</span>
-            <span class="mx-d"><b>+47%</b> over the best agent in Salesforce AI Research’s paper (GPT-4o), and <b>2.6×</b> as good at saying it doesn’t know. Different model and setup, shown for context.</span>
-          </button>
-          <button role="tab" class="mx-tab" aria-selected="false" aria-controls="mxPlot" data-i="2">
-            <span class="mx-t">Fresh answers</span>
-            <span class="mx-d"><b>0%</b> stale answers, and right <b>100%</b> of the time on “as of a date” questions. It reads the decision in force, not the last message that matched.</span>
-          </button>
-        </div>
-      </div>
-    </div>
-    <figure class="mx-chart" id="mxPlot" role="tabpanel" aria-live="polite">
-      <div class="mx-legend" id="mxLegend"></div>
-      <div class="mx-area">
-        <span class="mx-ylab" id="mxYlab">Judged score</span>
-        <div class="mx-plot" id="mxBars"></div>
-      </div>
-      <figcaption class="mx-cap" id="mxCap"></figcaption>
-    </figure>
-  </div>
-
-  <div class="wrap">
-    <div class="table-wrap">
-      <table class="rt">
-        <caption class="sr-only">Results on HERB (Salesforce AI Research): held-out products, with the dev products for comparison</caption>
-        <thead>
-          <tr><th scope="col">System</th><th scope="col">Avg score, held-out</th><th scope="col">Customer questions</th><th scope="col">Quotes verified</th><th scope="col">Avg on the 3 dev products we built on</th></tr>
-        </thead>
-        <tbody>
-          <tr class="rt-lore"><th scope="row">Lore</th><td><span class="cell-bar" style="--v:63.6"></span>63.6</td><td>54.2</td><td>100%</td><td class="dev">83.2</td></tr>
-          <tr class="rt-ref"><th scope="row">HERB paper’s best agent <span>Salesforce AI Research, GPT-4o, different setup</span></th><td><span class="cell-bar" style="--v:43.4"></span>43.4</td><td>n/a</td><td>n/a</td><td class="dev">n/a</td></tr>
-          <tr><th scope="row">Lore without the FalkorDB graph<sup>*</sup></th><td><span class="cell-bar" style="--v:24.2"></span>24.2</td><td>0.0</td><td>100%</td><td class="dev">25.0</td></tr>
-          <tr><th scope="row">Plain RAG</th><td><span class="cell-bar" style="--v:9.6"></span>9.6</td><td>0.0</td><td>98.5%</td><td class="dev">14.7</td></tr>
-        </tbody>
-      </table>
-      <p class="table-note"><strong>Lore scores lower on products it has never seen (63.6) than on the ones it was built on (83.2). We report both.</strong> Scores are judged answers out of 100, not accuracy. <sup>*</sup>The same agent with search and read only: it keeps the vector and full-text search, and loses every graph query. Stale answers, on 24 hand-labeled questions about status now and on a past date: plain RAG 6.7%, search only 8.7%, Lore 0%. Method and footnotes in <a href="{REPO_URL}/blob/main/eval/report.md">eval/report.md</a>.</p>
-    </div>
-
-    <div class="figs3">
-      <div class="f3"><span class="f3-n">3–28 ms</span><span class="f3-l">per graph query, p50. The seconds in an answer are the model’s turns.</span></div>
-      <div class="f3"><span class="f3-n">~$0.003</span><span class="f3-l">per answer, about 1.7k tokens.</span></div>
-      <div class="f3"><span class="f3-n">100%</span><span class="f3-l">of 1,009 citations quote their source word for word, checked in code.</span></div>
     </div>
   </div>
 </section>
@@ -760,7 +759,7 @@
   <div class="wrap foot-grid">
     <div class="foot-brand">
       <a class="brand" href="#top"><svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true"><path class="bm-edge" d="M7 20 L14 8 L21 18 Z"/><circle class="bm-node" cx="7" cy="20" r="3.2"/><circle class="bm-node" cx="21" cy="18" r="3.2"/><rect class="bm-cite" x="10.6" y="4.6" width="6.8" height="6.8" rx="1.6"/></svg><span>Lore</span></a>
-      <p>Built for Graph Hacks: Context for AI Agents (WeMakeDevs × FalkorDB).</p>
+      <p>The company brain that knows what’s still true.</p>
     </div>
     <nav class="foot-links" aria-label="Footer">
       <a href="{VIDEO_URL}">Demo video</a>

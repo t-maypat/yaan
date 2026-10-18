@@ -216,6 +216,8 @@ p { margin: 0; }
   text-wrap: pretty;
 }
 .hero-ctas { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 30px; }
+.link-note { position: fixed; left: 50%; bottom: 24px; z-index: 60; transform: translate(-50%, 12px); opacity: 0; pointer-events: none; padding: 10px 16px; border-radius: 10px; background: var(--ink); color: var(--paper); font-size: 14px; box-shadow: var(--shadow-sm); transition: opacity .2s, transform .2s; }
+.link-note.on { opacity: 1; transform: translate(-50%, 0); }
 .hero-built { margin-top: 18px; font-size: 13.5px; color: var(--faint); letter-spacing: .01em; }
 .hero-built span { margin: 0 6px; opacity: .6; }
 
@@ -759,14 +761,14 @@ p { margin: 0; }
 .mx-lede { margin-top: 18px; font-size: 16px; line-height: 1.6; color: var(--night-muted); }
 .mx-lede a { color: var(--night-ink); text-decoration: underline; text-decoration-color: rgba(236, 237, 238, .4); text-underline-offset: 3px; }
 .mx-tabs { display: grid; gap: 6px; margin-top: 56px; }
-.mx-tab { display: grid; gap: 6px; text-align: left; padding: 8px 0 8px 20px; border: 0; border-left: 2px solid transparent; background: none; cursor: pointer; color: var(--night-muted); transition: border-color .3s; }
+.mx-tab { display: grid; gap: 6px; text-align: left; padding: 8px 0 8px 20px; border: 0; border-left: 2px solid transparent; background: none; cursor: pointer; color: var(--night-muted); transition: border-color .15s; }
 .mx-tab[aria-selected="true"] { border-left-color: var(--night-ink); }
 .mx-t { font: 500 18px/1.3 var(--sans); color: #8c9198; transition: color .25s; }
 .mx-tab:hover .mx-t { color: var(--night-ink); }
 .mx-tab[aria-selected="true"] .mx-t { color: var(--night-ink); }
-.mx-d { font-size: 14.5px; line-height: 1.55; max-height: 0; opacity: 0; overflow: hidden; transition: max-height .45s var(--ease), opacity .3s; }
-.mx-tab[aria-selected="true"] .mx-d { max-height: 120px; opacity: 1; }
-.mx-d b { color: var(--night-ink); font-weight: 600; }
+.mx-d { font-size: 14.5px; line-height: 1.7; max-height: 0; opacity: 0; overflow: hidden; transition: max-height .25s var(--ease), opacity .18s; }
+.mx-tab[aria-selected="true"] .mx-d { max-height: 160px; opacity: 1; }
+.mx-d b { color: var(--night-ink); font: 400 26px/1 var(--serif); letter-spacing: -.02em; margin-right: 2px; vertical-align: -2px; font-variant-numeric: lining-nums; }
 
 .mx-chart { margin: 0; background: var(--mx-bg); padding: 64px 64px 44px 48px; display: flex; flex-direction: column; min-width: 0; }
 .mx-legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 20px; font-size: 13.5px; color: var(--ink-2); min-height: 22px; }
@@ -781,13 +783,13 @@ p { margin: 0; }
 .mx-grid { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid var(--rule); pointer-events: none; }
 .mx-grid span { position: absolute; right: calc(100% + 10px); top: -8px; font: 11.5px var(--mono); color: var(--muted); white-space: nowrap; }
 .mx-group { position: relative; flex: 1; height: 100%; display: flex; justify-content: center; align-items: flex-end; gap: 6px; }
-.mx-bar { position: relative; width: clamp(22px, 3.3vw, 54px); height: calc(var(--h) * 1%); background: var(--mx-ctx); transform-origin: bottom; animation: mxgrow .9s var(--ease) both; animation-delay: var(--d, 0s); }
+.mx-bar { position: relative; width: clamp(22px, 3.3vw, 54px); height: calc(var(--h) * 1%); background: var(--mx-ctx); transform-origin: bottom; animation: mxgrow .5s var(--ease) both; animation-delay: var(--d, 0s); }
 .mx-bar.is-lore { background: var(--mx-lore); }
 .mx-bar svg { position: absolute; left: 50%; top: 10px; width: 16px; height: 16px; transform: translateX(-50%); }
 .mx-bar.is-lore svg { color: #fff; }
 .mx-bar:not(.is-lore) svg { color: var(--muted); }
 .mx-bar.short svg { display: none; }
-.mx-v { position: absolute; left: 50%; bottom: calc(100% + 7px); transform: translateX(-50%); font: 500 12.5px var(--mono); color: var(--ink); white-space: nowrap; animation: fadein .4s both; animation-delay: calc(var(--d, 0s) + .5s); }
+.mx-v { position: absolute; left: 50%; bottom: calc(100% + 7px); transform: translateX(-50%); font: 500 12.5px var(--mono); color: var(--ink); white-space: nowrap; animation: fadein .25s both; animation-delay: calc(var(--d, 0s) + .3s); }
 .mx-x { position: absolute; top: calc(100% + 12px); left: 50%; transform: translateX(-50%); font-size: 13.5px; color: var(--ink-2); white-space: nowrap; text-align: center; }
 .mx-cap { margin-top: 56px; font-size: 13px; color: var(--muted); max-width: 640px; }
 @keyframes mxgrow { from { transform: scaleY(0); } }

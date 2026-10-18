@@ -719,23 +719,23 @@
       lore: { name: 'Lore', icon: 'lore' },
       search: { name: 'Lore without the FalkorDB graph', icon: 'search' },
       rag: { name: 'Plain RAG', icon: 'rag' },
-      paper: { name: 'HERB paper’s best agent (GPT-4o)', icon: 'paper' },
+      paper: { name: 'Salesforce AI Research agent (GPT-4o)', icon: 'paper' },
     };
     const TABS = [
       {
-        ylab: 'Judged score (0–100)', max: 80, ticks: [0, 20, 40, 60, 80], unit: '', series: ['lore', 'search', 'rag'],
-        groups: [['Content', [64.0, 17.7, 12.6]], ['People', [65.2, 37.6, 13.3]], ['Customer', [54.2, 0.0, 0.0]], ['Artifact', [71.3, 41.5, 12.6]]],
-        cap: 'Held-out products, one run per system. Same model, judge prompts and search for every system; “without the FalkorDB graph” keeps vector and full-text search and loses every graph query.',
-      },
-      {
         ylab: 'Score / share (0–100)', max: 100, ticks: [0, 25, 50, 75, 100], series: ['lore', 'paper'],
         groups: [['Average score', [63.6, 43.4], ''], ['Unanswerable questions declined', [76.7, 29.3], '%']],
-        cap: 'The paper’s best product-specific agent is GPT-4o with ReAct (HERB, Salesforce AI Research, EMNLP 2025); Lore runs Claude Haiku 5.5 with HERB’s judge prompts. Different model and setup: shown for context.',
+        cap: 'Salesforce AI Research’s best product-specific agent is GPT-4o with ReAct, as published in their HERB paper (EMNLP 2025). Lore runs Claude Haiku 5.5, scored with the paper’s own judge prompts. Different model and setup: shown for context.',
+      },
+      {
+        ylab: 'Judged score (0–100)', max: 80, ticks: [0, 20, 40, 60, 80], unit: '', series: ['lore', 'search', 'rag'],
+        groups: [['Content', [64.0, 17.7, 12.6]], ['People', [65.2, 37.6, 13.3]], ['Customer', [54.2, 0.0, 0.0]], ['Artifact', [71.3, 41.5, 12.6]]],
+        cap: 'Held-out products, one run per system, all on Claude Haiku 5.5 with the same judge prompts and search. “Without the FalkorDB graph” keeps vector and full-text search and loses every graph query.',
       },
       {
         ylab: 'Answers right (%)', max: 100, ticks: [0, 25, 50, 75, 100], unit: '%', series: ['lore', 'search', 'rag'],
         groups: [['All drift questions', [95.8, 70.8, 54.2]], ['Current status', [100, 54.5, 54.5]], ['As of a date', [100, 80, 60]]],
-        cap: 'HERB-Drift: 24 hand-labeled questions on Salesforce AI Research’s HERB data about status now and on a past date, ground truth read from the raw messages. Stale answers: Lore 0%, search only 8.7%, plain RAG 6.7%.',
+        cap: 'Our drift test: 24 hand-labeled questions on Salesforce AI Research’s enterprise data about status now and on a past date, ground truth read from the raw messages, all systems on Claude Haiku 5.5. Stale answers: Lore 0%, search only 8.7%, plain RAG 6.7%.',
       },
     ];
     const fmt = (v, unit) => (Number.isInteger(v) && unit === '%' ? v : v.toFixed(1)) + unit;
@@ -749,7 +749,7 @@
         const u = unit ?? T.unit;
         const cols = vals.map((v, k) => {
           const key = T.series[k], h = v / T.max * 100;
-          return `<div class="mx-bar ${key === 'lore' ? 'is-lore' : ''} ${h < 9 ? 'short' : ''}" style="--h:${h};--d:${(g * vals.length + k) * 0.06}s" title="${S[key].name}: ${fmt(v, u)}">${ICON[S[key].icon]}<span class="mx-v">${fmt(v, u)}</span></div>`;
+          return `<div class="mx-bar ${key === 'lore' ? 'is-lore' : ''} ${h < 9 ? 'short' : ''}" style="--h:${h};--d:${(g * vals.length + k) * 0.03}s" title="${S[key].name}: ${fmt(v, u)}">${ICON[S[key].icon]}<span class="mx-v">${fmt(v, u)}</span></div>`;
         }).join('');
         return `<div class="mx-group">${cols}<span class="mx-x">${label}</span></div>`;
       }).join('');
@@ -841,6 +841,25 @@
       });
     });
     show(0);
+  })();
+
+  /* ---------------- links filled at launch ----------------
+     index.html carries {APP_URL}, {VIDEO_URL}, {REPO_URL} and {BLOG_URL} until launch (site/README.md).
+     Locally the app is the API's built UI on :8000; elsewhere an unfilled link says so instead of 404ing. */
+  (() => {
+    const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+    let note;
+    $$('a[href*="{"]').forEach((a) => {
+      const href = a.getAttribute('href');
+      if (local && href.startsWith('{APP_URL}')) { a.href = 'http://localhost:8000/'; return; }
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (!note) { note = el('div', 'link-note'); note.setAttribute('role', 'status'); document.body.appendChild(note); }
+        note.textContent = 'This link goes live at launch.';
+        note.classList.add('on');
+        clearTimeout(note.t); note.t = setTimeout(() => note.classList.remove('on'), 2200);
+      });
+    });
   })();
 
   /* ---------------- dialogs ---------------- */
