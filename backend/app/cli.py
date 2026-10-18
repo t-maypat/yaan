@@ -173,7 +173,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
         cached = ", cached" if u["cached"] else ""
         print(
             f"\n{u['model']}: {u['input_tokens']} in / {u['output_tokens']} out tokens, "
-            f"${u['cost_usd']:.5f}{cached} · today ${llm.spent_today():.4f}"
+            f"${u['cost_usd']:.5f}{cached} | today ${llm.spent_today():.4f}"
         )
     return 0
 
