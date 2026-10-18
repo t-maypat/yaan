@@ -1,6 +1,6 @@
-# Lore
+# Yaan
 
-**The company brain that knows what's still true.** Lore turns a company's chats, meetings, PRs and docs into a time-aware [FalkorDB](https://www.falkordb.com) graph of people, work and decisions. An agent can then say what's true now, what was true then, why, who knows, and what breaks when it changes, with a verbatim, machine-checked source for every sentence.
+**The company brain that knows what's still true.** Yaan turns a company's chats, meetings, PRs and docs into a time-aware [FalkorDB](https://www.falkordb.com) graph of people, work and decisions. An agent can then say what's true now, what was true then, why, who knows, and what breaks when it changes, with a verbatim, machine-checked source for every sentence.
 
 **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB) · **Track 03 Company Brain** (primary) · **Track 01** (agents acting on connected data)
 
@@ -9,8 +9,8 @@ Video: *link added at submission* · Blog: *link added at submission* · Run it 
 ![The Inbox: a regression alert with its blast radius drawn as a graph: the reopened rate-limiting issue in the middle, linked to the PR that fixed it, its author and reviewers, the customer's company, two teams, the earlier "resolved" message and sibling security issues](docs/img/inbox-radius.png)
 
 ## Why a graph
-- **Facts change, and the graph remembers how.** Every status of an issue or PR is a Decision node with a validity window (`valid_from` → `valid_to`), linked by SUPERSEDES to the one it replaced, DECIDED_BY a person and EVIDENCED_BY a quote. "Is it fixed?" and "was it fixed on 7 January?" are one comparison. Vector search finds the message that said "fixed" and believes it: in our drift test, search alone gave a stale status in 20% of answers, Lore in 0%.
-- **The answer lives in the links, not in any one document.** A bug report names `CUST-0026`; only the graph knows that customer works at BlueWave. "Who fixed the most bugs?" is `count()` over PR -[:FIXES]-> Issue, not a guess from ten chunks. "What breaks if this changes?" is a walk from the decision to the PR, its reviewers, the customers and the open issues around it. On customer questions, every plain-RAG system in the HERB paper scores 0, as do our baseline and search-only agent; Lore scores 54.2 on held-out products (88.4 on dev).
+- **Facts change, and the graph remembers how.** Every status of an issue or PR is a Decision node with a validity window (`valid_from` → `valid_to`), linked by SUPERSEDES to the one it replaced, DECIDED_BY a person and EVIDENCED_BY a quote. "Is it fixed?" and "was it fixed on 7 January?" are one comparison. Vector search finds the message that said "fixed" and believes it: in our drift test, search alone gave a stale status in 20% of answers, Yaan in 0%.
+- **The answer lives in the links, not in any one document.** A bug report names `CUST-0026`; only the graph knows that customer works at BlueWave. "Who fixed the most bugs?" is `count()` over PR -[:FIXES]-> Issue, not a guess from ten chunks. "What breaks if this changes?" is a walk from the decision to the PR, its reviewers, the customers and the open issues around it. On customer questions, every plain-RAG system in the HERB paper scores 0, as do our baseline and search-only agent; Yaan scores 54.2 on held-out products (88.4 on dev).
 - **Expertise and influence are graph algorithms.** Degree of authorship over components, FalkorDB's native PageRank, betweenness and label-propagation communities over who works with whom, and `shortestPath` from a listed owner to the real expert. `who_knows` puts a right engineer first on every HERB expertise question (hit@1 1.0, vs 0.0 for "whoever posted most").
 
 ## Results
@@ -19,28 +19,28 @@ Video: *link added at submission* · Blog: *link added at submission* · Run it 
 | System | Content | People | Customer | Artifact | **Avg (held-out)** | Unanswerable declined | Quotes verified | p50 answer | **Avg (dev)** |
 |---|---|---|---|---|---|---|---|---|---|
 | Plain RAG baseline | 12.6 | 13.3 | 0.0 | 12.6 | **9.6** | 80.0% | 98.5% | 4.8 s | 14.7 |
-| Lore without graph tools (search + read) | 17.7 | 37.6 | 0.0 | 41.5 | **24.2** | 81.9% | 100% | 13.0 s | 25.0 |
-| **Lore** | **64.0** | **65.2** | **54.2** | **71.3** | **63.6** | 76.7% | **100%** | 9.7 s | **83.2** |
+| Yaan without graph tools (search + read) | 17.7 | 37.6 | 0.0 | 41.5 | **24.2** | 81.9% | 100% | 13.0 s | 25.0 |
+| **Yaan** | **64.0** | **65.2** | **54.2** | **71.3** | **63.6** | 76.7% | **100%** | 9.7 s | **83.2** |
 | *HERB paper: best product-specific agent (GPT-4o)* | | | | | *43.4* | *29.3%* | | | |
 
-**Stale answers** (HERB-Drift, 24 hand-labeled dev questions about status now and as of a date): plain RAG 6.7% of answers (54% right), search-only 8.7% (71% right), **Lore 0% (96% right)**.
+**Stale answers** (HERB-Drift, 24 hand-labeled dev questions about status now and as of a date): plain RAG 6.7% of answers (54% right), search-only 8.7% (71% right), **Yaan 0% (96% right)**.
 
 - **Same agent, graph tools removed: 63.6 → 24.2 on held-out (83.2 → 25.0 on dev).** FalkorDB is load-bearing.
-- **Dev was 83.2, held-out is 63.6.** We built and fixed Lore looking at the 3 dev products only; the drop is what didn't carry over to new products, mostly Customer (88.4 → 54.2) and People (88.4 → 65.2). We report it rather than tune on it: the held-out questions stay unread.
-- **Every quote shown is checked word for word** against its source in code before the answer appears; unsupported sentences are dropped, and with nothing left Lore says "Not found in Lore's graph".
+- **Dev was 83.2, held-out is 63.6.** We built and fixed Yaan looking at the 3 dev products only; the drop is what didn't carry over to new products, mostly Customer (88.4 → 54.2) and People (88.4 → 65.2). We report it rather than tune on it: the held-out questions stay unread.
+- **Every quote shown is checked word for word** against its source in code before the answer appears; unsupported sentences are dropped, and with nothing left Yaan says "Not found in Lore's graph".
 - FalkorDB answers each tool call in **3–28 ms** (p50 per tool on held-out); the seconds are the model's turns. ~1.7k tokens and $0.003 per answer.
 - Footnotes: the judge is Claude Haiku 5.5 standing in for GPT-4o; one run per system (± a few points of sampling spread); the HERB row is a different model and setup, for context. Full method, the validator ablation (with a correction we made), the drift set and the error analysis: **[eval/report.md](eval/report.md)**.
 
 ## Architecture
-![Lore's big picture: company data flows through the ingestion pipeline into the FalkorDB graph, which feeds the answer agent and the Change Sentinel, which feed the web UI](docs/diagrams/lore-overview.svg)
+![Yaan's big picture: company data flows through the ingestion pipeline into the FalkorDB graph, which feeds the answer agent and the Change Sentinel, which feed the web UI](docs/diagrams/lore-overview.svg)
 
 - **Ingestion (S1–S10):** normalize → structural graph (people, teams, channels, artifacts, PR status chains; no AI) → chunks + local 384-d embeddings in FalkorDB's vector index → deterministic linking (ids, urls, names) → LLM event extraction with **every quote verified by substring match** (487/488 on held-out) → entity resolution and the **decision fold** (who may change what: assignees, QA and leads; others' claims are recorded and refused) → derived layers (expertise, collaboration, communities, PageRank, betweenness, truck factor, precedents) → health report.
 - **Answer agent:** a plain tool loop (no framework) over 17 read-only tools, each one `.cypher` file; strict JSON answer contract; a deterministic citation validator; viewer-scoped redaction.
 - **Change Sentinel:** a rule table over decision changes (regressions, reopenings, reversals, unauthorized changes, key-person and bus-factor risks) → blast radius → templated drafts that quote their evidence → **Approve / Dismiss recorded as a Decision** ("what did we do last time?" is a graph query).
-- **Doors:** a web UI, an **MCP server** (any agent gets Lore's tools), and **connectors** for Slack, GitHub, Jira and Notion: their changes come in through the same pipeline, and approved actions go back out as comments and messages.
+- **Doors:** a web UI, an **MCP server** (any agent gets Yaan's tools), and **connectors** for Slack, GitHub, Jira and Notion: their changes come in through the same pipeline, and approved actions go back out as comments and messages.
 
 ## Graph data model
-![Lore's graph data model: what is true and since when (Alert, Claim, Decision, Issue, Area), who (Person, Team, Customer, Company), and what was said (Artifact, Channel, Chunk, Product), with their relationships](docs/diagrams/data-model.svg)
+![Yaan's graph data model: what is true and since when (Alert, Claim, Decision, Issue, Area), who (Person, Team, Customer, Company), and what was said (Artifact, Channel, Chunk, Product), with their relationships](docs/diagrams/data-model.svg)
 
 | Node (label) | Key properties | Count (10 products) |
 |---|---|---|
@@ -68,7 +68,7 @@ Video: *link added at submission* · Blog: *link added at submission* · Run it 
 Full schema with every property: [docs/schema_card.md](docs/schema_card.md) (it is also what the guarded text-to-Cypher tool shows the model).
 
 ## Cypher queries and algorithms
-FalkorDB features Lore depends on: Cypher over a property graph; range indexes on ids; a **full-text index** (English stemming) and an **HNSW vector index** on chunks, fused in one search; native **`algo.pageRank`**, **`algo.betweenness`**, **`algo.labelPropagation`** and **`shortestPath`**; `GRAPH.RO_QUERY` with a read-only ACL user for text-to-Cypher; per-query timeouts; `GRAPH.COPY` for the resettable demo graph; `DUMP`/`RESTORE` for the snapshot.
+FalkorDB features Yaan depends on: Cypher over a property graph; range indexes on ids; a **full-text index** (English stemming) and an **HNSW vector index** on chunks, fused in one search; native **`algo.pageRank`**, **`algo.betweenness`**, **`algo.labelPropagation`** and **`shortestPath`**; `GRAPH.RO_QUERY` with a read-only ACL user for text-to-Cypher; per-query timeouts; `GRAPH.COPY` for the resettable demo graph; `DUMP`/`RESTORE` for the snapshot.
 
 <details><summary><b>Every query, with its purpose</b> (generated from the files by <code>scripts/query_table.py</code>)</summary>
 
@@ -269,7 +269,7 @@ FalkorDB features Lore depends on: Cypher over a property graph; range indexes o
 </details>
 
 ## FalkorDB's five context-graph challenges
-| Challenge | How Lore handles it |
+| Challenge | How Yaan handles it |
 |---|---|
 | **Data quality** | No LLM output enters the graph unverified: every extracted quote must be a substring of its message (487/488 on held-out). A policy decides who may change a status; refused claims stay visible as CONFLICTS_WITH. A health report counts isolated nodes (0%), duplicate ids (0) and unresolved mentions (2.9% of 7,169). |
 | **Scale and latency** | Product-scoped queries starting from indexes (plans checked in tests); bounded paths, `LIMIT` on every read, a 2 s timeout on agent reads; 5–27 ms p50 per tool call on 38.5k nodes / 96k edges. Product scoping holds as the graph grows from 3 to 10 products (hybrid hit@10 0.854 → 0.885). |
@@ -287,26 +287,26 @@ FalkorDB features Lore depends on: Cypher over a property graph; range indexes o
 **Track 01 · Agents acting on connected data**
 - **Actions:** the Sentinel drafts follow-ups from the blast radius; approval is recorded as a Decision and the drafts go out to Jira, GitHub, Notion and Slack.
 - **Algorithms as tools:** `rank` (counts in Cypher), `who_knows`, `find_missing` (absence of a path), `impact_of`, `connection_path` (`shortestPath`).
-- **MCP:** Lore's 16 graph tools plus `ask` for any MCP client, over stdio (`lore mcp`; [.mcp.json](.mcp.json) registers it for Claude Code) or HTTP (`/mcp`).
+- **MCP:** Yaan's 16 graph tools plus `ask` for any MCP client, over stdio (`lore mcp`; [.mcp.json](.mcp.json) registers it for Claude Code) or HTTP (`/mcp`).
 
 ## Quickstart
 Needs Docker. Browsing everything works without an API key; asking new questions needs an Anthropic key.
 
 ```sh
-git clone <this repo> lore && cd lore
+git clone https://github.com/t-maypat/yaan && cd yaan
 cp .env.example .env
 docker compose --profile app up -d --build                     # FalkorDB + the API serving the UI
-docker compose --profile app run --rm api lore seed --from <snapshot URL from the release>
+docker compose --profile app run --rm api yaan seed --from https://github.com/t-maypat/yaan/releases/latest/download/lore-snapshot.tar.gz
 # open http://127.0.0.1:8000  (Ask, Inbox, Timeline, Graph health, Evaluation)
 ```
 
 - To ask questions, put `ANTHROPIC_API_KEY=` in `.env` and restart the `api` service. Without a key, `/ask` says so instead of answering.
-- **MCP for Claude Code:** `claude mcp add lore -- uv run --project backend lore mcp`, or open the repo in Claude Code and accept `.mcp.json`.
+- **MCP for Claude Code:** `claude mcp add yaan -- uv run --project backend yaan mcp`, or open the repo in Claude Code and accept `.mcp.json`.
 - **Connectors:** setup and the cross-tool story are in [docs/connectors.md](docs/connectors.md).
 - **Development:** `uv sync --project backend`, `uv run --project backend pytest backend` (1,000+ tests), `npm --prefix frontend run dev`. The `Makefile` wraps the same commands on Linux and macOS.
 
 ## Data and license
-**Code:** Apache-2.0 ([LICENSE](LICENSE)). **Data:** [HERB](https://huggingface.co/datasets/Salesforce/HERB) by Salesforce AI Research, a public **synthetic** enterprise dataset, licensed **CC BY-NC 4.0** ([paper](https://arxiv.org/abs/2506.23139)). Lore uses no real company's or person's data. Demo and connector items are synthetic too and labeled `[synthetic demo …]`. The snapshot redistributes HERB-derived data under the same license, with attribution.
+**Code:** Apache-2.0 ([LICENSE](LICENSE)). **Data:** [HERB](https://huggingface.co/datasets/Salesforce/HERB) by Salesforce AI Research, a public **synthetic** enterprise dataset, licensed **CC BY-NC 4.0** ([paper](https://arxiv.org/abs/2506.23139)). Yaan uses no real company's or person's data. Demo and connector items are synthetic too and labeled `[synthetic demo …]`. The snapshot redistributes HERB-derived data under the same license, with attribution.
 
 ## Evaluation methodology
 See [eval/report.md](eval/report.md): the dev/held-out split and its guard, the systems (each one change apart), the judge, the drift set, the error analysis, the declared deviations, and the reproduction commands. Decisions and verified facts are logged in [docs/decisions.md](docs/decisions.md); beginner-level guides to every part are in [docs/learn/](docs/learn/README.md).
@@ -314,7 +314,7 @@ See [eval/report.md](eval/report.md): the dev/held-out split and its guard, the 
 ## Limitations
 - **Held-out is 20 points below dev** (63.6 vs 83.2): fixes found on dev questions carried over only partly. The held-out products also share HERB's question templates, so even that run measures new products, not new kinds of question.
 - **HERB is synthetic and tidy.** Some checks find nothing here: resolved bugs without a fix, unreviewed PRs.
-- **Some HERB labels contradict each other.** 7 of Lore's 13 "answered an unanswerable" cases are questions HERB's own answerable ground truth answers (eval report §6).
+- **Some HERB labels contradict each other.** 7 of Yaan's 13 "answered an unanswerable" cases are questions HERB's own answerable ground truth answers (eval report §6).
 - **Graph-computed counts ignore permissions**, and the permission policy is synthetic.
 - **The content judge is noisy:** the same answer scored 90 in one run and 40 in the next.
 - **Slack, Jira and GitHub ran live on our sandbox workspaces** (ticket → fix PR → customer re-report in Slack → regression card in 11 s). Notion is tested on recorded API payloads only. The sandboxes hold only the labeled demo story, connectors poll every 30 s, and tokens are pasted into `.env`: there's no OAuth install yet.

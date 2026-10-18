@@ -41,7 +41,7 @@
         <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>
         <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.3 8.3 0 0 1 9.4 4a8.3 8.3 0 1 0 10.6 10.6Z"/></svg>
       </button>
-      <a class="icon-btn" href="{REPO_URL}" aria-label="Yaan on GitHub"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span></a>
+      <a class="icon-btn" href="https://github.com/t-maypat/yaan" aria-label="Yaan on GitHub"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span></a>
     </div>
   </div>
 </header>
@@ -75,7 +75,7 @@
         <div><b>4 tools</b><span>Slack, GitHub, Jira, Notion</span></div>
         <div><b>3 AI clients</b><span>Claude Code, Codex, Cursor</span></div>
       </div>
-      <p class="doc-note"><b>Note:</b> Yaan’s internal name is <code>lore</code>. The commands, settings and files use this name.</p>
+      <p class="doc-note"><b>Note:</b> Yaan was called Lore while it was built. Settings (<code>LORE_…</code>), container names and some files still use that name, and <code>lore</code> works as the command too.</p>
     </section>
 
     <section id="before">
@@ -91,7 +91,7 @@
       <span class="sd-n">1</span>
       <h2>Get the code</h2>
       <p>Open a terminal. Run these commands:</p>
-      <pre class="code"><code>git clone {REPO_URL} yaan
+      <pre class="code"><code>git clone https://github.com/t-maypat/yaan yaan
 cd yaan</code></pre>
     </section>
 
@@ -121,7 +121,7 @@ cd yaan</code></pre>
       <span class="sd-n">4</span>
       <h2>Load the demo graph</h2>
       <p>Load the ready-made graph. It holds a synthetic company, so you can try Yaan before you connect your own tools. This step needs no API key.</p>
-      <pre class="code"><code>docker compose --profile app run --rm api lore seed --from {SNAPSHOT_URL}</code></pre>
+      <pre class="code"><code>docker compose --profile app run --rm api yaan seed --from https://github.com/t-maypat/yaan/releases/latest/download/lore-snapshot.tar.gz</code></pre>
     </section>
 
     <section id="step-5" class="step-doc">
@@ -176,9 +176,9 @@ cd yaan</code></pre>
       <h3 class="h3-doc">Start the connectors</h3>
       <p>Tell Yaan which product each channel, repository, project and page belongs to. Edit <code>connectors.yaml</code>. Then apply your settings and check them:</p>
       <pre class="code"><code>docker compose --profile app up -d --force-recreate api
-docker compose --profile app exec api lore connectors status</code></pre>
+docker compose --profile app exec api yaan connectors status</code></pre>
       <p>Start the connectors. They keep running in the background:</p>
-      <pre class="code"><code>docker compose --profile app exec -d api lore connectors run</code></pre>
+      <pre class="code"><code>docker compose --profile app exec -d api yaan connectors run</code></pre>
       <p class="tip"><b>Tip:</b> Slack uses Socket Mode. You do not need a public URL. GitHub, Jira and Notion are checked every 30 seconds.</p>
     </section>
 
@@ -196,7 +196,7 @@ docker compose --profile app exec api lore connectors status</code></pre>
           <p>Add this to <code>~/.codex/config.toml</code>:</p>
           <pre class="code"><code>[mcp_servers.yaan]
 command = "docker"
-args = ["exec", "-i", "lore-api-1", "lore", "mcp"]</code></pre>
+args = ["exec", "-i", "lore-api-1", "yaan", "mcp"]</code></pre>
         </article>
         <article class="card-tool">
           <header><span class="glyph" style="--icon:url(assets/icons/color/cursor.svg);--icon-d:url(assets/icons/color/cursor-d.svg)"></span><h3>Cursor</h3></header>

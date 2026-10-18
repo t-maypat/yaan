@@ -1,4 +1,4 @@
-"""Lore command line: `lore <command>` (or `python -m app.cli <command>`).
+"""Yaan command line: `yaan <command>` (`lore` still works) or `python -m app.cli <command>`.
 
 The Makefile wraps these commands for Linux/macOS; on Windows call them directly.
 A command that isn't built yet exits with status 2 and names the phase that builds it.
@@ -526,7 +526,7 @@ COMMANDS = {
     "health": ("print the graph-health report (S10)", cmd_health),
     "search": ("hybrid search over the graph's chunks (agent tool 1)", cmd_search),
     "bench-search": ("search hit@k / precision@k and latency on dev questions", cmd_bench_search),
-    "ask": ("answer a question with the Lore agent; --baseline = hybrid RAG", cmd_ask),
+    "ask": ("answer a question with the Yaan agent; --baseline = hybrid RAG", cmd_ask),
     "llm-check": ("one tiny LLM call: is the API key set and does it have credit?", cmd_llm_check),
     "eval": ("answer a split's HERB questions and score them (Phase 5)", cmd_eval),
     "eval-report": ("rebuild eval/results/table.md from the results files", cmd_eval_report),
@@ -535,7 +535,7 @@ COMMANDS = {
         cmd_bench_experts,
     ),
     "demo": ("reset the demo graph, or inject a synthetic message live (11.6)", cmd_demo),
-    "mcp": ("serve Lore's read-only tools (and ask) over MCP on stdio (17.1)", cmd_mcp),
+    "mcp": ("serve Yaan's read-only tools (and ask) over MCP on stdio (17.1)", cmd_mcp),
     "snapshot": ("save the graph + live-path data to snapshots/ (no LLM; 15.2)", cmd_snapshot),
     "seed": ("restore a snapshot (file or URL) and the demo graph, no API key (15.2)", cmd_seed),
     "connectors": (
@@ -627,7 +627,7 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="lore", description="Lore: a time-aware company brain on FalkorDB."
+        prog="yaan", description="Yaan (formerly Lore): a time-aware company brain on FalkorDB."
     )
     commands = parser.add_subparsers(dest="command", required=True, metavar="<command>")
     for name, (help_text, _) in COMMANDS.items():

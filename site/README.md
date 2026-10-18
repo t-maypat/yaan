@@ -1,6 +1,6 @@
-# Lore landing page
+# Yaan landing page
 
-A static page (`index.html`, `styles.css`, `main.js`, `assets/`) with no build step and no backend. It never calls Lore's API. Content follows [docs/landing-brief.md](../docs/landing-brief.md).
+A static page (`index.html`, `styles.css`, `main.js`, `assets/`) with no build step and no backend. It never calls Yaan's API. Content follows [docs/landing-brief.md](../docs/landing-brief.md).
 
 ## Preview locally
 ```
@@ -11,16 +11,8 @@ Open http://localhost:8765. Add `?theme=dark` or `?theme=light` to force a theme
 ## Deploy on Vercel
 Import the repo, set **Root Directory** to `site`, framework preset **Other**, no build command. `vercel.json` sets clean URLs and asset caching.
 
-## Before submission
-Replace the placeholders in `index.html`:
-- `{VIDEO_URL}`: the 3-minute demo video
-- `{REPO_URL}`: the GitHub repo (also used for `#cypher-queries-and-algorithms` and `/blob/main/eval/report.md`)
-- `{BLOG_URL}`: the blog post
-- `{SNAPSHOT_URL}`: the release asset with the demo graph snapshot (used in `docs.html`, step 4)
-
-```
-sed -i 's#{VIDEO_URL}#https://…#g; s#{REPO_URL}#https://github.com/…#g; s#{BLOG_URL}#https://…#g; s#{SNAPSHOT_URL}#https://…#g' site/index.html site/docs.html
-```
+## Links
+The repo is https://github.com/t-maypat/yaan. The self-hosting guide (`docs.html`, step 4) loads the demo graph from the repo's latest release, so the release must carry `lore-snapshot.tar.gz` (from `snapshots/`).
 
 ## Protecting a public deployment
 The site is static, so a swarm can only use bandwidth (Vercel's DDoS mitigation covers it; turn on Attack Challenge Mode in the Vercel firewall if needed). The **app's API** is what costs money. On a public URL set `LORE_LLM_CACHE_ONLY=1` (answers replay from the cache, never call the API), keep the per-IP, global and concurrency limits on (`.env.example`, D081), and set `FORWARDED_ALLOW_IPS` behind a proxy.

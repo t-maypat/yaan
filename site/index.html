@@ -50,8 +50,8 @@
         <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>
         <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.3 8.3 0 0 1 9.4 4a8.3 8.3 0 1 0 10.6 10.6Z"/></svg>
       </button>
-      <a class="icon-btn" href="{REPO_URL}" aria-label="Yaan on GitHub"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span></a>
-      <a class="btn btn-ink btn-sm" href="{VIDEO_URL}">Watch the demo</a>
+      <a class="icon-btn" href="https://github.com/t-maypat/yaan" aria-label="Yaan on GitHub"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span></a>
+      <a class="btn btn-ink btn-sm" href="docs.html">Self-host it</a>
     </div>
   </div>
 </header>
@@ -68,12 +68,8 @@
     <h1 class="hero-title">The company brain that knows what’s still true.</h1>
     <p class="hero-sub">Yaan turns your team’s Slack, meetings, pull requests, tickets and docs into a time-aware graph of people, work and decisions. Ask what’s true now, what was true then, why, and who knows, with a word-for-word source for every sentence.</p>
     <div class="hero-ctas">
-      <a class="btn btn-ink" href="{VIDEO_URL}">
-        <svg class="play" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9.2"/><path d="M8.2 6.6v6.8l5.4-3.4z"/></svg>
-        Watch the 3-minute demo
-      </a>
-      <a class="btn btn-line" href="docs.html">Self-host it</a>
-      <a class="btn btn-ghost" href="{REPO_URL}"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span>View on GitHub</a>
+      <a class="btn btn-ink" href="docs.html">Self-host it</a>
+      <a class="btn btn-line" href="https://github.com/t-maypat/yaan"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span>View on GitHub</a>
     </div>
   </div>
 
@@ -392,7 +388,7 @@
           <tr><th scope="row">Plain RAG</th><td><span class="cell-bar" style="--v:9.6"></span>9.6</td><td>0.0</td><td>98.5%</td><td class="dev">14.7</td></tr>
         </tbody>
       </table>
-      <p class="table-note"><strong>Yaan scores lower on products it has never seen (63.6) than on the ones it was built on (83.2). We report both.</strong> Scores are judged answers out of 100, not accuracy. <sup>*</sup>The same agent with search and read only: it keeps the vector and full-text search, and loses every graph query. Stale answers, on 24 hand-labeled questions about status now and on a past date: plain RAG 6.7%, search only 8.7%, Yaan 0%. Method and footnotes in <a href="{REPO_URL}/blob/main/eval/report.md">eval/report.md</a>.</p>
+      <p class="table-note"><strong>Yaan scores lower on products it has never seen (63.6) than on the ones it was built on (83.2). We report both.</strong> Scores are judged answers out of 100, not accuracy. <sup>*</sup>The same agent with search and read only: it keeps the vector and full-text search, and loses every graph query. Stale answers, on 24 hand-labeled questions about status now and on a past date: plain RAG 6.7%, search only 8.7%, Yaan 0%. Method and footnotes in <a href="https://github.com/t-maypat/yaan/blob/main/eval/report.md">eval/report.md</a>.</p>
     </div>
 
     <div class="figs3">
@@ -440,7 +436,7 @@
         <p class="sec-lede">Yaan runs on your own servers under the Apache-2.0 license. Your company’s knowledge stays inside your network, and every line of code that touches it is open to read.</p>
         <div class="sh-ctas">
           <a class="btn btn-ink" href="docs.html">Read the self-hosting guide</a>
-          <a class="btn btn-line" href="{REPO_URL}"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span>Read the source</a>
+          <a class="btn btn-line" href="https://github.com/t-maypat/yaan"><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span>Read the source</a>
         </div>
       </div>
       <figure class="sh-map" aria-label="Everything runs inside your infrastructure; only calls to the AI model you choose leave it">
@@ -582,14 +578,14 @@
       </div>
 
       <figure class="tour-frame" id="tp" role="tabpanel" aria-labelledby="tt0">
-        <div class="frame-bar" aria-hidden="true"><span class="fb-path" id="tourPath">lore / ask</span></div>
+        <div class="frame-bar" aria-hidden="true"><span class="fb-path" id="tourPath">yaan (formerly lore) / ask</span></div>
         <div class="frame-view">
-          <img class="tour-img is-on" src="assets/img/ask-pane-hover.png" alt="The Ask pane: an answer whose sentences each carry a numbered citation; pointing at one shows its highlighted source quote" width="1440" height="1000" loading="lazy" data-i="0" data-path="lore / ask">
-          <img class="tour-img" src="assets/img/timeline-asof.png" alt="A decision timeline for the 'Feature Attribution Mismatch' issue, reported, dismissed, then reopened, with an as-of slider" width="1440" height="1943" loading="lazy" data-i="1" data-path="lore / ask / timeline">
-          <img class="tour-img" src="assets/img/inbox-key-person.png" alt="An Inbox alert naming a key person whose departure would leave components with no expert" width="1020" height="1160" loading="lazy" data-i="2" data-path="lore / inbox / key person">
-          <img class="tour-img" src="assets/img/inbox-radius.png" alt="A regression alert with its blast radius drawn as a graph around the reopened issue" width="1020" height="1040" loading="lazy" data-i="3" data-path="lore / inbox / regression">
-          <img class="tour-img" src="assets/img/ask-pane-cypher.png" alt="The trace of an answer showing the exact Cypher each graph tool ran, with timings" width="1440" height="900" loading="lazy" data-i="4" data-path="lore / ask / cypher">
-          <img class="tour-img" src="assets/img/viewer-hidden.png" alt="An answer viewed as a specific person, noting how many sources were hidden from that viewer" width="1440" height="900" loading="lazy" data-i="5" data-path="lore / ask / view as">
+          <img class="tour-img is-on" src="assets/img/ask-pane-hover.png" alt="The Ask pane: an answer whose sentences each carry a numbered citation; pointing at one shows its highlighted source quote" width="1440" height="1000" loading="lazy" data-i="0" data-path="yaan (formerly lore) / ask">
+          <img class="tour-img" src="assets/img/timeline-asof.png" alt="A decision timeline for the 'Feature Attribution Mismatch' issue, reported, dismissed, then reopened, with an as-of slider" width="1440" height="1943" loading="lazy" data-i="1" data-path="yaan / ask / timeline">
+          <img class="tour-img" src="assets/img/inbox-key-person.png" alt="An Inbox alert naming a key person whose departure would leave components with no expert" width="1020" height="1160" loading="lazy" data-i="2" data-path="yaan / inbox / key person">
+          <img class="tour-img" src="assets/img/inbox-radius.png" alt="A regression alert with its blast radius drawn as a graph around the reopened issue" width="1020" height="1040" loading="lazy" data-i="3" data-path="yaan / inbox / regression">
+          <img class="tour-img" src="assets/img/ask-pane-cypher.png" alt="The trace of an answer showing the exact Cypher each graph tool ran, with timings" width="1440" height="900" loading="lazy" data-i="4" data-path="yaan / ask / cypher">
+          <img class="tour-img" src="assets/img/viewer-hidden.png" alt="An answer viewed as a specific person, noting how many sources were hidden from that viewer" width="1440" height="900" loading="lazy" data-i="5" data-path="yaan / ask / view as">
         </div>
       </figure>
     </div>
@@ -660,12 +656,9 @@
 
     <div class="cmp" id="cmp">
       <div class="cmp-head">
-        <h3>Against the alternatives</h3>
-        <div class="cmp-tabs" role="tablist" aria-label="Compare FalkorDB with">
-          <button role="tab" class="cmp-tab" id="cmpT0" aria-controls="cmpP0" aria-selected="true" tabindex="0">vs Neo4j</button><button role="tab" class="cmp-tab" id="cmpT1" aria-controls="cmpP1" aria-selected="false" tabindex="-1">vs AWS Neptune</button><button role="tab" class="cmp-tab" id="cmpT2" aria-controls="cmpP2" aria-selected="false" tabindex="-1">vs TigerGraph</button><button role="tab" class="cmp-tab" id="cmpT3" aria-controls="cmpP3" aria-selected="false" tabindex="-1">vs ArangoDB</button>
-        </div>
+        <h3>Against Neo4j</h3>
       </div>
-      <div class="cmp-panel" id="cmpP0" role="tabpanel" aria-labelledby="cmpT0">
+      <div class="cmp-panel" id="cmpP0">
             <table class="cmp-t">
               <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f"><span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></th><th scope="col" class="c-o">Neo4j</th></tr></thead>
               <tbody>
@@ -678,39 +671,8 @@
               <tr><th scope="row">Vector + full-text search</th><td class="c-f"><span class="ck" aria-label="yes">✓</span></td><td class="c-o"><span class="ck" aria-label="yes">✓</span></td></tr>
               </tbody>
             </table>
-          </div><div class="cmp-panel" id="cmpP1" role="tabpanel" aria-labelledby="cmpT1" hidden>
-            <table class="cmp-t">
-              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f"><span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></th><th scope="col" class="c-o">AWS Neptune</th></tr></thead>
-              <tbody>
-              <tr class="win"><th scope="row">Latency</th><td class="c-f">Fast</td><td class="c-o">Poor</td></tr>
-              <tr class="win"><th scope="row">Memory efficiency</th><td class="c-f">Highly efficient</td><td class="c-o">Poor</td></tr>
-              <tr><th scope="row">Horizontal scaling</th><td class="c-f">Flexible</td><td class="c-o">Flexible</td></tr>
-              <tr><th scope="row">Query language</th><td class="c-f">Cypher</td><td class="c-o">openCypher, Gremlin, SPARQL</td></tr>
-              <tr class="win"><th scope="row">Runs on your laptop</th><td class="c-f"><span class="ck" aria-label="yes">✓</span> One Docker container</td><td class="c-o"><span class="cx" aria-label="no">✕</span> AWS managed service</td></tr>
-              </tbody>
-            </table>
-          </div><div class="cmp-panel" id="cmpP2" role="tabpanel" aria-labelledby="cmpT2" hidden>
-            <table class="cmp-t">
-              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f"><span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></th><th scope="col" class="c-o">TigerGraph</th></tr></thead>
-              <tbody>
-              <tr class="win"><th scope="row">Latency</th><td class="c-f">Fast</td><td class="c-o">Adequate</td></tr>
-              <tr class="win"><th scope="row">Memory efficiency</th><td class="c-f">Highly efficient</td><td class="c-o">Moderate</td></tr>
-              <tr class="win"><th scope="row">Horizontal scaling</th><td class="c-f">Flexible</td><td class="c-o">Limited</td></tr>
-              <tr class="win"><th scope="row">Query language</th><td class="c-f">Cypher</td><td class="c-o">GSQL</td></tr>
-              </tbody>
-            </table>
-          </div><div class="cmp-panel" id="cmpP3" role="tabpanel" aria-labelledby="cmpT3" hidden>
-            <table class="cmp-t">
-              <thead><tr><th scope="col"><span class="sr-only">Feature</span></th><th scope="col" class="c-f"><span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></th><th scope="col" class="c-o">ArangoDB</th></tr></thead>
-              <tbody>
-              <tr class="win"><th scope="row">Latency</th><td class="c-f">Fast</td><td class="c-o">Poor</td></tr>
-              <tr class="win"><th scope="row">Memory efficiency</th><td class="c-f">Highly efficient</td><td class="c-o">Moderate</td></tr>
-              <tr class="win"><th scope="row">Horizontal scaling</th><td class="c-f">Flexible</td><td class="c-o">Limited</td></tr>
-              <tr class="win"><th scope="row">Query language</th><td class="c-f">Cypher</td><td class="c-o">AQL</td></tr>
-              </tbody>
-            </table>
           </div>
-      <p class="cmp-src">Ratings and benchmark figures as published on falkordb.com; query languages and deployment from each vendor’s documentation.</p>
+      <p class="cmp-src">Benchmark figures as published on falkordb.com; the rest from each vendor’s documentation.</p>
     </div>
 
     <div class="uses">
@@ -816,7 +778,7 @@
     </div>
 
     <div class="gw-links">
-      <a class="link-btn" href="{REPO_URL}#cypher-queries-and-algorithms">All 166 Cypher queries are in the repo</a>
+      <a class="link-btn" href="https://github.com/t-maypat/yaan#cypher-queries-and-algorithms">All 166 Cypher queries are in the repo</a>
       <button class="link-btn" type="button" data-open="dlgModel">See the graph data model</button>
     </div>
   </div>
@@ -834,21 +796,6 @@
       <li><span class="nx-state">Planned</span><span class="nx-t">Permissions synced from Slack and GitHub.</span></li>
       <li><span class="nx-state">Planned</span><span class="nx-t">A graph per company, with your own retention rules.</span></li>
     </ul>
-  </div>
-</section>
-
-<!-- ============ CLOSING CTA ============ -->
-<section class="section closing" id="closing">
-  <div class="wrap">
-    <a class="poster" href="{VIDEO_URL}">
-      <span class="poster-copy">
-        <span class="poster-play" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M7 4.8v10.4l8.2-5.2z"/></svg></span>
-        <span class="poster-t">See a regression caught live, in three minutes.</span>
-        <span class="poster-d">A customer re-reports a fixed bug. Yaan flags it, draws who it touches, and posts the follow-up on Approve.</span>
-        <span class="poster-len">Watch the 3-minute demo</span>
-      </span>
-      <span class="poster-shot" aria-hidden="true"><img src="assets/img/inbox-radius.png" alt="" width="1020" height="1040" loading="lazy"></span>
-    </a>
   </div>
 </section>
 
@@ -873,13 +820,11 @@
         <p class="foot-h">Get started</p>
         <a href="docs.html">Self-hosting guide</a>
         <a href="docs.html#architecture">Architecture</a>
-        <a href="{VIDEO_URL}">Watch the 3-minute demo</a>
-        <a href="{REPO_URL}">Source code on GitHub</a>
+        <a href="https://github.com/t-maypat/yaan">Source code on GitHub</a>
       </nav>
       <nav class="foot-col" aria-label="Learn more">
         <p class="foot-h">Learn more</p>
-        <a href="{BLOG_URL}">The story behind Yaan</a>
-        <a href="{REPO_URL}/blob/main/eval/report.md">Full evaluation report</a>
+        <a href="https://github.com/t-maypat/yaan/blob/main/eval/report.md">Full evaluation report</a>
         <a href="https://arxiv.org/abs/2506.23139">Salesforce AI Research’s HERB paper</a>
       </nav>
     </div>

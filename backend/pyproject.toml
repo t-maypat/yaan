@@ -1,7 +1,7 @@
 [project]
 name = "lore"
 version = "0.1.0"
-description = "Lore: a time-aware company brain on FalkorDB"
+description = "Yaan (formerly Lore): a time-aware company brain on FalkorDB"
 requires-python = ">=3.11"
 # Runtime deps arrive with the phase that first needs them (`uv add --project backend <pkg>`):
 # huggingface_hub (Phase 2), fastembed + diskcache (4), rapidfuzz (8), mcp (14).
@@ -23,6 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
+yaan = "app.cli:main"
 lore = "app.cli:main"
 
 [dependency-groups]
