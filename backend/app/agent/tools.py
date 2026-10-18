@@ -235,6 +235,7 @@ def doc_discussion(doc: str, product_id: str, graph: str | None = None) -> dict:
         params = {"doc_id": base, "window_ms": DOC_WINDOW_MS, "limit": 60}
         messages = db.run("doc_discussion", params, graph=graph).rows
         meetings = db.run("doc_meetings", {"doc_id": base}, graph=graph).rows
+        authors = {p for v in versions for p in v["authors"]}
         documents.append(
             {
                 "base_id": base,
@@ -242,11 +243,30 @@ def doc_discussion(doc: str, product_id: str, graph: str | None = None) -> dict:
                 "versions": [
                     {k: v[k] for k in ("id", "version", "title", "ts_iso", "url")} for v in versions
                 ],
-                "authors": sorted({p for v in versions for p in v["authors"]}),
-                "slack_discussion": [
-                    {**m, "text": clip(m["text"], LIST_TEXT_CHARS)} for m in messages
+                "authors": sorted(authors),
+                # Two lists, not a flag: the model read a flagged author summary as the
+                # author's own suggestions (D047). The review is what others said.
+                "feedback": [
+                    {**m, "text": clip(m["text"], LIST_TEXT_CHARS)}
+                    for m in messages
+                    if m["person_id"] not in authors
                 ],
-                "meetings": meetings,
+                "author_messages": [
+                    {**m, "text": clip(m["text"], LIST_TEXT_CHARS)}
+                    for m in messages
+                    if m["person_id"] in authors
+                ],
+                "meetings": [
+                    {
+                        **mt,
+                        "speakers": [
+                            {**s, "is_author": s["id"] in authors}
+                            for s in mt["speakers"]
+                            if s["id"]
+                        ],
+                    }
+                    for mt in meetings
+                ],
             }
         )
     return {
@@ -277,6 +297,9 @@ def list_prs(product_id: str, status: str | None = None, graph: str | None = Non
     rows = db.run("product_prs", params, graph=graph).rows
     for r in rows:
         r["reviews"] = [rv for rv in r["reviews"] if rv["id"]]
+        r["reverted_by"] = [
+            {**u, "reason": clip(u["reason"], 300)} for u in r["reverted_by"] if u["number"]
+        ]
     return {"product_id": product_id, "prs": rows, "cypher": ["product_prs.cypher"]}
 
 
@@ -354,10 +377,14 @@ TOOL_SPECS = [
     ),
     _tool(
         "doc_discussion",
-        "A document's authors and how it was reviewed: every Slack message in the channel "
-        "where it was shared, from the share until a newer version was shared (with each "
-        "author's id and role), and the meetings that discussed it (with speakers and roles). "
-        "Use it for who wrote or reviewed a document and what changes people suggested.",
+        "A document's authors and how it was reviewed: 'feedback' holds every Slack message "
+        "by other people in the channel where it was shared, from the share until a newer "
+        "version was shared (with each person's id and role); 'author_messages' holds the "
+        "author's own share, replies and summaries, which are not suggestions by the author; "
+        "and the meetings that discussed it (speakers with roles, is_author marked). Use it "
+        "for who wrote or reviewed a document and what changes people suggested. Changes "
+        "suggested by a role are what people with that role said in feedback or meetings; "
+        "if the only person with that role is the author, nobody with it suggested changes.",
         {
             "doc": {
                 "type": "string",
@@ -377,7 +404,9 @@ TOOL_SPECS = [
         "list_prs",
         "The product's own pull requests with number, title, url, current status and the "
         "status history (open, approved, changes_requested, merged, closed), author and "
-        "reviewers. 'Approved but not merged' PRs show status 'approved'.",
+        "reviewers. 'Approved but not merged' PRs show status 'approved'. A PR undone by a "
+        "later 'Revert PR# N' pull request lists it in reverted_by, with the stated reason: "
+        "the PRs that 'were reverted' are these originals, not the revert PRs.",
         {
             "status": _nullable(
                 {

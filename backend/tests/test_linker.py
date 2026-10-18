@@ -95,6 +95,21 @@ def test_a_cross_product_pr_reference_is_a_share_not_delivery(meta, widget):
     assert "link_implements" not in rows and "link_fixes" not in rows  # never from a mention
 
 
+def test_a_revert_pr_links_to_the_pr_it_undoes_in_its_own_repo(meta, widget):
+    def pr(id_, title, repo, number):
+        return art(id_, "x", kind="pr", title=title, meta={"repo": repo, "number": number})
+
+    original = pr("pr:w8", "Implement GraphQL Server", "s/Widget", 8)
+    undo = pr("pr:w13", "Revert PR# 8: Implement GraphQL Server", "s/Widget", 13)
+    other_repo = pr("pr:g8", "Unrelated", "s/Gadget", 8)
+    dangling = pr("pr:w14", "Revert PR#99: Gone", "s/Widget", 14)
+    rows, unresolved = linker.build_rows(
+        meta, {"Widget": [*widget, original, undo, dangling], "Gadget": [other_repo]}
+    )
+    assert rows["link_reverts"] == [{"revert_id": "pr:w13", "original_id": "pr:w8"}]
+    assert {"artifact_id": "pr:w14", "product": "Widget", "surface": "revert:#99"} in unresolved
+
+
 def test_customers_companies_and_unknown_ids(meta, widget):
     msg = art("msg:cust", "CUST-0002 at Blue Wave reported it; CUST-9999 too. Dee Fox agrees.")
     rows, unresolved = linker.build_rows(meta, {"Widget": [*widget, msg]})

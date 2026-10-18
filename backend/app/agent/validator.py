@@ -68,16 +68,36 @@ def check(answer: dict[str, Any], seen: set[str], texts: dict[str, list[str]]) -
             report.problems.append(
                 f"[{c['n']}] quote is not word for word in {c['artifact_id']}: {c['quote'][:120]!r}"
             )
-    for line in answer["answer_markdown"].splitlines():
+    valid = numbers - report.bad
+    lines = answer["answer_markdown"].splitlines()
+    for i, line in enumerate(lines):
         for unit in units(line):
             markers = {int(m) for m in MARKER.findall(unit)}
             if markers - numbers:
                 missing = ", ".join(f"[{n}]" for n in sorted(markers - numbers))
                 report.problems.append(f"{missing} has no entry in citations: {unit[:120]!r}")
-            if needs_citation(unit) and not (markers & numbers) - report.bad:
+            if needs_citation(unit) and not markers & valid and not cited_children(lines, i, valid):
                 report.uncited.append(unit)
                 report.problems.append(f"no valid citation for: {unit[:160]!r}")
     return report
+
+
+def indent(line: str) -> int:
+    return len(line) - len(line.lstrip())
+
+
+def cited_children(lines: list[str], i: int, valid: set[int]) -> bool:
+    """Do the lines indented under lines[i] carry a valid citation? A list item such as
+    "- PR #13: <url>" is backed by the cited sub-items under it (D047)."""
+    depth = indent(lines[i])
+    for line in lines[i + 1 :]:
+        if not line.strip():
+            continue
+        if indent(line) <= depth:
+            return False
+        if {int(m) for m in MARKER.findall(line)} & valid:
+            return True
+    return False
 
 
 def clean(answer: dict[str, Any], report: Report) -> tuple[dict[str, Any], list[str]]:
@@ -86,11 +106,13 @@ def clean(answer: dict[str, Any], report: Report) -> tuple[dict[str, Any], list[
         return answer, []
     valid = {c["n"] for c in answer["citations"]} - report.bad
     kept_lines, dropped = [], []
-    for line in answer["answer_markdown"].splitlines():
+    lines = answer["answer_markdown"].splitlines()
+    for i, line in enumerate(lines):
         kept = []
+        backed = cited_children(lines, i, valid)
         for unit in units(line):
             markers = {int(m) for m in MARKER.findall(unit)}
-            if needs_citation(unit) and not markers & valid:
+            if needs_citation(unit) and not markers & valid and not backed:
                 dropped.append(unit)
                 continue
             kept.append(MARKER.sub(lambda m: m.group(0) if int(m.group(1)) in valid else "", unit))
@@ -99,7 +121,7 @@ def clean(answer: dict[str, Any], report: Report) -> tuple[dict[str, Any], list[
             bullet = BULLET.match(line)
             if bullet and not BULLET.match(body):  # the bullet's own sentence was dropped
                 body = f"{bullet.group(0).strip()} {body}"
-            kept_lines.append(body)
+            kept_lines.append(line[: indent(line)] + body)
         elif not line.strip():
             kept_lines.append("")
     markdown = "\n".join(kept_lines).strip()

@@ -34,6 +34,8 @@ URL_TAIL = ".,;:!?)]}'"
 EID = re.compile(r"\beid_[0-9a-f]{8}\b")
 CUSTOMER_ID = re.compile(r"\bCUST-\d+\b")
 SPEAKER = re.compile(r"^([^:\n]{2,60}): ", re.MULTILINE)
+# "Revert PR# 8: Implement GraphQL Server": the PR that undoes PR 8 of the same repository.
+REVERT = re.compile(r"^\s*Revert\s+(?:PR\s*)?#\s*(\d+)\b", re.IGNORECASE)
 PERSON_NAME = re.compile(r"^[A-Z][\w'.-]+(?: [A-Z][\w'.-]+){1,3}$")  # "Fiona Miller"
 
 LOAD_ORDER = (
@@ -43,6 +45,7 @@ LOAD_ORDER = (
     "link_mentions_customer",
     "link_mentions_company",
     "link_spoke_in",
+    "link_reverts",
     "set_link_notes",
 )
 
@@ -162,9 +165,37 @@ def build_rows(
             unresolved_log += [
                 {"artifact_id": a.id, "product": product, "surface": u} for u in notes.unresolved
             ]
+        unresolved_log += link_reverts(artifacts, product, rows)
     for name in LOAD_ORDER:  # identical rows (a link shared by two products) load once
         rows[name] = list({json.dumps(r, sort_keys=True): r for r in rows[name]}.values())
     return rows, unresolved_log
+
+
+def link_reverts(
+    artifacts: list[Artifact], product: str, rows: dict[str, list[dict[str, Any]]]
+) -> list[dict[str, Any]]:
+    """(PR)-[:REVERTS]->(PR): a "Revert PR# N" pull request undoes PR N of its own repository.
+
+    The question "which PRs were reverted?" asks for the originals, and only the revert's
+    title says which one it undoes (D047). Returns the reverts whose target isn't loaded.
+    """
+    by_number = {
+        (a.meta.get("repo"), str(a.meta.get("number"))): a.id
+        for a in artifacts
+        if a.kind == "pr" and a.meta
+    }
+    missing = []
+    for a in artifacts:
+        if a.kind != "pr" or not (m := REVERT.match(a.title or "")):
+            continue
+        target = by_number.get((a.meta.get("repo"), m.group(1)))
+        if target and target != a.id:
+            rows["link_reverts"].append({"revert_id": a.id, "original_id": target})
+        elif not target:
+            missing.append(
+                {"artifact_id": a.id, "product": product, "surface": f"revert:#{m.group(1)}"}
+            )
+    return missing
 
 
 def link_artifact(

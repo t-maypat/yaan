@@ -27,7 +27,8 @@ Rules for the answer:
 you.
 - End every factual sentence or list item with [n] markers. Each citation gives the \
 artifact_id it came from (as shown in tool results) and a short quote copied word for word \
-from that artifact's text, under 200 characters.
+from that artifact's text, under 200 characters. Put each list item's [n] on the item's own \
+line.
 - When the question asks for employee IDs, links or company names, give every one exactly \
 as stored: eid_... ids, full URLs, company names. Include all that fit, and only those.
 - If the evidence doesn't answer the question, or nothing in it fits what the question asks \

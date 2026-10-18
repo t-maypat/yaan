@@ -33,6 +33,8 @@ CREATE
   (r1)-[:MENTIONS]->(dee), (r1)-[:MENTIONS]->(cy),
   (p1:Artifact:PR {id: 'pr:w1', kind: 'pr', title: 'Add export', text: 'Adds CSV export.', url: 'https://github.com/salesforce/Widget/pull/1', number: 1, current_status: 'approved', external: false, ts_ms: 4000, ts_iso: '2026-05-01T00:00:04Z', product_id: 'Widget'}),
   (p2:Artifact:PR {id: 'pr:ext', kind: 'pr', title: 'Upstream fix', text: 'Elsewhere.', url: 'https://github.com/example/lib/pull/9', number: 9, current_status: 'merged', external: true, ts_ms: 100, ts_iso: '2025-01-01T00:00:00Z', product_id: 'Widget'}),
+  (p3:Artifact:PR {id: 'pr:w3', kind: 'pr', title: 'Revert PR# 1: Add export', text: 'Reverting because of a change in product direction.', url: 'https://github.com/salesforce/Widget/pull/3', number: 3, current_status: 'merged', external: false, ts_ms: 4500, ts_iso: '2026-05-01T00:00:04Z', product_id: 'Widget'}),
+  (p3)-[:REVERTS]->(p1), (p3)-[:IN_PRODUCT]->(widget),
   (p1)-[:IN_PRODUCT]->(widget), (p2)-[:IN_PRODUCT]->(widget),
   (bo)-[:AUTHORED]->(p1), (cy)-[:REVIEWED {state: 'APPROVED', ts_ms: 4100, comment: 'LGTM, approved!'}]->(p1),
   (dA:Decision {id: 'dec:pr:w1/status:4000', topic: 'pr:w1/status', kind: 'pr_status', value: 'open', valid_from_ms: 4000, valid_to_ms: 4100, status: 'superseded', origin: 'structural'}),

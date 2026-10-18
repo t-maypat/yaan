@@ -53,14 +53,15 @@ def test_doc_discussion_is_the_share_window_plus_meetings(company):
     [doc] = out["documents"]
     assert doc["base_id"] == "doc:wdai_vision" and doc["authors"] == ["eid_a1"]
     assert [v["version"] for v in doc["versions"]] == ["base", "final"]
-    # From the first share to the share of the newer version; the later chat is out.
-    assert [m["id"] for m in doc["slack_discussion"]] == ["msg:m1", "msg:m2", "msg:m3", "msg:m4"]
-    assert doc["slack_discussion"][1]["role"] == "Engineering Lead"
+    # From the first share to the share of the newer version; the later chat is out. The
+    # author's own messages are kept apart: their to-do list is not their suggestion (D047).
+    assert [m["id"] for m in doc["feedback"]] == ["msg:m2", "msg:m3"]
+    assert [m["id"] for m in doc["author_messages"]] == ["msg:m1", "msg:m4"]
+    assert doc["feedback"][0]["role"] == "Engineering Lead"
     [meeting] = doc["meetings"]
-    assert meeting["id"] == "mtg:wd_1" and {s["id"] for s in meeting["speakers"]} == {
-        "eid_a1",
-        "eid_b2",
-    }
+    assert meeting["id"] == "mtg:wd_1"
+    speakers = {(s["id"], s["is_author"]) for s in meeting["speakers"]}
+    assert speakers == {("eid_a1", True), ("eid_b2", False)}
     assert tools.doc_discussion("Roadmap", "Widget", graph=company)["documents"] == []
 
 
@@ -72,10 +73,16 @@ def test_issue_reports_join_customers_to_companies(company):
 
 
 def test_list_prs_leaves_out_external_prs_and_shows_the_chain(company):
-    [pr] = tools.list_prs("Widget", graph=company)["prs"]
-    assert pr["id"] == "pr:w1" and pr["chain"] == ["open", "approved"]
-    assert pr["authors"] == ["eid_b2"] and pr["reviews"] == [{"id": "eid_c3", "state": "APPROVED"}]
-    assert tools.list_prs("Widget", status="merged", graph=company)["prs"] == []
+    prs = {p["id"]: p for p in tools.list_prs("Widget", graph=company)["prs"]}
+    assert set(prs) == {"pr:w1", "pr:w3"}  # the external PR is left out
+    pr = prs["pr:w1"]
+    assert pr["chain"] == ["open", "approved"] and pr["authors"] == ["eid_b2"]
+    assert pr["reviews"] == [{"id": "eid_c3", "state": "APPROVED"}]
+    [undo] = pr["reverted_by"]  # "Revert PR# 1" names the original (D047)
+    assert undo["number"] == 3 and "product direction" in undo["reason"]
+    assert prs["pr:w3"]["reverts"] == [1] and prs["pr:w3"]["reverted_by"] == []
+    merged = tools.list_prs("Widget", status="merged", graph=company)["prs"]
+    assert [p["id"] for p in merged] == ["pr:w3"]
 
 
 def test_links_shared_counts_only_this_products_sharers(company):

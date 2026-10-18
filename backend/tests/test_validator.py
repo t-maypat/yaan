@@ -77,3 +77,24 @@ def test_an_abstention_is_not_checked():
 def test_the_schema_matches_the_model():
     assert set(SCHEMA["properties"]) == set(Answer.model_fields)
     assert SCHEMA["additionalProperties"] is False
+
+
+def test_a_list_item_is_backed_by_its_cited_sub_items():
+    a = answer(
+        "Reverted PRs:\n"
+        "- https://github.com/salesforce/ainAIX/pull/26\n"
+        "  - Reverted for the new product direction [1].\n"
+        "- https://github.com/salesforce/ainAIX/pull/99\n"
+        "  - No source for this one.",
+        [(1, "msg:1", "revert PR 26 given the new product direction")],
+    )
+    report = validator.check(a, SEEN, TEXTS)
+    assert report.uncited == [
+        "- https://github.com/salesforce/ainAIX/pull/99",
+        "- No source for this one.",
+    ]
+    cleaned, _ = validator.clean(a, report)
+    assert cleaned["answer_markdown"] == (
+        "Reverted PRs:\n- https://github.com/salesforce/ainAIX/pull/26\n"
+        "  - Reverted for the new product direction [1]."
+    )
