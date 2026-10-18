@@ -10,8 +10,6 @@ import sys
 
 # command -> (docs/PLAN.md phase that builds it, help text)
 PENDING: dict[str, tuple[str, str]] = {
-    "ingest": ("Phase 3", "load normalized products into a graph (stages S2-S10)"),
-    "health": ("Phase 3", "print the graph-health report"),
     "ask": ("Phase 4", "answer a question (baseline RAG in Phase 4, Lore agent in Phase 9)"),
     "eval": ("Phase 5", "run and score a system on an eval split"),
     "seed": ("Phase 15", "rebuild the demo graph from exports/ without LLM calls"),
@@ -82,6 +80,50 @@ def cmd_normalize(args: argparse.Namespace) -> int:
     return 0
 
 
+INGEST_STAGES = ("structural",)  # later phases add lexical, link, extract, …
+
+
+def cmd_ingest(args: argparse.Namespace) -> int:
+    from app import schema
+    from app.config import get_settings
+    from app.eval.split import read_split
+    from app.ingest import health, structural
+    from app.ingest.normalize import normalized_dir, read_jsonl
+
+    graph = args.graph or get_settings().lore_graph
+    products = args.products or read_split()["dev"]
+    schema.apply(graph)  # indexes before any MERGE (load order matters, decisions.md)
+    problems = schema.verify(graph)
+    if problems:
+        print(f"lore ingest: schema problems on {graph!r}: {problems}", file=sys.stderr)
+        return 1
+    artifacts = {}
+    for name in products:
+        path = normalized_dir(name) / "artifacts.jsonl"
+        if not path.is_file():
+            print(f"lore ingest: {path} is missing: run `lore normalize`", file=sys.stderr)
+            return 1
+        artifacts[name] = read_jsonl(path)
+    rows = structural.build_rows(structural.load_metadata(), artifacts)
+    print(f"{'query':<24}{'rows':>8}{'nodes+':>9}{'edges+':>9}{'props set':>11}")
+    for query, r in structural.load(rows, graph).items():
+        print(
+            f"{query:<24}{r['rows']:>8}{r['nodes_created']:>9}"
+            f"{r['relationships_created']:>9}{r['properties_set']:>11}"
+        )
+    print(f"\ngraph {graph!r}, products {', '.join(products)}\n")
+    print(health.render(health.report(graph)))
+    return 0
+
+
+def cmd_health(args: argparse.Namespace) -> int:
+    from app.config import get_settings
+    from app.ingest import health
+
+    print(health.render(health.report(args.graph or get_settings().lore_graph)))
+    return 0
+
+
 # command -> (help text, handler)
 COMMANDS = {
     "schema": ("create and verify the indexes for a graph (queries/00_schema.cypher)", cmd_schema),
@@ -89,6 +131,8 @@ COMMANDS = {
     "rank-dev": ("rank products by change signals to pick the dev products (D017)", cmd_rank_dev),
     "normalize": ("HERB products -> data/normalized/<product>/artifacts.jsonl (S1)", cmd_normalize),
     "split": ("draw the held-out test products once (seeded) into eval/split.json", cmd_split),
+    "ingest": ("load normalized products into a graph (stages: structural)", cmd_ingest),
+    "health": ("print the graph-health report (S10)", cmd_health),
 }
 
 # command -> [(flag, argparse options)]
@@ -97,6 +141,12 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
     "normalize": [
         ("--products", {"nargs": "+", "help": "product names (default: the dev products)"})
     ],
+    "ingest": [
+        ("--products", {"nargs": "+", "help": "product names (default: the dev products)"}),
+        ("--stages", {"nargs": "+", "choices": INGEST_STAGES, "default": list(INGEST_STAGES)}),
+        ("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"}),
+    ],
+    "health": [("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"})],
 }
 
 

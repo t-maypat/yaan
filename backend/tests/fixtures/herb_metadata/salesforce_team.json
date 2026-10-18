@@ -1,0 +1,18 @@
+[
+  {
+    "employee_id": "eid_aaaa0000", "name": "Vera Park", "role": "VP of Engineering", "location": "Remote", "org": "tableau",
+    "engineering_leads": [
+      {
+        "employee_id": "eid_aaaa0001", "name": "Ann Lee", "role": "Engineering Lead", "location": "Remote", "org": "tableau",
+        "engineers": [{"employee_id": "eid_aaaa0002", "name": "Ann Lee", "role": "Software Engineer", "location": "Austin", "org": "tableau"}],
+        "qa_specialists": [{"employee_id": "eid_aaaa0003", "name": "Bo Chen", "role": "QA Specialist", "location": "Austin", "org": "tableau"}]
+      }
+    ],
+    "product_managers": [{"employee_id": "eid_aaaa0004", "name": "Cy Diaz", "role": "Product Manager", "location": "Remote", "org": "tableau"}],
+    "tech_architects": [],
+    "ux_researchers": [],
+    "marketing_research_analysts": [],
+    "chief_product_officers": [],
+    "marketing_managers": []
+  }
+]

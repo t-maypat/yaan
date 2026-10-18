@@ -345,9 +345,11 @@ def test_a12_reads_cannot_write_through_either_lock(graph):
         db.client(readonly=False).connection.execute_command("FLUSHALL")
 
 
-@pytest.mark.skip(reason="needs real data: measured with GRAPH.MEMORY USAGE in Phase 3.9")
-def test_a13_memory_per_graph():
-    pass
+def test_a13_memory_per_graph(admin, graph):
+    # The real number (dev products, Phase 3.9) is in decisions.md A13; this pins the command.
+    reply = admin.connection.execute_command("GRAPH.MEMORY", "USAGE", graph)
+    sizes = dict(zip(reply[::2], reply[1::2], strict=False))
+    assert int(sizes["total_graph_sz_mb"]) >= 0
 
 
 def test_a14_python_client_timeout_and_read_only_path(graph):
