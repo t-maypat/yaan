@@ -31,6 +31,7 @@ from app.config import get_settings
 READ_TIMEOUT_MAX_MS = 120_000  # TIMEOUT_MAX in docker-compose.yml (D014)
 WRITE_BATCH_ROWS = 500  # rows per write statement, well under the 10 s write budget
 SOCKET_TIMEOUT_S = 130  # the server stops any query by 120 s; this only catches a dead connection
+CONNECT_TIMEOUT_S = 5  # an unreachable host fails fast (e.g. /health) instead of hanging
 
 # Change counters summed across a write's batches (falkordb QueryResult properties).
 STAT_FIELDS = (
@@ -103,6 +104,7 @@ def client(readonly: bool) -> FalkorDB:
         username=user,
         password=password,
         socket_timeout=SOCKET_TIMEOUT_S,
+        socket_connect_timeout=CONNECT_TIMEOUT_S,
     )
 
 
