@@ -181,6 +181,12 @@ def table(paths: list[Path] | None = None) -> str:
         "their mean; Unanswerable is the % of unanswerable questions left unanswered. The "
         "reference row is HERB's published product-specific result: a different answer "
         "model and setup, so context only.",
+        "",
+        "Run-to-run spread: answers are sampled (Haiku 5.5 takes no temperature), so one dev run "
+        "of the same system moves by a few Avg points. The baseline scored 16.4 and 13.8 on two "
+        "13 Oct runs; between them only the search changed (4.9). Per question, scores moved "
+        "both ways and followed the model's choice to answer partly or abstain, not what search "
+        "found (D043).",
     ]
     return "\n".join(lines) + "\n"
 

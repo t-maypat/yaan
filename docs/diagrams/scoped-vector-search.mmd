@@ -1,0 +1,15 @@
+%% Product-scoped vector search (4.9, D042): ask-then-filter loses candidates; walk-then-score doesn't.
+flowchart TB
+  subgraph OLD["Before: ask the index graph-wide, then filter"]
+    direction LR
+    O1["Question<br/>vector"]:::code --> O2["Vector index<br/>nearest 100 chunks<br/>in the whole graph"]:::store
+    O2 --> O3["Keep only<br/>CollaborateForce's"]:::code
+    O3 --> O4["23 of 100 left<br/>fewer with every<br/>product added"]:::guard
+  end
+  subgraph NEW["Now: walk the product's own chunks, score each one exactly"]
+    direction LR
+    N1["Product node<br/>found by id index"]:::store --> N2["Product ← IN_PRODUCT ← Artifact<br/>→ HAS_CHUNK → Chunk<br/>about 2,100 chunks"]:::store
+    N2 --> N3["vec.cosineDistance<br/>on every chunk<br/>about 2.6 ms"]:::code
+    N3 --> N4["exact top 60<br/>the same at any<br/>graph size"]:::file
+  end
+  OLD ~~~ NEW
