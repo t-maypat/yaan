@@ -57,11 +57,24 @@ def cmd_rank_dev(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_split(args: argparse.Namespace) -> int:
+    from app.eval.split import SEED, eval_path, make_split
+
+    split, written = make_split()
+    print(f"seed {SEED} (from the HERB revision)")
+    for key in ("dev", "test", "rest"):
+        print(f"  {key:<5}{len(split[key]):>3}  {', '.join(split[key])}")
+    state = "wrote" if written else "checked (unchanged)"
+    print(f"\n{state} {eval_path('split.json')}")
+    return 0
+
+
 # command -> (help text, handler)
 COMMANDS = {
     "schema": ("create and verify the indexes for a graph (queries/00_schema.cypher)", cmd_schema),
     "fetch-herb": ("download the HERB dataset (pinned revision) into data/herb", cmd_fetch_herb),
     "rank-dev": ("rank products by change signals to pick the dev products (D017)", cmd_rank_dev),
+    "split": ("draw the held-out test products once (seeded) into eval/split.json", cmd_split),
 }
 
 # command -> [(flag, argparse options)]

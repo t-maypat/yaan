@@ -1,0 +1,41 @@
+{
+  "seed": 2685127176,
+  "dev": [
+    "ExplainabilityForce",
+    "CollaborateForce",
+    "VizForce"
+  ],
+  "test": [
+    "ContentForce",
+    "EdgeForce",
+    "KnowledgeForce",
+    "MonitorForce",
+    "SearchFlow",
+    "SearchForce",
+    "SummarizeForce"
+  ],
+  "rest": [
+    "ActionGenie",
+    "AnomalyForce",
+    "AutoTuneForce",
+    "CoachForce",
+    "CollaborationForce",
+    "ConnectForce",
+    "ContextForce",
+    "FeedbackForce",
+    "FlowForce",
+    "ForecastForce",
+    "InsightForce",
+    "LeadForce",
+    "PersonalizeForce",
+    "PitchForce",
+    "ProposalForce",
+    "SecurityForce",
+    "SentimentForce",
+    "SupportForce",
+    "TrendForce",
+    "WorkFlowGenie"
+  ],
+  "herb_revision": "a00bca08f9118e482e6de9951fdcb654fbed5343",
+  "created": "2026-10-11T15:55:43+00:00"
+}
