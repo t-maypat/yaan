@@ -1,0 +1,20 @@
+%% What Phase 3 loads: the structural graph, built without any LLM (S2; D026, D028, D029).
+flowchart LR
+  ORG["Org<br/>6, e.g. tableau"]:::store
+  TEAM["Team<br/>18 VP groups"]:::store
+  PERSON["Person<br/>530 employees"]:::store
+  CUST["Customer<br/>120"]:::store
+  CO["Company<br/>10"]:::store
+  ART["Artifact<br/>Message · Meeting · MeetingChat<br/>Doc · PR · Link"]:::file
+  CH["Channel<br/>stage: planning / dev / support"]:::file
+  PROD["Product<br/>aliases = codenames"]:::store
+  DEC["Decision<br/>pr:id/status<br/>valid_from → valid_to<br/>SUPERSEDES older ones"]:::guard
+  TEAM -- "PART_OF" --> ORG
+  PERSON -- "MEMBER_OF" --> TEAM
+  PERSON -- "REPORTS_TO" --> PERSON
+  CUST -- "WORKS_AT" --> CO
+  PERSON -- "AUTHORED · ATTENDED<br/>REVIEWED {state, ts}" --> ART
+  ART -- "IN_CHANNEL" --> CH
+  ART -- "IN_PRODUCT" --> PROD
+  DEC -- "AFFECTS<br/>EVIDENCED_BY {field, quote}" --> ART
+  DEC -- "DECIDED_BY" --> PERSON

@@ -1,0 +1,15 @@
+%% One real PR's structural decision chain: CollaborateForce PR #1 (Phase 3.5, D028).
+flowchart RL
+  D1["Decision: open<br/>6 Jul 22:51 → 7 Jul 07:33<br/>superseded"]:::guard
+  D2["Decision: changes_requested<br/>7 Jul 07:33 → 07:39<br/>superseded"]:::guard
+  D3["Decision: closed<br/>7 Jul 07:39 → now<br/>active · time inferred"]:::guard
+  PR["PR #1 salesforce/CollaborateForce<br/>state: closed, merged: False<br/>current_status = closed"]:::file
+  A["eid_a7dd9c52<br/>author"]:::human
+  R["eid_01e37306<br/>reviewer"]:::human
+  D3 -- "SUPERSEDES" --> D2
+  D2 -- "SUPERSEDES" --> D1
+  D1 -- "DECIDED_BY" --> A
+  D2 -- "DECIDED_BY" --> R
+  D1 -- "EVIDENCED_BY summary" --> PR
+  D2 -- "EVIDENCED_BY review comment" --> PR
+  D3 -- "EVIDENCED_BY state: closed" --> PR
