@@ -28,25 +28,26 @@
 }
 
 :root[data-theme="dark"] {
-  --paper: #0e141b;
-  --paper-2: #121a23;
-  --surface: #151d27;
-  --surface-2: #19232e;
-  --ink: #e5eaf0;
-  --ink-2: #c8d1db;
-  --muted: #93a1b1;
-  --faint: #6a7889;
-  --rule: #253140;
-  --rule-2: #314052;
-  --mark: #e8cd45;
-  --mark-ink: #12171e;
-  --link: #69b6d0;
-  --link-soft: #16303c;
-  --warn: #e58a75;
-  --warn-soft: #3a2420;
+  /* graphite (D085) */
+  --paper: #111214;
+  --paper-2: #141517;
+  --surface: #18191c;
+  --surface-2: #1f2125;
+  --ink: #ecedee;
+  --ink-2: #c9ccd0;
+  --muted: #9a9fa6;
+  --faint: #6e737a;
+  --rule: #2a2d32;
+  --rule-2: #363a40;
+  --mark: #f2d24b;
+  --mark-ink: #111214;
+  --link: #5fb3c9;
+  --link-soft: #1b2e35;
+  --warn: #e8907a;
+  --warn-soft: #3a2621;
   --ok: #6fc59a;
   --shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 12px 32px -12px rgba(0, 0, 0, .5);
-  --shadow-sm: 0 6px 16px -8px rgba(0, 0, 0, .5);
+  --shadow-sm: 0 6px 16px -8px rgba(0, 0, 0, .55);
   color-scheme: dark;
 }
 

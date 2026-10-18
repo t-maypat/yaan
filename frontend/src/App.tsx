@@ -310,7 +310,12 @@ function Opening({ form, onPick, products }: { form: ReactNode; onPick: (s: Sugg
       <div className="mt-14">
         <h2 className="font-serif text-[1.6rem] tracking-[-0.01em]">Try a question from the data</h2>
         <p className="text-sm text-muted mt-0.5">
-          The data is HERB, a public synthetic company. Each product also goes by a codename in its chats.
+          The data is{" "}
+          <a className="text-link underline underline-offset-2" href="https://arxiv.org/abs/2506.23139">
+            HERB
+          </a>
+          , Salesforce AI Research's enterprise benchmark (EMNLP 2025): a synthetic company. Each product also goes by a
+          codename in its chats.
         </p>
         <QuestionIndex onPick={onPick} products={products} />
       </div>

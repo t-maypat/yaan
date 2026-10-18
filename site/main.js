@@ -25,6 +25,7 @@
     try { localStorage.setItem('lore-theme', next); } catch (e) { /* storage blocked: theme lasts this visit */ }
     syncThemeLabel();
     graph && graph.refreshColors();
+    shade && shade.refresh();
   });
 
   /* ---------------- nav ---------------- */
@@ -32,9 +33,10 @@
   const onScroll = () => nav.classList.toggle('is-scrolled', scrollY > 12);
   addEventListener('scroll', onScroll, { passive: true });
   onScroll();
-  const night = document.getElementById('falkordb');
-  if (night) {
-    const darkCheck = () => { const r = night.getBoundingClientRect(); nav.classList.toggle('on-dark', r.top <= 40 && r.bottom > 40); };
+  // the bar turns dark over the dark bands (the metrics side panel and Why FalkorDB)
+  const nights = [document.getElementById('falkordb'), document.querySelector('.mx-side')].filter(Boolean);
+  if (nights.length) {
+    const darkCheck = () => nav.classList.toggle('on-dark', nights.some((el) => { const r = el.getBoundingClientRect(); return r.top <= 40 && r.bottom > 40 && r.right > innerWidth - 40; }));
     addEventListener('scroll', darkCheck, { passive: true }); darkCheck();
   }
   const navLinks = $$('.nav-links a');
@@ -46,6 +48,67 @@
   }, { rootMargin: '-45% 0px -50% 0px' });
   // sections without a nav link clear the highlight
   ['problem', 'how', 'features', 'results', 'falkordb', 'works', 'next'].forEach((id) => { const el = document.getElementById(id); el && secObs.observe(el); });
+
+  /* =====================================================================
+     Hero shade: slow graphite smoke on the far sides only (a WebGL
+     fragment shader at half resolution). Quiet by design: it never
+     reaches the headline, and with reduced motion it is one still frame.
+     ===================================================================== */
+  const shade = (() => {
+    const hero = $('.hero');
+    const cv = document.createElement('canvas');
+    cv.className = 'hero-shade'; cv.setAttribute('aria-hidden', 'true');
+    hero.prepend(cv);
+    const gl = cv.getContext('webgl', { premultipliedAlpha: true, antialias: false, alpha: true });
+    if (!gl) { cv.remove(); return null; }
+    const VS = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
+    const FS = `precision mediump float;
+      uniform vec2 r; uniform float t; uniform vec3 c; uniform float a;
+      float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+      float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+        return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+      float fbm(vec2 p){float v=0.,s=.5;for(int i=0;i<5;i++){v+=s*n(p);p=p*2.03+vec2(1.7,9.2);s*=.5;}return v;}
+      void main(){
+        vec2 uv=gl_FragCoord.xy/r; vec2 p=uv*vec2(r.x/r.y,1.)*2.2;
+        vec2 q=vec2(fbm(p+vec2(0.,t*.035)),fbm(p+vec2(5.2,1.3)-t*.025));
+        float f=fbm(p+2.4*q+vec2(t*.012,0.));
+        float side=smoothstep(.3,.02,uv.x)+smoothstep(.7,.98,uv.x);
+        float vert=smoothstep(0.,.25,uv.y)*smoothstep(1.,.7,uv.y);
+        float al=a*side*vert*smoothstep(.38,.82,f);
+        gl_FragColor=vec4(c*al,al);
+      }`;
+    const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); return o; };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { cv.remove(); return null; }
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, 'p');
+    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    const U = { r: gl.getUniformLocation(prog, 'r'), t: gl.getUniformLocation(prog, 't'), c: gl.getUniformLocation(prog, 'c'), a: gl.getUniformLocation(prog, 'a') };
+    const tint = () => {
+      const rgb = cssVar('--shade').split(',').map((x) => +x / 255);
+      gl.uniform3f(U.c, rgb[0], rgb[1], rgb[2]);
+      gl.uniform1f(U.a, parseFloat(cssVar('--shade-a')) || .3);
+    };
+    const size = () => {
+      const w = Math.max(1, Math.round(cv.clientWidth * .5)), h = Math.max(1, Math.round(cv.clientHeight * .5));
+      cv.width = w; cv.height = h; gl.viewport(0, 0, w, h); gl.uniform2f(U.r, w, h);
+    };
+    const frame = (ms) => { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.uniform1f(U.t, ms / 1000 + 40); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); };
+    let raf = 0, run = false, last = 0;
+    const loop = (ms) => { if (ms - last > 33) { frame(ms); last = ms; } raf = run ? requestAnimationFrame(loop) : 0; };
+    const start = () => { if (run) return; if (reduced) { frame(0); return; } run = true; raf = requestAnimationFrame(loop); };
+    const stop = () => { run = false; cancelAnimationFrame(raf); };
+    tint(); size(); frame(0);
+    requestAnimationFrame(() => cv.classList.add('on'));
+    new ResizeObserver(() => { size(); if (!run) frame(0); }).observe(cv);
+    new IntersectionObserver(([e]) => (e.isIntersecting ? start() : stop())).observe(hero);
+    return { refresh() { tint(); if (!run) frame(0); } };
+  })();
 
   /* =====================================================================
      Hero graph: the real subgraph around ExplainabilityForce, drawn in the
@@ -129,7 +192,8 @@
       flankL = Math.max(0, left - 24); flankR = Math.max(0, right - 24);
       cTop = c.top - r.top + 80;
       compact = flankL < 150;
-      const top = Math.max(70, cTop - 360), bottom = Math.min(H - 40, cTop + c.height + 40);
+      // beside the console only: from its top bar down to its last row
+      const top = cTop + 14, bottom = Math.min(H - 30, cTop + c.height + 10);
       NODES.forEach((n) => {
         if (compact) {
           // narrow screens: a quiet band of nodes above the console, no labels
@@ -137,9 +201,7 @@
           n.y = 40 + n.v * Math.max(120, cTop - 120);
         } else {
           n.y = top + n.v * (bottom - top);
-          // above the console the margin widens to the edge of the subhead
-          let fw = n.s === 'L' ? flankL : flankR;
-          if (n.y < cTop - 40) fw = Math.max(fw, (W - 760) / 2 - 10);
+          const fw = n.s === 'L' ? flankL : flankR;
           n.fw = fw;
           n.x = n.s === 'L' ? 22 + n.u * (fw - 30) : W - 22 - n.u * (fw - 30);
         }
@@ -151,9 +213,9 @@
       const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
       for (let i = 0; i < count; i++) {
         const side = rnd() < .5 ? 'L' : 'R';
-        const fw = compact ? W * .45 : (side === 'L' ? flankL : flankR) + 160;
+        const fw = compact ? W * .45 : (side === 'L' ? flankL : flankR) + 20;
         const x = side === 'L' ? rnd() * fw : W - rnd() * fw;
-        const y = compact ? 20 + rnd() * Math.max(140, cTop - 60) : 80 + rnd() * (H - 120);
+        const y = compact ? 20 + rnd() * Math.max(140, cTop - 60) : cTop - 10 + rnd() * (H - cTop - 40);
         dust.push({ x, y, r: 1.2 + rnd() * 1.8, ph: rnd() * 6.28 });
       }
     }
@@ -642,50 +704,73 @@
   })();
 
   /* =====================================================================
-     Results: the FalkorDB-graph switch and the bar tooltips.
+     Results: grouped bars, one tab per metric. Lore is the one coloured
+     series; everything it's compared with is a pale bar beside it.
      ===================================================================== */
   (() => {
-    const sw = $('#graphSwitch'); if (!sw) return;
-    const box = $('#ablate'), label = $('#swLabel');
-    const bar = $('#barLore'), barV = $('#barLoreV');
-    const figs = [
-      { n: $('#abAvg'), on: 63.6, off: 24.2, pct: false, bar: true },
-      { n: $('#abCust'), on: 54.2, off: 0.0, pct: false },
-      { n: $('#abStale'), on: 0, off: 8.7, pct: true },
+    const bars = $('#mxBars'); if (!bars) return;
+    const ICON = {
+      lore: '<svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><path d="M7 20 L14 8 L21 18 Z" stroke="currentColor" stroke-width="2"/><circle cx="7" cy="20" r="3.4" fill="currentColor"/><circle cx="21" cy="18" r="3.4" fill="currentColor"/><rect x="10.4" y="4.4" width="7.2" height="7.2" rx="1.6" fill="currentColor"/></svg>',
+      search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></svg>',
+      rag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M9 11h6M9 15h6"/></svg>',
+      paper: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h7a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M20 5h-7a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h7z"/></svg>',
+    };
+    const S = {
+      lore: { name: 'Lore', icon: 'lore' },
+      search: { name: 'Lore without the FalkorDB graph', icon: 'search' },
+      rag: { name: 'Plain RAG', icon: 'rag' },
+      paper: { name: 'HERB paper’s best agent (GPT-4o)', icon: 'paper' },
+    };
+    const TABS = [
+      {
+        ylab: 'Judged score (0–100)', max: 80, ticks: [0, 20, 40, 60, 80], unit: '', series: ['lore', 'search', 'rag'],
+        groups: [['Content', [64.0, 17.7, 12.6]], ['People', [65.2, 37.6, 13.3]], ['Customer', [54.2, 0.0, 0.0]], ['Artifact', [71.3, 41.5, 12.6]]],
+        cap: 'Held-out products, one run per system. Same model, judge prompts and search for every system; “without the FalkorDB graph” keeps vector and full-text search and loses every graph query.',
+      },
+      {
+        ylab: 'Score / share (0–100)', max: 100, ticks: [0, 25, 50, 75, 100], series: ['lore', 'paper'],
+        groups: [['Average score', [63.6, 43.4], ''], ['Unanswerable questions declined', [76.7, 29.3], '%']],
+        cap: 'The paper’s best product-specific agent is GPT-4o with ReAct (HERB, Salesforce AI Research, EMNLP 2025); Lore runs Claude Haiku 5.5 with HERB’s judge prompts. Different model and setup: shown for context.',
+      },
+      {
+        ylab: 'Answers right (%)', max: 100, ticks: [0, 25, 50, 75, 100], unit: '%', series: ['lore', 'search', 'rag'],
+        groups: [['All drift questions', [95.8, 70.8, 54.2]], ['Current status', [100, 54.5, 54.5]], ['As of a date', [100, 80, 60]]],
+        cap: 'HERB-Drift: 24 hand-labeled questions on Salesforce AI Research’s HERB data about status now and on a past date, ground truth read from the raw messages. Stale answers: Lore 0%, search only 8.7%, plain RAG 6.7%.',
+      },
     ];
-    const fmt = (f, v) => f.pct ? (v === 0 ? '0%' : v.toFixed(1) + '%') : v.toFixed(1);
-    sw.addEventListener('click', () => {
-      const on = sw.getAttribute('aria-checked') !== 'true';
-      sw.setAttribute('aria-checked', String(on));
-      label.textContent = on ? 'FalkorDB graph on' : 'FalkorDB graph off';
-      box.classList.toggle('is-off', !on);
-      figs.forEach((f) => {
-        const from = parseFloat(f.n.textContent), to = on ? f.on : f.off;
-        if (f.bar) { bar.style.setProperty('--v', to); barV.parentElement.style.setProperty('--v', to); barV.style.setProperty('--v', to); }
-        const set = (v) => { f.n.textContent = fmt(f, v); if (f.bar) barV.textContent = fmt(f, v); };
-        if (reduced) return set(to);
-        const t0 = performance.now(), D = 900;
-        const tick = (t) => {
-          const k = Math.min(1, (t - t0) / D), e = 1 - Math.pow(1 - k, 3);
-          set(k < 1 ? from + (to - from) * e : to);
-          if (k < 1) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
+    const fmt = (v, unit) => (Number.isInteger(v) && unit === '%' ? v : v.toFixed(1)) + unit;
+    const draw = (i) => {
+      const T = TABS[i];
+      $('#mxYlab').textContent = T.ylab;
+      $('#mxLegend').innerHTML = T.series.map((k) => `<span class="lg-${k}">${ICON[S[k].icon]}${S[k].name}</span>`).join('');
+      $('#mxCap').textContent = T.cap;
+      const grid = T.ticks.map((t) => `<div class="mx-grid" style="bottom:${t / T.max * 100}%"><span>${t}${T.unit === '%' ? '%' : ''}</span></div>`).join('');
+      const groups = T.groups.map(([label, vals, unit], g) => {
+        const u = unit ?? T.unit;
+        const cols = vals.map((v, k) => {
+          const key = T.series[k], h = v / T.max * 100;
+          return `<div class="mx-bar ${key === 'lore' ? 'is-lore' : ''} ${h < 9 ? 'short' : ''}" style="--h:${h};--d:${(g * vals.length + k) * 0.06}s" title="${S[key].name}: ${fmt(v, u)}">${ICON[S[key].icon]}<span class="mx-v">${fmt(v, u)}</span></div>`;
+        }).join('');
+        return `<div class="mx-group">${cols}<span class="mx-x">${label}</span></div>`;
+      }).join('');
+      bars.innerHTML = grid + groups;
+    };
+    const tabs = $$('.mx-tab');
+    const pick = (i, focus) => {
+      tabs.forEach((t, k) => { t.setAttribute('aria-selected', String(k === i)); t.tabIndex = k === i ? 0 : -1; });
+      draw(i);
+      if (focus) tabs[i].focus();
+    };
+    tabs.forEach((t, i) => {
+      t.addEventListener('click', () => pick(i));
+      t.addEventListener('keydown', (e) => {
+        const k = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+        if (k) { e.preventDefault(); pick((i + k + tabs.length) % tabs.length, true); }
       });
     });
-    // one tooltip per bar, near the end of the hovered bar
-    const tip = $('#barsTip'), fig = $('.bars');
-    $$('.bar-row').forEach((row) => {
-      const show = () => {
-        tip.textContent = row.dataset.tip;
-        const r = row.getBoundingClientRect(), f = fig.getBoundingClientRect(), b = $('.bar', row).getBoundingClientRect();
-        tip.style.left = Math.min(b.right - f.left + 12, f.width - 300) + 'px';
-        tip.style.top = (r.top - f.top - 30) + 'px';
-        tip.classList.add('on');
-      };
-      row.addEventListener('mouseenter', show);
-      row.addEventListener('mouseleave', () => tip.classList.remove('on'));
-    });
+    // the bars grow when the chart first scrolls into view
+    tabs.forEach((t, k) => { t.tabIndex = k === 0 ? 0 : -1; });
+    new IntersectionObserver(([e], obs) => { if (e.isIntersecting) { draw(0); obs.disconnect(); } }, { threshold: .3 }).observe($('#mxPlot'));
   })();
 
   /* =====================================================================

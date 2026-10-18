@@ -49,7 +49,10 @@ export function EvalPage() {
         Evaluation
       </h1>
       <p className="text-muted mt-2 max-w-[64ch]">
-        {test.length ? "HERB's held-out questions, from 7 products never read while building Lore, run once" : "HERB's dev questions"} (
+        {test.length
+          ? "Held-out questions from HERB, Salesforce AI Research's enterprise benchmark (EMNLP 2025): 7 products never read while building Lore, run once"
+          : "Dev questions from HERB, Salesforce AI Research's enterprise benchmark (EMNLP 2025)"}{" "}
+        (
         {lore ? `${lore.questions.answerable} answerable, ${lore.questions.unanswerable} unanswerable` : `${mainWord} split`}
         ), scored with HERB's own judge prompts. Each row is one change away from Lore, so the gap between rows is what that part
         is worth.
@@ -208,7 +211,7 @@ function AvgBars({
         </ul>
       </div>
       <p className="text-[0.8rem] text-muted mt-2">
-        The vertical line is HERB's published best product-specific agent ({num(reference.avg)}), a different model and
+        The vertical line is the best product-specific agent in Salesforce AI Research's HERB paper ({num(reference.avg)}), a different model and
         setup, shown for context only.
       </p>
     </figure>
