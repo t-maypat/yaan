@@ -50,8 +50,8 @@ from app import llm
 from app.llm import LLMError, LLMResult, Role, Turn
 
 INSTALL = (
-    "LORE_LLM_PROVIDER=litellm needs LiteLLM, an optional extra: "
-    "`uv sync --project backend --extra litellm` (or `pip install litellm`)"
+    "LORE_LLM_PROVIDER=litellm needs LiteLLM, which the default install leaves out: "
+    "`uv pip install --python backend/.venv litellm` (or `pip install litellm`)"
 )
 EFFORTS = {"low", "medium", "high"}  # what LiteLLM's reasoning_effort takes
 

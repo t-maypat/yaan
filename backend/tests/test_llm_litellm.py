@@ -286,7 +286,7 @@ def test_a_role_without_a_model_and_a_missing_install_fail_with_instructions(lit
     with pytest.raises(llm.LLMError, match="LORE_LITELLM_MODEL_JUDGE"):
         llm.complete(role="judge", system="s", user="u", purpose="t")
     monkeypatch.setitem(sys.modules, "litellm", None)  # `import litellm` raises ImportError
-    with pytest.raises(llm.LLMError, match=r"--extra litellm"):
+    with pytest.raises(llm.LLMError, match=r"uv pip install --python backend/.venv litellm"):
         llm.complete(role="extract", system="s", user="u", purpose="t")
 
 
