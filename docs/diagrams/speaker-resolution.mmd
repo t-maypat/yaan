@@ -1,0 +1,10 @@
+%% Meeting speaker -> person (Phase 6.3, D037). 98 names are shared by 530 people, so a name alone is ambiguous.
+flowchart TD
+  N["Speaker name in a transcript<br/>Julia Brown"]:::human --> A{"Participants of this<br/>meeting with that name?"}:::code
+  A -->|exactly 1| R1["SPOKE_IN<br/>method: participants"]:::store
+  A -->|0| B{"Everyone in the<br/>directory with that name"}:::code
+  A -->|2 or more| C{"Exactly one of them<br/>authored something<br/>in this product?"}:::code
+  B -->|exactly 1| R2["SPOKE_IN<br/>method: directory"]:::store
+  B -->|2 or more| C
+  C -->|yes| R3["SPOKE_IN<br/>method: ...+activity"]:::store
+  C -->|no| R4["unresolved<br/>left for Phase 8"]:::guard

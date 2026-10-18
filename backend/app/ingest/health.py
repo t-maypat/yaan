@@ -31,7 +31,20 @@ def report(graph: str | None = None) -> dict[str, Any]:
         "isolated_pct": round(100 * lonely / total, 2) if total else 0.0,
         "pr_chains": rows("health_pr_chains"),
         "duplicate_ids": rows("health_duplicate_ids"),
+        "linking": linking(rows("health_links")),
+        "mentions": [
+            {"labels": ":".join(r["labels"]), "n": r["n"]} for r in rows("health_mentions")
+        ],
+        "speakers": rows("health_spoke_in"),
     }
+
+
+def linking(found: list[dict[str, Any]]) -> dict[str, Any]:
+    """S4 totals: mentions found in text and the share left unresolved (6.5)."""
+    row = found[0] if found else {}
+    mentions, unresolved = row.get("mentions") or 0, row.get("unresolved") or 0
+    pct = round(100 * unresolved / mentions, 2) if mentions else 0.0
+    return {"mentions": mentions, "unresolved": unresolved, "unresolved_pct": pct}
 
 
 def render(r: dict[str, Any]) -> str:
@@ -47,4 +60,11 @@ def render(r: dict[str, Any]) -> str:
         lines.append(f"  {side:<28}{row['with_chain']:>8,} of {row['prs']:,}")
     dupes = r["duplicate_ids"]
     lines.append(f"duplicate ids: {len(dupes)}" + (f"  e.g. {dupes[0]['id']}" if dupes else ""))
+    link = r["linking"]
+    lines.append(
+        f"linking: {link['mentions']:,} mentions found, {link['unresolved']:,} unresolved "
+        f"({link['unresolved_pct']}%)"
+    )
+    lines += [f"  MENTIONS {row['labels']:<21}{row['n']:>6,}" for row in r["mentions"]]
+    lines += [f"  SPOKE_IN {row['method']:<21}{row['n']:>6,}" for row in r["speakers"]]
     return "\n".join(lines)

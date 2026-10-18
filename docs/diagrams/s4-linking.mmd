@@ -1,0 +1,9 @@
+%% S4 deterministic linking (Phase 6, D037): what each pattern in an artifact's text becomes in the graph.
+flowchart LR
+  T["Artifact text<br/>message, meeting,<br/>chat, doc, PR"]:::file
+  T --> U["url, Slack &lt;url|label&gt;"]:::code --> S["SHARES<br/>to the PR / doc / link<br/>with that url"]:::store
+  T --> E["@eid_1234abcd<br/>(not system messages)"]:::code --> MP["MENTIONS Person"]:::store
+  T --> P["product name or codename<br/>VizForce, VizAI"]:::code --> MPr["MENTIONS Product<br/>surfaces: VizAI"]:::store
+  T --> C["CUST-0024,<br/>unique customer name"]:::code --> MC["MENTIONS Customer<br/>then WORKS_AT Company"]:::store
+  T --> SP["Name: words<br/>in a transcript"]:::code --> SI["SPOKE_IN<br/>turns, method"]:::store
+  T --> X["anything that<br/>doesn't resolve"]:::guard --> N["artifact.unresolved[ ]<br/>+ link_unresolved.jsonl<br/>health: 3.36% on dev"]:::file
