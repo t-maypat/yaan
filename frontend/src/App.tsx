@@ -11,9 +11,17 @@ import { type Step, Walk } from "./components/Walk";
 import { SUGGESTIONS, type Suggestion } from "./suggestions";
 import { when } from "./words";
 
+// W7: answer as a person. HERB has no access rules, so the policy is synthetic
+// (permissions.yaml): the PM planning channels are for their members, meetings for attendees.
+const VIEWERS: { id: string; label: string }[] = [
+  { id: "eid_2d14387c", label: "David Miller, Product Manager (in the PM channel)" },
+  { id: "eid_9e9883de", label: "Hannah Garcia, Software Engineer (not in it)" },
+];
+
 type Run = {
   question: string;
   product: string | null;
+  viewer: string | null;
   asOfMs: number | null; // answered for the state at this moment (the Timeline's slider)
   steps: Step[];
   answer?: AnswerEvent;
@@ -43,6 +51,7 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [productError, setProductError] = useState<string | null>(null);
   const [product, setProduct] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [run, setRun] = useState<Run | null>(null);
   const [active, setActive] = useState<number | null>(null);
@@ -60,7 +69,7 @@ export default function App() {
     const ctl = new AbortController();
     abort.current = ctl;
     setActive(null);
-    setRun({ question, product: productId, asOfMs, steps: [], citations: [], running: true });
+    setRun({ question, product: productId, viewer, asOfMs, steps: [], citations: [], running: true });
     window.scrollTo({ top: 0 });
     const update = (f: (r: Run) => Run) => setRun((r) => (r && !ctl.signal.aborted ? f(r) : r));
     ask(
@@ -92,6 +101,7 @@ export default function App() {
       },
       ctl.signal,
       asOfMs,
+      viewer,
     ).catch((err: Error) => {
       if (ctl.signal.aborted) return;
       setRun((r) => r && { ...r, running: false, error: err.message });
@@ -135,6 +145,25 @@ export default function App() {
         />
         <div className="flex gap-3 items-end">
           <ProductPicker products={products} value={product} onChange={setProduct} error={productError} />
+          <div>
+            <label htmlFor="viewer" className="block text-[0.78rem] text-muted">
+              View as
+            </label>
+            <select
+              id="viewer"
+              value={viewer ?? ""}
+              onChange={(e) => setViewer(e.target.value || null)}
+              title="Answer as this person: sources they can't see are left out (synthetic policy)"
+              className="bg-transparent border-0 border-b-2 border-ink py-1.5 pr-1 max-w-[11rem]"
+            >
+              <option value="">Anyone</option>
+              {VIEWERS.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+          </div>
           {run?.running ? (
             <button type="button" onClick={stop} className="px-5 py-2 border-2 border-ink font-medium">
               Stop

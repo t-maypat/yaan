@@ -20,6 +20,8 @@ export type AnswerEvent = {
   abstain: boolean;
   validator?: { dropped?: unknown[]; model_abstained?: boolean };
   llm?: { model: string; turns: number; cost_usd: number; cached: boolean };
+  viewer_id?: string | null; // W7: answered as this person
+  hidden_sources?: number; // sources that person may not see, left out
 };
 export type GraphNode = { id: string; label: string; name: string | null; cited: boolean };
 export type GraphEdge = { source: string; target: string; rel: string };
@@ -64,11 +66,17 @@ export async function ask(
   onEvent: (e: AskEvent) => void,
   signal?: AbortSignal,
   asOfMs?: number | null,
+  viewerId?: string | null,
 ): Promise<void> {
   const r = await fetch("/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, product_id: productId, as_of_ms: asOfMs ?? null }),
+    body: JSON.stringify({
+      question,
+      product_id: productId,
+      as_of_ms: asOfMs ?? null,
+      viewer_id: viewerId ?? null,
+    }),
     signal,
   });
   if (!r.ok || !r.body) return failLoudly(r);

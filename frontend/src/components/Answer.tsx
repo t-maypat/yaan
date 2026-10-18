@@ -19,6 +19,12 @@ const PLUGINS = [remarkGfm];
 export function Answer({ answer, citations, active, setActive }: Props) {
   const byN = new Map(citations.map((c) => [c.n, c]));
   const dropped = answer.validator?.dropped?.length ?? 0;
+  const hidden = answer.hidden_sources ? (
+    <p className="text-sm mt-2">
+      <span className="font-semibold">{plural(answer.hidden_sources, "source")} hidden</span>
+      <span className="text-muted">: the person you're viewing as can't see them, so Lore didn't read them.</span>
+    </p>
+  ) : null;
   if (answer.abstain) {
     return (
       <div className="border-l-4 border-warn bg-warn-soft px-5 py-4 max-w-[68ch]">
@@ -27,6 +33,7 @@ export function Answer({ answer, citations, active, setActive }: Props) {
         <p className="text-sm text-muted mt-2">
           Lore abstains when no source it read supports an answer, rather than guess.
         </p>
+        {hidden}
       </div>
     );
   }
@@ -44,6 +51,7 @@ export function Answer({ answer, citations, active, setActive }: Props) {
           The citation check removed {plural(dropped, "sentence")} whose quote wasn't in its source.
         </p>
       )}
+      {hidden}
     </div>
   );
 }
