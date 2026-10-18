@@ -40,6 +40,8 @@ class Settings(BaseSettings):
 
     # Locations
     data_dir: Path = REPO_ROOT / "data"
+    models_dir: Path = REPO_ROOT / "data" / "models"  # downloaded embedding model files
+    cache_dir: Path = REPO_ROOT / "data" / "cache"  # embedding (and later LLM) disk caches
     eval_dir: Path = REPO_ROOT / "eval"
     queries_dir: Path = REPO_ROOT / "backend" / "queries"
 

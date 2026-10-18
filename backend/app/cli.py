@@ -80,14 +80,14 @@ def cmd_normalize(args: argparse.Namespace) -> int:
     return 0
 
 
-INGEST_STAGES = ("structural",)  # later phases add lexical, link, extract, …
+INGEST_STAGES = ("structural", "lexical")  # later phases add link, extract, …
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
     from app import schema
     from app.config import get_settings
     from app.eval.split import read_split
-    from app.ingest import health, structural
+    from app.ingest import chunk_embed, health, structural
     from app.ingest.normalize import normalized_dir, read_jsonl
 
     graph = args.graph or get_settings().lore_graph
@@ -104,15 +104,50 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             print(f"lore ingest: {path} is missing: run `lore normalize`", file=sys.stderr)
             return 1
         artifacts[name] = read_jsonl(path)
-    rows = structural.build_rows(structural.load_metadata(), artifacts)
+    report = {}
+    if "structural" in args.stages:
+        rows = structural.build_rows(structural.load_metadata(), artifacts)
+        report |= structural.load(rows, graph)
+    if "lexical" in args.stages:
+        report["upsert_chunks"] = chunk_embed.load(chunk_embed.chunk_products(artifacts), graph)
     print(f"{'query':<24}{'rows':>8}{'nodes+':>9}{'edges+':>9}{'props set':>11}")
-    for query, r in structural.load(rows, graph).items():
+    for query, r in report.items():
         print(
             f"{query:<24}{r['rows']:>8}{r['nodes_created']:>9}"
             f"{r['relationships_created']:>9}{r['properties_set']:>11}"
         )
-    print(f"\ngraph {graph!r}, products {', '.join(products)}\n")
+    print(f"\ngraph {graph!r}, products {', '.join(products)}, stages {', '.join(args.stages)}\n")
     print(health.render(health.report(graph)))
+    return 0
+
+
+def cmd_search(args: argparse.Namespace) -> int:
+    import json
+
+    from app.agent.tools import search_artifacts
+
+    out = search_artifacts(
+        " ".join(args.query), product_id=args.product, k=args.k, mode=args.mode, graph=args.graph
+    )
+    print(json.dumps(out, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_bench_search(args: argparse.Namespace) -> int:
+    import json
+
+    from app.eval import search_bench
+
+    result = search_bench.run(k=args.k, graph=args.graph)
+    k = result["k"]
+    print(f"{'mode':<10}{'questions':>10}{f'hit@{k}':>9}{f'prec@{k}':>9}{'p50 ms':>9}{'p95 ms':>9}")
+    for mode, m in result["modes"].items():
+        print(
+            f"{mode:<10}{m['questions']:>10}{m[f'hit@{k}']:>9}{m[f'precision@{k}']:>9}"
+            f"{m['p50_ms']:>9}{m['p95_ms']:>9}"
+        )
+    print(json.dumps({m: r["by_type"] for m, r in result["modes"].items()}, indent=1))
+    print(json.dumps(result["latency"], indent=1))
     return 0
 
 
@@ -133,6 +168,8 @@ COMMANDS = {
     "split": ("draw the held-out test products once (seeded) into eval/split.json", cmd_split),
     "ingest": ("load normalized products into a graph (stages: structural)", cmd_ingest),
     "health": ("print the graph-health report (S10)", cmd_health),
+    "search": ("hybrid search over the graph's chunks (agent tool 1)", cmd_search),
+    "bench-search": ("search hit@k / precision@k and latency on dev questions", cmd_bench_search),
 }
 
 # command -> [(flag, argparse options)]
@@ -147,6 +184,17 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"}),
     ],
     "health": [("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"})],
+    "search": [
+        ("query", {"nargs": "+", "help": "free text"}),
+        ("--product", {"help": "product id, e.g. VizForce"}),
+        ("--k", {"type": int, "default": 10}),
+        ("--mode", {"choices": ("hybrid", "fulltext", "vector"), "default": "hybrid"}),
+        ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
+    ],
+    "bench-search": [
+        ("--k", {"type": int, "default": 10}),
+        ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
+    ],
 }
 
 

@@ -17,7 +17,10 @@ Limits (A17, D014):
 Errors propagate as QueryError (QueryTimeout for a timeout), naming the query, graph and batch.
 """
 
+import math
 import re
+import time
+from collections import deque
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -47,6 +50,8 @@ STAT_FIELDS = (
 )
 
 QUERY_NAME = re.compile(r"^[a-z0-9_]+$")
+# Latency of recent calls, newest last (4.7): feeds p50/p95 for the README and the eval.
+LATENCY: deque[dict[str, Any]] = deque(maxlen=50_000)
 
 
 class QueryError(RuntimeError):
@@ -149,7 +154,50 @@ def run_text(
 
     For the schema's DDL lines (1.5) and, later, the agent's checked Cypher (Phase 9).
     Everything else uses `run`, so the queries the product depends on stay in files.
+    Every call's latency is recorded in LATENCY (4.7).
     """
+    started = time.perf_counter()
+    result = _run_text(text, params, label, graph, readonly, timeout_ms, batch_rows)
+    LATENCY.append(
+        {
+            "query": label,
+            "readonly": readonly,
+            "ms": round((time.perf_counter() - started) * 1000, 3),  # as the caller sees it
+            "server_ms": round(result.run_time_ms, 3),  # FalkorDB's own execution time
+            "rows": len(result.rows),
+        }
+    )
+    return result
+
+
+def latency_stats(prefix: str = "") -> dict[str, dict[str, float]]:
+    """p50 / p95 of recorded calls per query name (names starting with `prefix`)."""
+    by_name: dict[str, list[dict[str, Any]]] = {}
+    for entry in LATENCY:
+        if entry["query"].startswith(prefix):
+            by_name.setdefault(entry["query"], []).append(entry)
+    return {
+        name: {
+            "n": len(entries),
+            "p50_ms": percentile([e["ms"] for e in entries], 50),
+            "p95_ms": percentile([e["ms"] for e in entries], 95),
+            "server_p50_ms": percentile([e["server_ms"] for e in entries], 50),
+            "server_p95_ms": percentile([e["server_ms"] for e in entries], 95),
+        }
+        for name, entries in sorted(by_name.items())
+    }
+
+
+def percentile(values: list[float], pct: float) -> float:
+    """Nearest-rank percentile; 0.0 for no values."""
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    rank = max(1, math.ceil(pct / 100 * len(ordered)))
+    return round(ordered[rank - 1], 3)
+
+
+def _run_text(text, params, label, graph, readonly, timeout_ms, batch_rows) -> Result:
     graph = graph or get_settings().lore_graph
     params = params or {}
     name = label

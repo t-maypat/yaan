@@ -7,9 +7,11 @@ requires-python = ">=3.11"
 # huggingface_hub (Phase 2), fastembed + diskcache (4), rapidfuzz (8), mcp (14).
 dependencies = [
     "anthropic>=1.0",
+    "diskcache>=5.6",
     "falkordb>=1.0",
     "fastapi>=0.110",
-    "huggingface-hub>=2.1.1",
+    "fastembed>=0.7",
+    "huggingface-hub>=0.20,<2.0",
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
     "uvicorn[standard]>=0.29",
@@ -35,7 +37,10 @@ packages = ["app"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
-markers = ["db: needs a running FalkorDB (docker compose up -d)"]
+markers = [
+    "db: needs a running FalkorDB (docker compose up -d)",
+    "model: runs the local embedding model (downloaded once into data/models)",
+]
 
 [tool.ruff]
 line-length = 100
