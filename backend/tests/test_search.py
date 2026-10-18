@@ -172,6 +172,20 @@ def test_hybrid_returns_both_lists_fused(searchable):
 
 
 @pytest.mark.db
+def test_people_adds_authors_and_participants(searchable):
+    out = tools.search_artifacts("put on hold", mode="fulltext", people=True, graph=searchable)
+    by_id = {r["artifact_id"]: r for r in out["results"]}
+    assert by_id["msg:20260501-1-ccccc"]["authors"] == ["eid_aaaa0001"]
+    assert out["cypher"][-1] == "artifact_people.cypher" and "people_ms" in out["timings"]
+    meeting = tools.search_artifacts(
+        "review the doc", kinds=["meeting"], people=True, graph=searchable
+    )["results"][0]
+    assert meeting["participants"] == ["eid_aaaa0002", "eid_aaaa0003"]
+    plain = tools.search_artifacts("put on hold", mode="fulltext", graph=searchable)
+    assert "authors" not in plain["results"][0]
+
+
+@pytest.mark.db
 def test_reloading_chunks_creates_nothing(searchable, widget):
     stats = chunk_embed.load(chunk_embed.chunk_products({"Widget": widget}), searchable)
     assert stats["nodes_created"] == 0 and stats["relationships_created"] == 0

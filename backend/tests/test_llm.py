@@ -175,6 +175,13 @@ def test_baseline_abstains_without_calling_when_search_is_empty(gateway, monkeyp
     assert out["abstain"] and gateway.calls == []
 
 
+def test_baseline_shows_author_and_participant_ids():
+    block = baseline_rag.context_block(
+        [{**hit("mtg:1", "We agreed."), "authors": [], "participants": ["eid_a", "eid_b"]}]
+    )
+    assert 'participants="eid_a eid_b">' in block and "authors=" not in block
+
+
 def test_baseline_accepts_quotes_from_the_title_and_shows_urls():
     source = {**hit("pr:1", "Reverts the change."), "title": "Revert PR# 28: Fix rendering"}
     assert baseline_rag.quote_found("Revert PR# 28", source)

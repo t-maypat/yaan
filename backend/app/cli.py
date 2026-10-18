@@ -10,7 +10,6 @@ import sys
 
 # command -> (docs/PLAN.md phase that builds it, help text)
 PENDING: dict[str, tuple[str, str]] = {
-    "eval": ("Phase 5", "run and score a system on an eval split"),
     "seed": ("Phase 15", "rebuild the demo graph from exports/ without LLM calls"),
 }
 
@@ -203,6 +202,58 @@ def cmd_llm_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_eval(args: argparse.Namespace) -> int:
+    import json
+    from pathlib import Path
+
+    from app import llm
+    from app.eval import report, run_herb
+
+    def say(msg: str) -> None:
+        print(f"\r  {msg:<40}", end="", file=sys.stderr, flush=True)
+
+    try:
+        if args.score_only:
+            run = Path(args.score_only)
+        else:
+            run = run_herb.run(
+                args.system, args.split, args.products, args.limit, args.workers, progress=say
+            )
+            print(f"\nanswers: {run}", file=sys.stderr)
+        results = report.score_run(run, workers=args.workers)
+    except llm.LLMError as e:
+        print(f"\nlore eval: {e}", file=sys.stderr)
+        return 1
+    r = json.loads(results.read_text(encoding="utf-8"))
+    print(f"results: {results}")
+    for key, label in report.CATEGORIES:
+        c = r["categories"][key]
+        print(f"  {label:<9} {report.fmt(c['score'], none='-'):>6}  (n={c['n']})")
+    print(f"  {'Avg':<9} {report.fmt(r['avg'], none='-'):>6}")
+    print(
+        f"  Unanswerable {report.fmt(r['unanswerable'], none='-')}% left unanswered "
+        f"(n={r['questions']['unanswerable']})"
+    )
+    print(
+        f"  errors {r['errors']} | citations quote-ok {r['citations']['quote_ok_pct']}% | "
+        f"p50 {r['latency_s']['p50']} s | ${r['cost_usd']['answers_this_run']} answers + "
+        f"${r['cost_usd']['judge_this_run']} judge | today ${llm.spent_today():.4f}"
+    )
+    if r["errors"]:
+        print(f"lore eval: {r['errors']} answers failed; see answers.jsonl", file=sys.stderr)
+    if results.name != "results.json":  # a full run: refresh the table
+        print(f"table: {report.write_table()}")
+    return 0
+
+
+def cmd_eval_report(args: argparse.Namespace) -> int:
+    from app.eval import report
+
+    path = report.write_table()
+    print(path.read_text(encoding="utf-8"))
+    return 0
+
+
 def cmd_health(args: argparse.Namespace) -> int:
     from app.config import get_settings
     from app.ingest import health
@@ -224,6 +275,8 @@ COMMANDS = {
     "bench-search": ("search hit@k / precision@k and latency on dev questions", cmd_bench_search),
     "ask": ("answer a question: --baseline = hybrid RAG (Phase 4); the agent in Phase 9", cmd_ask),
     "llm-check": ("one tiny LLM call: is the API key set and does it have credit?", cmd_llm_check),
+    "eval": ("answer a split's HERB questions and score them (Phase 5)", cmd_eval),
+    "eval-report": ("rebuild eval/results/table.md from the results files", cmd_eval_report),
 }
 
 # command -> [(flag, argparse options)]
@@ -254,6 +307,14 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--baseline", {"action": "store_true", "help": "hybrid RAG, no graph tools"}),
         ("--product", {"help": "product id, e.g. VizForce"}),
         ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
+    ],
+    "eval": [
+        ("--system", {"choices": ("baseline",), "default": "baseline"}),
+        ("--split", {"choices": ("dev",), "default": "dev"}),
+        ("--products", {"nargs": "+", "help": "a subset of the split's products"}),
+        ("--limit", {"type": int, "help": "only the first N questions (a cheap smoke run)"}),
+        ("--workers", {"type": int, "default": 4, "help": "parallel LLM calls"}),
+        ("--score-only", {"metavar": "RUN_DIR", "help": "re-judge an existing eval/runs/ folder"}),
     ],
 }
 

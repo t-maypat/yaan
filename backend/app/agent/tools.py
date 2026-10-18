@@ -50,13 +50,15 @@ def search_artifacts(
     *,
     mode: Mode = "hybrid",
     full_text: bool = False,
+    people: bool = False,
     graph: str | None = None,
 ) -> dict[str, Any]:
     """Tool 1: hybrid search over chunks, fused with RRF, one result per artifact.
 
     `mode` is for evaluation and ablations: full-text only, vector only, or both fused.
     `full_text` adds each best chunk's whole text (the baseline RAG reads it; agents quote
-    from get_artifact instead).
+    from get_artifact instead). `people` adds each artifact's author and participant ids,
+    the metadata HERB's own RAG documents carry (D036).
     """
     fetch = min(MAX_FETCH, k * FETCH_FACTOR)
     filters = {"kinds": kinds, "product_id": product_id, "since_ms": since_ms, "until_ms": until_ms}
@@ -82,6 +84,18 @@ def search_artifacts(
         used.append("search_vector.cypher")
 
     results = fuse(lists, k, full_text)
+    if people and results:
+        started = time.perf_counter()
+        ids = [r["artifact_id"] for r in results]
+        found = {
+            row["artifact_id"]: row
+            for row in db.run("artifact_people", {"ids": ids}, graph=graph).rows
+        }
+        for r in results:
+            r["authors"] = sorted(found.get(r["artifact_id"], {}).get("authors", []))
+            r["participants"] = sorted(found.get(r["artifact_id"], {}).get("participants", []))
+        timings["people_ms"] = ms_since(started)
+        used.append("artifact_people.cypher")
     return {
         "query": query,
         "keywords": q,

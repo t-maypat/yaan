@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     lore_answer_model: str = "claude-haiku-5-5"
     lore_extract_effort: str = "low"
     lore_answer_effort: str = "medium"
+    # The eval judge stands in for HERB's gpt-4o judge (Phase 5, D035).
+    lore_judge_model: str = "claude-haiku-5-5"
+    lore_judge_effort: str = "low"
     lore_daily_spend_cap_usd: float = 2.0  # llm.py refuses a call that could cross it
 
     # Embeddings

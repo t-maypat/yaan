@@ -50,11 +50,20 @@ def fence(text: str) -> str:
 
 
 def context_block(results: list[dict[str, Any]]) -> str:
+    """Artifacts with their metadata, as HERB's RAG documents carry it: author and
+    participant employee ids, date, title, link (D036)."""
     return "\n\n".join(
         f'<artifact id="{r["artifact_id"]}" kind="{r["kind"]}" date="{r["ts_iso"]}"'
-        f' title="{fence(r["title"] or "")}" url="{r.get("url") or ""}">'
+        f' title="{fence(r["title"] or "")}" url="{r.get("url") or ""}"'
+        f"{people_attrs(r)}>"
         f"\n{fence(r['text'])}\n</artifact>"
         for r in results
+    )
+
+
+def people_attrs(r: dict[str, Any]) -> str:
+    return "".join(
+        f' {key}="{" ".join(r[key])}"' for key in ("authors", "participants") if r.get(key)
     )
 
 
@@ -67,8 +76,23 @@ def answer(
     question: str, product_id: str | None = None, k: int = TOP_K, graph: str | None = None
 ) -> dict[str, Any]:
     """Search, answer from the top k chunks, and check every citation."""
-    search = search_artifacts(question, product_id=product_id, k=k, full_text=True, graph=graph)
-    results = search["results"]
+    return answer_from(question, retrieve(question, product_id, k, graph))
+
+
+def retrieve(
+    question: str, product_id: str | None = None, k: int = TOP_K, graph: str | None = None
+) -> list[dict[str, Any]]:
+    """Step 1, the graph part: the top k chunks for the question."""
+    return search_artifacts(
+        question, product_id=product_id, k=k, full_text=True, people=True, graph=graph
+    )["results"]
+
+
+def answer_from(question: str, results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Step 2, the LLM part: answer from retrieved chunks and check every citation.
+
+    Split from retrieve() so the eval can search in one thread and answer in several.
+    """
     if not results:
         return {
             "question": question,

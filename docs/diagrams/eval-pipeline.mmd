@@ -1,0 +1,13 @@
+%% Phase 5: lore eval = answer every dev question, judge it like HERB's evaluate.py, summarize (D035, D036).
+flowchart LR
+  Q["Dev questions<br/>load_questions()<br/>held-out guard"]:::guard --> P["prepare: search<br/>one thread<br/>top 20 + authors"]:::store
+  P --> R["respond: answer LLM<br/>4 threads<br/>Haiku 5.5"]:::ext
+  R --> A["answers.jsonl<br/>+ herb-ans.json<br/>+ herb-unans.json"]:::file
+  A --> J{"judge by type<br/>HERB's prompts<br/>word for word"}:::code
+  J -->|content| L["Likert 0-100"]:::code
+  J -->|person, pr, url,<br/>company| F["extract ids / links / names<br/>then set F1"]:::code
+  J -->|unanswerable| U["done: yes / no<br/>no = left unanswered"]:::code
+  L --> S["summarize<br/>F1 x 100, Avg of 4<br/>errors never credited"]:::code
+  F --> S
+  U --> S
+  S --> O["eval/results/<br/>date_system_split.json<br/>+ table.md"]:::file

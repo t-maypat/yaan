@@ -18,6 +18,7 @@ How a call goes (D033):
 import hashlib
 import json
 import re
+import threading
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -29,10 +30,11 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 
-Role = Literal["extract", "answer"]
+Role = Literal["extract", "answer", "judge"]
 SCHEMA_VERSION = 1  # bump when a prompt or output model changes meaning, to bypass old cache
 PROMPT_LIMIT_TOKENS = 100_000  # Haiku 5.5 doubles its price above this (pricing page)
 CHARS_PER_TOKEN_WORST = 3.0  # conservative: Haiku 5.5's tokenizer counts ~30% more than 4.5's
+_FILES_LOCK = threading.Lock()  # the eval runs calls in threads; ledger and log are shared files
 
 # USD per million tokens: input, output, cache write (5 min), cache read.
 # Source: platform.claude.com/docs/en/about-claude/pricing, read 2026-10-13.
@@ -95,9 +97,10 @@ def spent_today(path: Path | None = None) -> float:
 def record_spend(amount: float, path: Path | None = None) -> None:
     path = path or ledger_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    days = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-    days[today()] = round(days.get(today(), 0.0) + amount, 6)
-    path.write_text(json.dumps(days, indent=1) + "\n", encoding="utf-8", newline="\n")
+    with _FILES_LOCK:
+        days = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        days[today()] = round(days.get(today(), 0.0) + amount, 6)
+        path.write_text(json.dumps(days, indent=1) + "\n", encoding="utf-8", newline="\n")
 
 
 def today() -> str:
@@ -171,8 +174,11 @@ def complete(
 ) -> LLMResult:
     """One LLM call through the gateway. `purpose` names it in the call log (e.g. "baseline")."""
     s = get_settings()
-    model = s.lore_extract_model if role == "extract" else s.lore_answer_model
-    effort = s.lore_extract_effort if role == "extract" else s.lore_answer_effort
+    model, effort = {
+        "extract": (s.lore_extract_model, s.lore_extract_effort),
+        "answer": (s.lore_answer_model, s.lore_answer_effort),
+        "judge": (s.lore_judge_model, s.lore_judge_effort),
+    }[role]
     schema = output.model_json_schema() if output else None
     key = request_key(
         model,
@@ -250,5 +256,5 @@ def log_call(purpose: str, r: LLMResult, elapsed_ms: float = 0.0) -> None:
         "ms": round(elapsed_ms, 1),
         "request_id": r.request_id,
     }
-    with path.open("a", encoding="utf-8", newline="\n") as f:
+    with _FILES_LOCK, path.open("a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(entry) + "\n")
