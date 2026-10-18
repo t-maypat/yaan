@@ -1,0 +1,44 @@
+%% Lore's graph data model (CONTEXT §9.2, docs/schema_card.md): what is true and since when, who, and what was said.
+flowchart TB
+  subgraph TRUE["What is true, and since when (extracted, folded)"]
+    direction LR
+    AL["Alert · Action"]:::guard
+    CL["Claim<br/>quote, authority"]:::code
+    D["Decision<br/>value, valid_from → valid_to<br/>SUPERSEDES the older one"]:::code
+    I["Issue<br/>status, component"]:::code
+    AR["Area<br/>component · work item"]:::code
+  end
+  subgraph WHO["Who"]
+    direction LR
+    T["Team · Org · Community"]:::human
+    P["Person<br/>role, PageRank<br/>COLLAB with Person"]:::human
+    CU["Customer"]:::human
+    CO["Company"]:::human
+  end
+  subgraph SAID["What was said (structural, no LLM)"]
+    direction LR
+    CH["Channel"]:::file
+    A["Artifact<br/>Message · Meeting · Doc<br/>PR (REVERTS PR) · Link"]:::file
+    CK["Chunk<br/>text + 384-d vector"]:::store
+    PRD["Product"]:::ext
+  end
+  AL -->|FLAGS| D
+  CL -->|"SUPPORTS · CONFLICTS_WITH"| D
+  D -->|AFFECTS| I
+  I -->|IN_AREA| AR
+  AL -->|NOTIFIES| P
+  D -->|DECIDED_BY| P
+  I -->|"ASSIGNED_TO {from, to}"| P
+  I -->|REPORTED_BY| CU
+  D -->|"EVIDENCED_BY {quote}"| A
+  CL -->|"FROM {quote}"| A
+  I -->|REPORTED_IN| A
+  P -->|MEMBER_OF| T
+  CU -->|WORKS_AT| CO
+  P -->|"AUTHORED · REVIEWED · ATTENDED · SPOKE_IN"| A
+  CO -->|USES| PRD
+  A -->|IN_CHANNEL| CH
+  A -->|HAS_CHUNK| CK
+  A -->|"IN_PRODUCT · MENTIONS · SHARES"| PRD
+  P -.->|"KNOWS {score}"| AR
+  A -.->|"FIXES (a PR)"| I

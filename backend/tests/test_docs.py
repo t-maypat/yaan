@@ -66,3 +66,13 @@ def test_learning_guides_are_indexed():
     index = (DOCS / "learn" / "README.md").read_text(encoding="utf-8")
     for guide in sorted((DOCS / "learn").glob("[0-9][0-9]-*.md")):
         assert f"({guide.name})" in index, f"add {guide.name} to docs/learn/README.md"
+
+
+def test_the_readme_lists_every_query():
+    """Submission rule: the README lists every .cypher file (scripts/query_table.py builds it)."""
+    import subprocess
+    import sys
+
+    script = Path(__file__).resolve().parents[2] / "scripts" / "query_table.py"
+    done = subprocess.run([sys.executable, str(script), "--check"], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
