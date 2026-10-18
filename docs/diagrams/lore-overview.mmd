@@ -1,0 +1,28 @@
+%% The big picture: where every phase fits (CONTEXT §9.1).
+flowchart LR
+  subgraph SRC["Company data · HERB, synthetic"]
+    direction TB
+    s1["Slack messages"]:::file
+    s2["Meetings and chats"]:::file
+    s3["Docs, PRs, links"]:::file
+    s4["People, teams, customers"]:::file
+    s1 ~~~ s2 ~~~ s3 ~~~ s4
+  end
+  subgraph ING["Ingestion pipeline · Phases 2–10"]
+    direction TB
+    i1["Structural load<br/>who wrote what · no LLM"]:::code
+    i2["Search indexes<br/>full-text + vectors"]:::code
+    i3["LLM extraction<br/>every claim keeps its quote"]:::code
+    i4["Decision fold<br/>rules in code, not the LLM"]:::code
+    i1 --> i2 --> i3 --> i4
+  end
+  DB[("FalkorDB graph<br/>people · work · decisions<br/>with validity windows")]:::store
+  AG["Answer agent · Phase 9<br/>graph tools, cited answers"]:::code
+  SE["Change Sentinel · Phase 11<br/>spots changes, drafts fixes"]:::code
+  UI["Web UI and MCP<br/>Phases 12 and 14"]:::ext
+  YOU(["You, or a judge"]):::human
+  SRC --> ING --> DB
+  DB --> AG --> UI
+  DB --> SE --> UI
+  SE -. "writes alerts back" .-> DB
+  UI <--> YOU

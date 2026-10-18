@@ -1,0 +1,13 @@
+%% Where things live in the repo.
+flowchart LR
+  R["Lore repo"]:::file
+  R --> DOCS["docs/<br/>plan · status · decisions<br/>sessions · learn · diagrams"]:::file
+  R --> BE["backend/<br/>Python, uv project"]:::code
+  BE --> APP["app/<br/>ingest · agent · sentinel · eval<br/>cli · config · db · llm · policy"]:::code
+  BE --> Q["queries/<br/>every Cypher query<br/>one file each"]:::store
+  BE --> T["tests/<br/>smoke · query lint · docs"]:::guard
+  R --> EV["eval/<br/>split · results · report"]:::store
+  R --> FE["frontend/<br/>web UI, Phase 12"]:::ext
+  R --> SC["scripts/<br/>git hooks · diagram renderer"]:::guard
+  R --> CC[".claude/commands/<br/>/pickup · /handoff<br/>/daily-review"]:::human
+  R --> DC["docker-compose.yml<br/>Makefile · .env.example"]:::file

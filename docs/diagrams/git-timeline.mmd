@@ -1,0 +1,27 @@
+%% Commits before, at and after kickoff, and the hook that guards every push (D010).
+flowchart LR
+  subgraph PRE["1 · Now → 14 Oct · before the event"]
+    direction TB
+    c1["Local commits<br/>[pre-event] Phase N.M …"]:::code
+    nr["No remote yet<br/>nothing can leave this PC"]:::guard
+    c1 ~~~ nr
+  end
+  subgraph KO["2 · 15 Oct after 00:01 IST · kickoff"]
+    direction TB
+    rc["Re-create the history<br/>squash, or rebase --ignore-date"]:::code
+    ts["New commits are stamped<br/>with the real time they're made"]:::human
+    ar["pre-event-archive branch<br/>stays local, never pushed"]:::file
+    rc ~~~ ts ~~~ ar
+  end
+  subgraph EV["3 · 15–18 Oct · every push"]
+    direction TB
+    c2["Commit per task<br/>push at /handoff"]:::code
+    tg["Tag 'submission'<br/>by 21:00 on 18 Oct"]:::human
+    c2 ~~~ tg
+  end
+  HK{"pre-push hook<br/>any commit dated<br/>before the start?"}:::guard
+  GH[("GitHub<br/>public history")]:::ext
+  NO["Push blocked<br/>fix the history first"]:::guard
+  PRE --> KO --> EV --> HK
+  HK -- "no: push" --> GH
+  HK -- "yes: refuse" --> NO

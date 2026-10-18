@@ -1,0 +1,23 @@
+%% How a chunk of work runs, and which files carry context between sessions.
+flowchart LR
+  subgraph IN["Read at the start"]
+    direction TB
+    C["CLAUDE.md<br/>rules · always loaded"]:::file
+    S1[("STATUS.md<br/>where we are")]:::store
+    P1[("PLAN.md<br/>what to do next")]:::store
+    C ~~~ S1 ~~~ P1
+  end
+  subgraph LOOP["One chunk of work"]
+    direction TB
+    P["/pickup<br/>get oriented"]:::code --> W["Do the tasks<br/>tests green, commit each"]:::code --> L["Explain it<br/>update the learning guide"]:::code --> H["/handoff<br/>record and commit"]:::code
+  end
+  subgraph OUT["Written at the end"]
+    direction TB
+    G[("learn/<br/>how it works")]:::store
+    D[("decisions.md<br/>why we chose")]:::store
+    J[("sessions/<br/>what happened")]:::store
+    S2[("STATUS.md + PLAN.md<br/>updated")]:::store
+    G ~~~ D ~~~ J ~~~ S2
+  end
+  NX(["Next session<br/>starts cold, reads these"]):::human
+  IN --> LOOP --> OUT -.-> NX
