@@ -281,7 +281,8 @@ def table(paths: list[Path] | None = None) -> str:
         cells += [
             fmt(r["avg"]),
             fmt(r["unanswerable"]),
-            stale_cell(drift.get(system)),
+            # The drift set is built from dev products only: its row belongs to dev, not test.
+            stale_cell(drift.get(system)) if split == "dev" else "n/a",
             fmt(r["latency_s"]["p50"]),
             fmt(r["tokens_per_answer"], 0),
         ]

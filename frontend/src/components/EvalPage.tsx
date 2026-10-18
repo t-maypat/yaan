@@ -33,16 +33,24 @@ export function EvalPage() {
     );
   if (!data) return <p className="mt-10 text-muted">Reading the results…</p>;
 
-  const dev = data.systems.filter((s) => s.split === "dev").sort((a, b) => (b.avg ?? 0) - (a.avg ?? 0));
-  const lore = dev.find((s) => s.system === "lore");
-  const base = dev.find((s) => s.system === "baseline");
+  const pick = (split: string) =>
+    data.systems.filter((s) => s.split === split).sort((a, b) => (b.avg ?? 0) - (a.avg ?? 0));
+  const dev = pick("dev");
+  const test = pick("test");
+  // The held-out run leads once it exists; dev rows stay below it for comparison.
+  const main = test.length ? test : dev;
+  const mainWord = test.length ? "held-out" : "dev";
+  const rows = test.length ? [...test, ...dev] : dev;
+  const lore = main.find((s) => s.system === "lore");
+  const base = main.find((s) => s.system === "baseline");
   return (
     <section className="pt-10 max-w-[64rem]" aria-labelledby="h-eval">
       <h1 id="h-eval" className="font-serif text-[2rem] leading-tight">
         Evaluation
       </h1>
       <p className="text-muted mt-2 max-w-[64ch]">
-        HERB's dev questions ({lore ? `${lore.questions.answerable} answerable, ${lore.questions.unanswerable} unanswerable` : "dev split"}
+        {test.length ? "HERB's held-out questions, from 7 products never read while building Lore, run once" : "HERB's dev questions"} (
+        {lore ? `${lore.questions.answerable} answerable, ${lore.questions.unanswerable} unanswerable` : `${mainWord} split`}
         ), scored with HERB's own judge prompts. Each row is one change away from Lore, so the gap between rows is what that part
         is worth.
       </p>
@@ -54,11 +62,11 @@ export function EvalPage() {
         </p>
       )}
 
-      <AvgBars systems={dev} reference={data.reference} />
+      <AvgBars systems={main} reference={data.reference} splitWord={mainWord} />
 
       <div className="overflow-x-auto mt-10">
         <table className="w-full text-[0.9rem] min-w-[44rem]">
-          <caption className="text-left font-semibold mb-2">All scores (dev)</caption>
+          <caption className="text-left font-semibold mb-2">All scores{test.length ? " (held-out, then dev)" : " (dev)"}</caption>
           <thead>
             <tr className="border-b border-ink text-left align-bottom">
               <th className="font-medium py-1 pr-3">System</th>
@@ -74,11 +82,15 @@ export function EvalPage() {
             </tr>
           </thead>
           <tbody>
-            {dev.map((s) => {
-              const d = data.drift[s.system];
+            {rows.map((s) => {
+              // The drift set is built from dev products: it belongs to the dev rows only.
+              const d = s.split === "dev" ? data.drift[s.system] : undefined;
               return (
-                <tr key={s.system} className="border-b border-rule">
-                  <td className={`py-1.5 pr-3 ${s.system === "lore" ? "font-semibold" : ""}`}>{SYSTEM_WORDS[s.system] ?? s.system}</td>
+                <tr key={`${s.system}-${s.split}`} className="border-b border-rule">
+                  <td className={`py-1.5 pr-3 ${s.system === "lore" ? "font-semibold" : ""}`}>
+                    {SYSTEM_WORDS[s.system] ?? s.system}
+                    {test.length > 0 && <span className="text-muted font-normal"> · {s.split === "test" ? "held-out" : "dev"}</span>}
+                  </td>
                   {CATS.map(([k]) => (
                     <td key={k} className="py-1.5 px-2 text-right tabular-nums">
                       {num(s.categories[k]?.score)}
@@ -130,8 +142,9 @@ export function EvalPage() {
         <div>
           <dt className="font-semibold">Limits</dt>
           <dd className="text-muted mt-0.5">
-            One run per system: a rerun moves Avg by a few points. The judge is Claude Haiku 5.5 standing in for GPT-4o. The
-            held-out products share HERB's question templates with dev.
+            One run per system: a rerun moves Avg by a few points. The judge is Claude Haiku 5.5 standing in for GPT-4o. Lore
+            was built looking at dev products only; held-out is the honest number. The held-out products share HERB's question
+            templates with dev.
           </dd>
         </div>
       </dl>
@@ -141,13 +154,21 @@ export function EvalPage() {
 
 // Avg per system as horizontal bars: <= 24px thick, 4px rounded data-end, value at the tip in a text token,
 // a solid hairline for HERB's published result. Hover (or focus) shows the categories.
-function AvgBars({ systems, reference }: { systems: SystemResult[]; reference: EvalLatest["reference"] }) {
+function AvgBars({
+  systems,
+  reference,
+  splitWord,
+}: {
+  systems: SystemResult[];
+  reference: EvalLatest["reference"];
+  splitWord: string;
+}) {
   const [hover, setHover] = useState<string | null>(null);
   const max = 100;
   return (
     <figure className="mt-8" aria-labelledby="h-avg">
       <figcaption id="h-avg" className="font-semibold">
-        Average score per system (dev, 0–100)
+        Average score per system ({splitWord}, 0–100)
       </figcaption>
       <div className="relative mt-3 pr-14">
         <div

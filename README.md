@@ -10,22 +10,25 @@ Video: *link added at submission* · Blog: *link added at submission* · Run it 
 
 ## Why a graph
 - **Facts change, and the graph remembers how.** Every status of an issue or PR is a Decision node with a validity window (`valid_from` → `valid_to`), linked by SUPERSEDES to the one it replaced, DECIDED_BY a person and EVIDENCED_BY a quote. "Is it fixed?" and "was it fixed on 7 January?" are one comparison. Vector search finds the message that said "fixed" and believes it: in our drift test, search alone gave a stale status in 20% of answers, Lore in 0%.
-- **The answer lives in the links, not in any one document.** A bug report names `CUST-0026`; only the graph knows that customer works at BlueWave. "Who fixed the most bugs?" is `count()` over PR -[:FIXES]-> Issue, not a guess from ten chunks. "What breaks if this changes?" is a walk from the decision to the PR, its reviewers, the customers and the open issues around it. On customer questions, every plain-RAG system in the HERB paper scores 0; Lore scores 88.4.
+- **The answer lives in the links, not in any one document.** A bug report names `CUST-0026`; only the graph knows that customer works at BlueWave. "Who fixed the most bugs?" is `count()` over PR -[:FIXES]-> Issue, not a guess from ten chunks. "What breaks if this changes?" is a walk from the decision to the PR, its reviewers, the customers and the open issues around it. On customer questions, every plain-RAG system in the HERB paper scores 0, as do our baseline and search-only agent; Lore scores 54.2 on held-out products (88.4 on dev).
 - **Expertise and influence are graph algorithms.** Degree of authorship over components, FalkorDB's native PageRank, betweenness and label-propagation communities over who works with whom, and `shortestPath` from a listed owner to the real expert. `who_knows` puts a right engineer first on every HERB expertise question (hit@1 1.0, vs 0.0 for "whoever posted most").
 
 ## Results
-**HERB dev products** (3 products, 96 answerable + 104 unanswerable questions; the 7 held-out products are ingested and sealed, and their single logged run is still to come). Same model (Claude Haiku 5.5), same judge prompts as HERB, same FalkorDB search for every system.
+**Held-out HERB products** (7 products never looked at while building: 189 answerable + 210 unanswerable questions, run once through a logged guard on 18 Oct). Same model (Claude Haiku 5.5), same judge prompts as HERB, same FalkorDB search for every system.
 
-| System | Content | People | Customer | Artifact | **Avg** | Unanswerable declined | Stale answers (drift set) | Quotes verified | p50 answer |
+| System | Content | People | Customer | Artifact | **Avg (held-out)** | Unanswerable declined | Quotes verified | p50 answer | **Avg (dev)** |
 |---|---|---|---|---|---|---|---|---|---|
-| Plain RAG baseline | 12.8 | 27.6 | 0.0 | 18.2 | **14.7** | 73.1% | 6.7% (54% right) | 97.9% | 5.2 s |
-| Lore without graph tools (search + read) | 18.8 | 44.3 | 0.0 | 36.8 | **25.0** | 81.7% | 8.7% (71% right) | 100% | 13.2 s |
-| **Lore** | **73.9** | **88.4** | **88.4** | **82.2** | **83.2** | **87.5%** | **0.0% (96% right)** | **100%** | 9.4 s |
+| Plain RAG baseline | 12.6 | 13.3 | 0.0 | 12.6 | **9.6** | 80.0% | 98.5% | 4.8 s | 14.7 |
+| Lore without graph tools (search + read) | 17.7 | 37.6 | 0.0 | 41.5 | **24.2** | 81.9% | 100% | 13.0 s | 25.0 |
+| **Lore** | **64.0** | **65.2** | **54.2** | **71.3** | **63.6** | 76.7% | **100%** | 9.7 s | **83.2** |
 | *HERB paper: best product-specific agent (GPT-4o)* | | | | | *43.4* | *29.3%* | | | |
 
-- **Same agent, graph tools removed: 83.2 → 25.0.** FalkorDB is load-bearing.
+**Stale answers** (HERB-Drift, 24 hand-labeled dev questions about status now and as of a date): plain RAG 6.7% of answers (54% right), search-only 8.7% (71% right), **Lore 0% (96% right)**.
+
+- **Same agent, graph tools removed: 63.6 → 24.2 on held-out (83.2 → 25.0 on dev).** FalkorDB is load-bearing.
+- **Dev was 83.2, held-out is 63.6.** We built and fixed Lore looking at the 3 dev products only; the drop is what didn't carry over to new products, mostly Customer (88.4 → 54.2) and People (88.4 → 65.2). We report it rather than tune on it: the held-out questions stay unread.
 - **Every quote shown is checked word for word** against its source in code before the answer appears; unsupported sentences are dropped, and with nothing left Lore says "Not found in Lore's graph".
-- FalkorDB answers each tool call in **5–27 ms** (p50); the seconds are the model's turns. ~1.6k tokens and $0.003 per answer.
+- FalkorDB answers each tool call in **3–28 ms** (p50 per tool on held-out); the seconds are the model's turns. ~1.7k tokens and $0.003 per answer.
 - Footnotes: the judge is Claude Haiku 5.5 standing in for GPT-4o; one run per system (± a few points of sampling spread); the HERB row is a different model and setup, for context. Full method, the validator ablation (with a correction we made), the drift set and the error analysis: **[eval/report.md](eval/report.md)**.
 
 ## Architecture
@@ -309,7 +312,7 @@ docker compose --profile app run --rm api lore seed --from <snapshot URL from th
 See [eval/report.md](eval/report.md): the dev/held-out split and its guard, the systems (each one change apart), the judge, the drift set, the error analysis, the declared deviations, and the reproduction commands. Decisions and verified facts are logged in [docs/decisions.md](docs/decisions.md); beginner-level guides to every part are in [docs/learn/](docs/learn/README.md).
 
 ## Limitations
-- **Dev numbers only, so far.** The held-out products share HERB's question templates, so even that run measures new products, not new kinds of question.
+- **Held-out is 20 points below dev** (63.6 vs 83.2): fixes found on dev questions carried over only partly. The held-out products also share HERB's question templates, so even that run measures new products, not new kinds of question.
 - **HERB is synthetic and tidy.** Some checks find nothing here: resolved bugs without a fix, unreviewed PRs.
 - **Some HERB labels contradict each other.** 7 of Lore's 13 "answered an unanswerable" cases are questions HERB's own answerable ground truth answers (eval report §6).
 - **Graph-computed counts ignore permissions**, and the permission policy is synthetic.
@@ -321,8 +324,8 @@ See [eval/report.md](eval/report.md): the dev/held-out split and its guard, the 
 Planning notes were prepared with an AI assistant before the event, as rule 8 allows. During the event, code was written with Claude Code as a coding assistant. Every query, schema decision and evaluation was reviewed, tested and is explainable by the author. Runtime LLM use: event extraction and answer generation (Claude Haiku 5.5; see `.env.example`). Log: [docs/ai-usage.md](docs/ai-usage.md).
 
 ## What's next
-- The held-out run, and the same measurement on new question types.
+- Close the dev → held-out gap with a fresh dev split, then measure on new question types.
+- One-click install (OAuth) and a hosted version, with a graph per company.
 - Real permission sources (Slack membership, repo access) in place of the synthetic policy.
 - Feature-level decisions from planning docs.
 - Webhooks instead of polling.
-- Per-tenant graphs.

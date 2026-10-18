@@ -115,6 +115,30 @@ def test_the_spend_cap_refuses_before_calling(gateway):
     assert gateway.calls == []
 
 
+def test_the_ledger_is_never_read_half_written(tmp_path):
+    """Judge threads read the ledger while others write it (13.3 crashed on an empty read)."""
+    import threading
+
+    path = tmp_path / "llm_spend.json"
+    errors: list[Exception] = []
+
+    def work() -> None:
+        try:
+            for _ in range(200):
+                llm.record_spend(0.001, path)
+                llm.spent_today(path)
+        except Exception as e:  # noqa: BLE001 — the test collects whatever a reader hits
+            errors.append(e)
+
+    threads = [threading.Thread(target=work) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == [] and llm.spent_today(path) == pytest.approx(1.2)
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
 def test_refusals_and_cutoffs_raise_but_are_still_billed(gateway):
     gateway.replies += [response(stop="refusal"), response(stop="max_tokens")]
     with pytest.raises(llm.Refused):

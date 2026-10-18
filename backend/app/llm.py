@@ -17,6 +17,7 @@ How a call goes (D033):
 
 import hashlib
 import json
+import os
 import re
 import threading
 import time
@@ -89,9 +90,10 @@ def ledger_path() -> Path:
 
 def spent_today(path: Path | None = None) -> float:
     path = path or ledger_path()
-    if not path.exists():
-        return 0.0
-    return float(json.loads(path.read_text(encoding="utf-8")).get(today(), 0.0))
+    with _FILES_LOCK:  # a read during a write saw an empty file and crashed a held-out judge run
+        if not path.exists():
+            return 0.0
+        return float(json.loads(path.read_text(encoding="utf-8")).get(today(), 0.0))
 
 
 def record_spend(amount: float, path: Path | None = None) -> None:
@@ -100,7 +102,10 @@ def record_spend(amount: float, path: Path | None = None) -> None:
     with _FILES_LOCK:
         days = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         days[today()] = round(days.get(today(), 0.0) + amount, 6)
-        path.write_text(json.dumps(days, indent=1) + "\n", encoding="utf-8", newline="\n")
+        # Atomic: another process (the API, a second eval) never reads a half-written ledger.
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(days, indent=1) + "\n", encoding="utf-8", newline="\n")
+        os.replace(tmp, path)
 
 
 def today() -> str:

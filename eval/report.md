@@ -2,7 +2,7 @@
 
 What we measured, how, and what the numbers do and don't show. Every figure here comes from a results file in [`eval/results/`](results/) (the table: [`results/table.md`](results/table.md), rebuilt by `lore eval-report`) or a decision entry in [`docs/decisions.md`](../docs/decisions.md).
 
-> **Status (18 Oct):** these are **dev** results, on the 3 dev products. The held-out run (the 7 sealed test products, run once through a logged guard) is ready but not yet run, so no held-out number appears anywhere yet.
+> **Status (18 Oct, final):** the held-out run is done, once, for all three systems (§3a; `eval/heldout_runs.log` has one opening per system). §3 keeps the dev results the system was built against.
 
 ## 1. The benchmark
 [HERB](https://huggingface.co/datasets/Salesforce/HERB) (Salesforce AI Research, CC BY-NC 4.0) is a synthetic company: 30 products, each with Slack channels, meeting transcripts, documents, pull requests and shared links, plus questions with ground truth.
@@ -45,6 +45,25 @@ The HERB row is the published result for a different model and setup: context, n
 - **The unanswerable gap (42.3% → 87.5%) is mostly the abstention line, not the validator (correction, D076).** The model itself chose to abstain in all 91 declines. In 47 of them its own text explained near-misses ("No Product Manager reviewed it; the feedback came from…"), which HERB's judge counts as an attempt. Lore replaces an abstention's text with a fixed line: "Not found in Lore's graph: no evidence answers this question. Searched with: …".
 
 **Paired view (D043):** a single run of a system moves by a few Avg points from sampling alone (Haiku 5.5 takes no temperature). The baseline scored 16.4 and 13.8 on two runs that differed only in search. Read 25 → 83 as large, not as precise.
+
+## 3a. Held-out results (18 Oct, runs `20261018T1301Z` lore, `T1315Z` baseline, `T1321Z` lore-search)
+The 7 test products (189 answerable + 210 unanswerable questions), never read while building. Agent, prompts, tools and graph frozen at commit `4946721`; one run per system (D079).
+
+| System | Content | People | Customer | Artifact | **Avg** | Unanswerable declined | Answerable abstained | Quotes verified | p50 / p95 answer | Tokens / answer | Cost (399 q) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| baseline | 12.6 | 13.3 | 0.0 | 12.6 | **9.6** | 80.0% | 79.9% | 98.5% | 4.8 / 8.9 s | 3,931 | $0.30 |
+| lore-search | 17.7 | 37.6 | 0.0 | 41.5 | **24.2** | 81.9% | 47.6% | 100% | 13.0 / 19.8 s | 1,926 | $1.07 |
+| **lore** | **64.0** | **65.2** | **54.2** | **71.3** | **63.6** | 76.7% | 8.5% | **100%** | 9.7 / 19.9 s | 1,690 | $1.12 |
+| *HERB paper, best product-specific agent (GPT-4o ReAct)* | | | | | *43.4* | *29.3%* | | | | | |
+
+**What it says:**
+- **The graph is still most of the score:** 24.2 → 63.6 between lore-search and lore, the same gap in kind as on dev (25.0 → 83.2). Search-only systems still score 0 on Customer questions.
+- **Lore loses 20 points from dev to held-out** (83.2 → 63.6), most in Customer (88.4 → 54.2) and People (88.4 → 65.2). The fixes of §6 were found by reading dev answers; this is the part that didn't carry over to new products. The held-out questions stay unread, so we report the gap and don't analyze it per question.
+- **The systems without the graph barely move** (25.0 → 24.2, 14.7 → 9.6): new products aren't harder in general; the drop is in what Lore learned from dev.
+- **Declining unanswerables dropped** (87.5% → 76.7%), and Lore abstained on more answerable questions (4.2% → 8.5%).
+- **Validator:** a problem in 40% of first answers, repaired in one round; 33 sentences dropped, 26 url lines cited automatically, 1 answer turned into an abstention. Every one of 1,009 citations quotes its source word for word.
+- **Latency:** FalkorDB p50 per tool 3–28 ms (`search_artifacts` 27 ms, `list_issues` 14 ms, `rank` 5 ms); the answer's seconds are the model's turns.
+- **A fault on the way, no effect on scores:** the baseline's judging crashed when one thread read the spend ledger while another rewrote it. Its 399 saved answers were judged again with `--score-only` (no new held-out opening); the ledger now reads under the lock and writes atomically (D079).
 
 ## 4. HERB-Drift: right about now, and about then (13.1)
 24 hand-labeled dev questions (`eval/drift_set.json`): 11 about the current status of an issue or PR, 10 "as of <date>", 3 "why". Ground truth was read from the raw messages by hand, never from Lore's graph, and every item lists its message ids. A Haiku judge classifies each answer as correct, stale (a state that held at another time), abstained or wrong.
@@ -102,7 +121,7 @@ In the check, the wrongly answered unanswerables went from 4 to 0.
 | The validator ablation reuses the Lore run | No sampling noise between the two, judge cost only | It removes the validator and the fixed abstention line together (D076) |
 
 ## 8. Limitations
-- **Dev only so far.** The held-out run is the number that counts; it runs once.
+- **Held-out is 20 points below dev** (63.6 vs 83.2). The drift set and the error analysis are dev-only.
 - **Same question templates.** HERB's held-out products share its 41 templates with dev, so a held-out run measures new products, not new kinds of question.
 - **Synthetic data.** HERB is generated and tidy: every resolved bug has a fixing PR, every issue an assignee. Several of Lore's checks (resolved without a fix, unreviewed PRs) find nothing here.
 - **The content judge is noisy** (same answer: 90, then 40).
@@ -118,6 +137,7 @@ uv run --project backend lore eval --split dev --system baseline --workers 6    
 uv run --project backend lore eval --score-only eval/runs/<run>_lore_dev --variant unvalidated
 uv run --project backend lore eval --split drift --system lore
 uv run --project backend lore bench-search --k 10 ; uv run --project backend lore bench-experts   # $0
+uv run --project backend lore eval --split test --system lore --heldout --workers 6   # the single held-out run, per system (~$1.1)
 uv run --project backend lore eval-report                                        # rebuild results/table.md
 ```
 Answers are cached by their exact request, so a re-run with unchanged code replays for $0.
