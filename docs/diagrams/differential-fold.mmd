@@ -1,0 +1,12 @@
+%% The event-sourced derived layer (D101): events are kept forever; each product is folded from them and only what changed is written.
+flowchart LR
+  M["New message<br/>from a tool or the demo"]:::ext --> X["Extract, read with its conversation<br/>LLM, before the writer lock"]:::code
+  X --> E[":Event nodes<br/>never deleted; observed_ms set once<br/>retracted_ms when a newer version drops one"]:::store
+  E --> F["Fold the message's product<br/>from the graph: events + context"]:::code
+  F --> H{"Each node's row hash<br/>vs the hash stamped on it"}:::guard
+  H -->|"changed"| W["clear its own edges, upsert,<br/>relink, stamp the hash last"]:::code
+  H -->|"no longer derived"| D["delete it"]:::code
+  H -->|"same"| K["leave it alone"]:::file
+  W --> G["Claims, decisions, issues<br/>no empty window; an interrupted write<br/>is redone by the next fold"]:::store
+  D --> G
+  E -.->|"events Lore knew at T"| B["Belief at T<br/>replayed, read-only"]:::file

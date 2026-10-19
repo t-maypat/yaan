@@ -125,7 +125,7 @@ def main() -> int:
         if runs:
             report[split] = summary(runs)
     path = get_settings().eval_dir / "results" / "bootstrap.json"
-    path.write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8", newline="\n")
     print(json.dumps(report, indent=1))
     print(f"-> {Path(path).relative_to(get_settings().eval_dir.parent)}", file=sys.stderr)
     return 0

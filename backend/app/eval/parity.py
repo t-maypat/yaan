@@ -130,7 +130,9 @@ def main(argv: list[str] | None = None) -> int:
     batch = extract.read_events(args.product)
     out = compare(args.product, live_events, batch, args.graph or get_settings().lore_graph)
     path = get_settings().eval_dir / "results" / f"parity_{args.product}.json"
-    path.write_text(json.dumps({"estimate": est, **out}, indent=1) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps({"estimate": est, **out}, indent=1) + "\n", encoding="utf-8", newline="\n"
+    )
     print(json.dumps({k: v for k, v in out.items() if not k.startswith("only_")}, indent=1))
     print(f"details: {path}")
     return 0
