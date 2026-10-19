@@ -6,7 +6,7 @@ default_person: eid_bd791efc        # David Garcia, Engineering Lead: who an unm
 slack:
   channels:                          # Slack channel name -> the VizForce channel it plays
     vizforce-bugs: ch-force-d79648    # bug-davidgarcia-VizForce
-  alerts_channel: lore-alerts        # alert cards with Approve / Dismiss, and notifications
+  alerts_channel: yaan-alerts        # alert cards with Approve / Dismiss, and notifications
   people: {}                         # Slack user id -> eid
 github:
   people:                            # GitHub login -> eid; "self" = the token's own login

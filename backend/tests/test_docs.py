@@ -1,4 +1,4 @@
-"""Docs guardrails: diagrams display everywhere and stay fresh; the README lists every query.
+"""Docs guardrails: diagrams display everywhere and stay fresh; docs/queries.md lists every query.
 
 Raw ```mermaid blocks show up as plain syntax in VS Code's preview, so the docs embed
 SVGs rendered by scripts/render_diagrams.py. These tests fail on a raw Mermaid block, a
@@ -53,8 +53,9 @@ def test_markdown_renders_everywhere(doc):
             assert (doc.parent / target).resolve().is_file(), f"broken image link: {target}"
 
 
-def test_the_readme_lists_every_query():
-    """Submission rule: the README lists every .cypher file (scripts/query_table.py builds it)."""
+def test_the_query_list_is_complete():
+    """Submission rule: docs/queries.md, linked from the README, lists every .cypher file
+    (scripts/query_table.py builds it)."""
     import subprocess
     import sys
 

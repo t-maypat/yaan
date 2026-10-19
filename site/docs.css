@@ -30,6 +30,8 @@
 .doc-note { background: var(--surface-2); border: 1px solid var(--rule); }
 .tip { background: color-mix(in srgb, var(--petrol) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--petrol) 25%, var(--rule)); }
 .caution { background: var(--brick-soft); border: 1px solid color-mix(in srgb, var(--brick) 30%, var(--rule)); }
+.opt { display: inline-block; margin-left: 10px; padding: 2px 9px; border-radius: 999px; border: 1px dashed var(--rule-2);
+  font: 600 12.5px/1.5 var(--sans); letter-spacing: .01em; color: var(--muted); vertical-align: middle; }
 
 .need { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 10px; }
 .need li { display: grid; grid-template-columns: 44px 1fr; gap: 14px; align-items: start; padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--rule); }
