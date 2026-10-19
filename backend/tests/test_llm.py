@@ -374,3 +374,23 @@ def test_converse_refusals_raise_and_are_billed(gateway):
             purpose="t",
         )
     assert llm.spent_today() > 0
+
+
+def test_a_ledger_held_open_elsewhere_is_retried_not_lost(gateway, monkeypatch):
+    """Windows refuses os.replace while another process has the ledger open (an older Lore
+    process, an antivirus scan): the write waits a moment instead of crashing a paid run."""
+    import os
+
+    real, refusals = os.replace, []
+
+    def flaky(src, dst):
+        if len(refusals) < 3:
+            refusals.append(dst)
+            raise PermissionError(5, "Access is denied")
+        return real(src, dst)
+
+    monkeypatch.setattr(llm.os, "replace", flaky)
+    path = llm.ledger_path()
+    with llm.spend(0.01, path) as pay:
+        pay(0.004)
+    assert len(refusals) == 3 and llm.spent_today(path) == pytest.approx(0.004)

@@ -122,11 +122,21 @@ def _read_ledger(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
+REPLACE_TRIES = 40  # x 50 ms: Windows refuses a rename while anyone holds the file open
+
+
 def _write_ledger(path: Path, days: dict[str, Any]) -> None:
     # Atomic: a reader never sees a half-written ledger.
     tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     tmp.write_text(json.dumps(days, indent=1) + "\n", encoding="utf-8", newline="\n")
-    os.replace(tmp, path)
+    for attempt in range(REPLACE_TRIES):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:  # another process (an older Lore, an antivirus scan) has it open
+            if attempt == REPLACE_TRIES - 1:
+                raise
+            time.sleep(0.05)
 
 
 def spent_today(path: Path | None = None) -> float:
