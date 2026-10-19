@@ -157,10 +157,12 @@ def ingest_artifact(
 
     t = time.perf_counter()
     if events is None:
-        units = extract.units(product, [a])
+        units = live_units(a, graph)
         kept, dropped, xstats = (
             extract.run(units, workers=1) if units else ([], [], {"cost_usd": 0})
         )
+        # the conversation is context: only what the new message states is new
+        kept = [e for e in kept if e["artifact_id"] == a.id]
     else:  # structured facts from the source: no LLM, but every quote must be in the text
         kept = [e for e in events if llm.quote_in(e["quote"], a.text)]
         dropped = [e for e in events if not llm.quote_in(e["quote"], a.text)]
@@ -248,6 +250,58 @@ def _write(a, graph, product, meta, kept, replace, received_ms, stages) -> dict[
         "alerts": engine.list_alerts(graph=graph, artifact_id=a.id),
         "stages_ms": stages,
     }
+
+
+CONTEXT_MESSAGES = 8  # earlier messages a live message is read with
+CONTEXT_WINDOW_MS = 7 * 86_400_000  # within the week before it
+
+
+def conversation(a: Artifact, graph: str) -> list[Artifact]:
+    """The messages before `a` in its channel, oldest first (D102). The batch extraction reads
+    whole conversations, so "the PR" and "that bug" resolve to what was said earlier; a live
+    message read alone could not, and org mode, which runs only the live path, extracted less
+    than the evaluated batch did."""
+    if a.kind != "message" or not a.channel_id or a.ts_ms is None:
+        return []
+    params = {
+        "channel_id": a.channel_id,
+        "before_ms": a.ts_ms,
+        "since_ms": a.ts_ms - CONTEXT_WINDOW_MS,
+        "limit": CONTEXT_MESSAGES,
+    }
+    rows = db.run("channel_context", params, graph=graph).rows
+    return [
+        Artifact(
+            id=r["id"],
+            kind="message",
+            product_hint=a.product_hint,
+            channel_id=a.channel_id,
+            ts_ms=r["ts_ms"],
+            ts_iso=r["ts_iso"],
+            author_eid=r["author"],
+            text=r["text"] or "",
+            raw_ref=r["id"],
+            system=bool(r["system"]),
+            meta={"channel_name": a.meta.get("channel_name")},
+        )
+        for r in reversed(rows)
+        if r["id"] != a.id
+    ]
+
+
+def live_units(a: Artifact, graph: str) -> list[extract.Unit]:
+    """One extraction unit: the new message after its conversation, oldest messages dropped
+    first to stay within extract.UNIT_CHARS. None for what extraction doesn't read (PRs,
+    docs, system messages, planning channels)."""
+    if a.kind != "message" or a.system or extract.channel_kind(a) not in extract.CHANNEL_KINDS:
+        return []
+    context = [m for m in conversation(a, graph) if not m.system]
+    budget = extract.UNIT_CHARS - len(a.text)
+    while context and sum(len(m.text) + 20 for m in context) > budget:
+        context.pop(0)
+    channel = a.meta.get("channel_name") or a.channel_id
+    unit_id = f"unit:{a.product_hint}:{channel}:live:{a.id}"
+    return [extract.Unit(unit_id, a.product_hint, channel, (*context, a))]
 
 
 def upgrade(graph: str) -> int:

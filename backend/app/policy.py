@@ -21,6 +21,23 @@ Outcome = Literal["authorized", "unverified", "unauthorized"]
 LEADS = {"Engineering Lead", "VP of Engineering", "Product Manager", "Chief Product Officer"}
 ISSUE_ROLES = LEADS | {"QA Specialist"}
 UNVERIFIED_CONFIDENCE = 0.6
+# What the table reads (D102): a person's authority, not their job title. people.yaml may set
+# it (`authority: lead | qa | member`), since a team's titles ("Tech Lead", "Staff Engineer")
+# aren't HERB's; without it, HERB's titles map: the LEADS are leads, a QA Specialist is qa,
+# any other title is a member, and no title is unknown (unverified).
+AUTHORITIES = ("lead", "qa", "member")
+
+
+def authority_of(role: str | None, authority: str | None = None) -> str | None:
+    if authority:
+        if authority not in AUTHORITIES:
+            raise ValueError(f"authority must be one of {AUTHORITIES}, not {authority!r}")
+        return authority
+    if role is None:
+        return None
+    if role in LEADS:
+        return "lead"
+    return "qa" if role == "QA Specialist" else "member"
 
 
 @dataclass(frozen=True)
@@ -30,6 +47,7 @@ class Facts:
     speaker: str | None
     speaker_role: str | None = None
     speaker_in_product: bool = False  # authored anything in the product's channels or PRs
+    speaker_authority: str | None = None  # people.yaml's, if set; else from the role
     assignee: str | None = None  # issue assignee at the claim's time
     pr_author: str | None = None
     pr_reviewers: frozenset[str] = field(default_factory=frozenset)
@@ -42,22 +60,23 @@ class Verdict:
     reason: str
 
 
-def is_lead(role: str | None) -> bool:
-    """A role that may act for the team beyond its own work (respond to any alert, D100)."""
-    return role in LEADS
+def is_lead(role: str | None, authority: str | None = None) -> bool:
+    """May act for the team beyond their own work (respond to any alert, D100)."""
+    return authority_of(role, authority) == "lead"
 
 
 def decide(kind: Literal["issue_status", "pr_action"], facts: Facts) -> Verdict:
     """The §9.4 authority table as code."""
     if not facts.speaker:
         return Verdict("unverified", "speaker", "the speaker is not a resolved person")
-    if facts.speaker_role is None:
+    level = authority_of(facts.speaker_role, facts.speaker_authority)
+    if level is None:
         return Verdict("unverified", "role", f"{facts.speaker} has no role in employee metadata")
-    who = f"{facts.speaker} ({facts.speaker_role})"
+    who = f"{facts.speaker} ({facts.speaker_role or level})"
     if kind == "issue_status":
         if facts.speaker == facts.assignee:
             return Verdict("authorized", "assignee", f"{who} is the issue's assignee")
-        if facts.speaker_role in ISSUE_ROLES and facts.speaker_in_product:
+        if level in ("lead", "qa") and facts.speaker_in_product:
             return Verdict("authorized", "role", f"{who} works on the product")
         if facts.speaker_in_product and facts.assignee is None:
             return Verdict("unverified", "no_assignee", f"no assignee recorded; {who} is on it")
@@ -67,7 +86,7 @@ def decide(kind: Literal["issue_status", "pr_action"], facts: Facts) -> Verdict:
             return Verdict("authorized", "author", f"{who} authored the PR")
         if facts.speaker in facts.pr_reviewers:
             return Verdict("authorized", "reviewer", f"{who} reviewed the PR")
-        if facts.speaker_role in LEADS and facts.speaker_in_product:
+        if level == "lead" and facts.speaker_in_product:
             return Verdict("authorized", "role", f"{who} leads on the product")
         if facts.speaker_in_product:
             # HERB's develop channels decide by consensus among the product's engineers.

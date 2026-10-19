@@ -2,15 +2,16 @@
 #
 # Yaan registers anyone it meets in a connected tool on its own, under their name in that tool.
 # List people here to give them a role and to merge their accounts across tools into one person.
-# The role is what the authority policy reads when someone says an issue is fixed, dismissed or
-# back:
+# `authority` is what the policy reads when someone says an issue is fixed, dismissed or back:
 #   - the issue's assignee may always change it;
-#   - an Engineering Lead, VP of Engineering, Product Manager, Chief Product Officer or QA
-#     Specialist who works on the product may change it;
-#   - anyone else with a role here (say, Software Engineer): the claim is recorded but refused,
-#     and Yaan raises a conflict alert;
-#   - someone with no role (not listed, or listed without one): the claim applies, marked
-#     unverified.
+#   - authority `lead` or `qa`, working on the product: may change it (leads may also respond
+#     to any alert);
+#   - authority `member`: the claim is recorded but refused, and Yaan raises a conflict alert;
+#   - no authority and no role (not listed, or listed without either): the claim applies,
+#     marked unverified.
+# Without `authority`, the role decides: Engineering Lead, VP of Engineering, Product Manager
+# and Chief Product Officer are leads, QA Specialist is qa, any other role is a member. Set
+# `authority` when your titles differ ("Tech Lead", "Staff Engineer").
 #
 # Account ids: Slack member id (Profile > ... > Copy member ID), GitHub login, Jira account id,
 # Notion user id. A list gives one person several accounts in the same tool.
@@ -18,7 +19,8 @@
 # people:
 #   - name: Priya Shah
 #     email: priya@example.com        # optional; with no email the id comes from the name
-#     role: Engineering Lead
+#     role: Tech Lead
+#     authority: lead                # optional: lead | qa | member
 #     accounts:
 #       slack: U0123ABCDEF
 #       github: priya-s

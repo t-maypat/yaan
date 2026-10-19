@@ -97,6 +97,7 @@ class Context:
     customers: set[str]
     active: dict[str, set[str]]  # product -> eids that authored anything there
     prs: dict[str, Artifact]  # pr id -> PR
+    authority: dict[str, str | None] = field(default_factory=dict)  # people.yaml's (D102)
     observed_ms: int = field(default_factory=lambda: int(time.time() * 1000))
 
 
@@ -295,6 +296,7 @@ def _verdict(kind, e, speaker, target, ctx: Context, assigned) -> policy.Verdict
     facts = policy.Facts(
         speaker=speaker if speaker in ctx.roles else None,
         speaker_role=ctx.roles.get(speaker or ""),
+        speaker_authority=ctx.authority.get(speaker or ""),
         speaker_in_product=speaker in ctx.active.get(e["product"], set()),
         assignee=assignee_at(assigned.get(target, []), e["ts_ms"] or 0)
         if kind == "issue_status"
@@ -503,10 +505,9 @@ def migrate_legacy(graph: str | None) -> int:
 
 def graph_context(product: str, graph: str | None) -> tuple[Context, list[Artifact]]:
     """The fold's context for one product, read from the graph, and its PRs for resolution."""
-    roles = {
-        r["id"]: r["role"]
-        for r in db.run_all("fold_people", {}, cap=STATE_CAP, graph=graph, timeout_ms=30_000)
-    }
+    people = db.run_all("fold_people", {}, cap=STATE_CAP, graph=graph, timeout_ms=30_000)
+    roles = {r["id"]: r["role"] for r in people}
+    authority = {r["id"]: r["authority"] for r in people if r["authority"]}
     customers = {
         r["id"]
         for r in db.run_all("fold_customers", {}, cap=STATE_CAP, graph=graph, timeout_ms=30_000)
@@ -551,6 +552,7 @@ def graph_context(product: str, graph: str | None) -> tuple[Context, list[Artifa
         customers=customers,
         active={product: active},
         prs={p.id: p for p in prs if not p.external},
+        authority=authority,
     )
     return ctx, prs
 

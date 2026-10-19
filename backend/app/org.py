@@ -96,12 +96,26 @@ def parse_roster(path: Path) -> dict[str, dict[str, Any]]:
             "id": eid,
             "name": e["name"],
             "role": e.get("role"),  # None: unknown, which the policy treats as unverified
+            "authority": authority(path, e),
             "email": e.get("email") or "",  # sign-in by proxy header (auth.py); not in the graph
             "location": e.get("location") or "",
             "org": e.get("org") or "",
             "accounts": accounts,
         }
     return out
+
+
+def authority(path: Path, e: dict[str, Any]) -> str | None:
+    """`authority: lead | qa | member` (D102): what the policy reads, so a team's own titles
+    work. Without it the role's HERB title decides (policy.authority_of)."""
+    from app import policy
+
+    value = e.get("authority")
+    if value is not None and value not in policy.AUTHORITIES:
+        raise OrgError(
+            f"{path.name}: {e['name']}'s authority {value!r} must be one of {policy.AUTHORITIES}"
+        )
+    return value
 
 
 @lru_cache

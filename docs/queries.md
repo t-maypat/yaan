@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-191 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+192 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -131,12 +131,12 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_meetings.cypher`](../backend/queries/upsert_meetings.cypher) | meeting transcript artifacts |
 | [`upsert_messages.cypher`](../backend/queries/upsert_messages.cypher) | Slack message artifacts |
 | [`upsert_orgs.cypher`](../backend/queries/upsert_orgs.cypher) | org nodes from the hierarchy's `org` field |
-| [`upsert_people.cypher`](../backend/queries/upsert_people.cypher) | person nodes from metadata/employee.json |
+| [`upsert_people.cypher`](../backend/queries/upsert_people.cypher) | person nodes from metadata/employee.json or people.yaml, with an explicit authority when people.yaml gives one (D102) |
 | [`upsert_products.cypher`](../backend/queries/upsert_products.cypher) | product nodes from channel names, with codenames found in artifacts (D029) |
 | [`upsert_prs.cypher`](../backend/queries/upsert_prs.cypher) | pull request artifacts, with current_status from their decision chain |
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (82)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (83)
 
 | Query | Purpose |
 |---|---|
@@ -158,6 +158,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`artifact_people_detail.cypher`](../backend/queries/artifact_people_detail.cypher) | the people around one artifact: authors, attendees, speakers, reviewers (with review state) and people it mentions |
 | [`artifact_texts.cypher`](../backend/queries/artifact_texts.cypher) | every quotable text of the given artifacts (title, url, text, chunk spans), for the citation validator |
 | [`artifacts_present.cypher`](../backend/queries/artifacts_present.cypher) | which of these ids are artifacts in the graph: the live path's "already ingested?" and the demo's injected flags (D101) |
+| [`channel_context.cypher`](../backend/queries/channel_context.cypher) | the messages before a new one in its channel, newest first: the conversation the live extraction reads it in, as the batch extraction does (D102) |
 | [`collab_meetings.cypher`](../backend/queries/collab_meetings.cypher) | who attended each meeting: the co-attendance part of COLLAB (10.1) |
 | [`collab_messages.cypher`](../backend/queries/collab_messages.cypher) | who wrote each (non-system) Slack message and in which channel: the conversation part of COLLAB (10.1) |
 | [`collab_paths.cypher`](../backend/queries/collab_paths.cypher) | the shortest COLLAB path (at most 4 hops) between each given pair of people: how a listed owner reaches the real expert, or how close a backup already is to a key person (10.5, D065) |

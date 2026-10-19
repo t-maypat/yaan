@@ -430,3 +430,69 @@ def test_a_teams_message_lands_in_its_own_graph(org_mode, empty_graph):
         "issue_reopened",
         "The CSV export times out again",
     ) == ["regression"]
+
+
+def test_people_yaml_may_give_an_authority_and_says_what_is_wrong(tmp_path):
+    path = tmp_path / "people.yaml"
+    path.write_text(
+        "people: [{name: Sam, role: Staff Engineer, authority: lead}, {name: Kim}]",
+        encoding="utf-8",
+    )
+    got = {p["name"]: p["authority"] for p in org.parse_roster(path).values()}
+    assert got == {"Sam": "lead", "Kim": None}
+    path.write_text("people: [{name: Sam, authority: boss}]", encoding="utf-8")
+    with pytest.raises(org.OrgError, match="Sam's authority 'boss' must be one of"):
+        org.parse_roster(path)
+
+
+def test_a_live_message_is_read_with_its_conversation(org_mode, empty_graph, monkeypatch):
+    """D102: org mode runs only the live path, which used to read each message alone. Now the
+    model sees the channel's earlier messages, as the batch extraction does, and only what the
+    new message states is kept."""
+    from app.ingest import extract, verify
+
+    org.prepare(empty_graph, MAPS.product, MAPS.sources)
+    sam = MAPS.person("slack", "U2", name="Sam Lee")
+    priya = org.eid_for("priya@acme.example")
+
+    def message(n: int, who: str, text: str) -> Artifact:
+        ts = 1804586400000 + n * 60_000
+        return Artifact(
+            id=base.synthetic_id("msg", "slack", f"C1-{ts}"),
+            kind="message",
+            product_hint="Acme",
+            channel_id="bug-support",
+            ts_ms=ts,
+            ts_iso=f"2027-03-09T10:0{n}:00Z",
+            author_eid=who,
+            text=text,
+            raw_ref=f"slack:C1:{ts}",
+            meta={"channel_name": "bug-support", "sender": who, "source": "slack"},
+        )
+
+    first = message(1, sam, "Issue 'CSV export times out' is back for CUST-0001.")
+    live.ingest_artifact(first, empty_graph, events=[])
+    reply = message(2, priya, "Fixed it: the export now streams.")
+    seen = []
+
+    def fake_run(units, workers=1):
+        [unit] = units
+        seen.append([m.id for m in unit.messages])
+        rows = [
+            {"type": "issue_reported", "quote": "CSV export times out", "msg": 0},
+            {"type": "issue_resolved", "quote": "Fixed it", "msg": 1},
+        ]
+        kept = []
+        for r in rows:
+            e = {**dict.fromkeys(extract.Event.model_fields), **r, "issue": "CSV export times out"}
+            e |= {"decisive": True, "confidence": 0.9}
+            ok, row = verify.check(e, unit)
+            assert ok
+            kept.append(row)
+        return kept, [], {"cost_usd": 0.0}
+
+    monkeypatch.setattr(extract, "run", fake_run)
+    out = live.ingest_artifact(reply, empty_graph)
+    assert seen == [[first.id, reply.id]]  # the earlier message first, then the new one
+    assert [e["type"] for e in out["events"]] == ["issue_resolved"]  # its own claim only
+    assert out["events"][0]["artifact_id"] == reply.id

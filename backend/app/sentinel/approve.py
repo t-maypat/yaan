@@ -66,7 +66,8 @@ def respond(
         for a in engine.list_alerts(graph=graph, alert_id=alert_id, limit=1)
         for n in a["notifies"]
     }
-    if person_id not in notified and not policy.is_lead(alert["person_role"]):
+    lead = policy.is_lead(alert["person_role"], alert["person_authority"])
+    if person_id not in notified and not lead:
         who = alert["person_name"] or person_id
         raise AlertError(
             f"{who} isn't notified by this alert and isn't a lead: only those may respond to it"

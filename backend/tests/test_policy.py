@@ -2,6 +2,7 @@
 
 import pytest
 
+from app import policy
 from app.policy import Facts, decide
 
 
@@ -44,3 +45,25 @@ def test_pr_action_by_author_reviewer_or_team_is_authorized_outsider_is_not():
 def test_unknown_kind_fails_loudly():
     with pytest.raises(ValueError):
         decide("feature_status", Facts("eid_a", "Product Manager"))  # type: ignore[arg-type]
+
+
+# --- authority, not titles (D102) ------------------------------------------------------------
+def test_herb_titles_map_to_authority_and_an_explicit_one_wins():
+    assert policy.authority_of("Engineering Lead") == "lead"
+    assert policy.authority_of("QA Specialist") == "qa"
+    assert policy.authority_of("Software Engineer") == "member"
+    assert policy.authority_of(None) is None
+    assert policy.authority_of("Staff Engineer", "lead") == "lead"  # a team's own title
+    with pytest.raises(ValueError, match="authority must be one of"):
+        policy.authority_of("Staff Engineer", "boss")
+
+
+def test_a_team_lead_under_another_title_may_dismiss_and_respond():
+    staff = policy.Facts(
+        speaker="eid_s", speaker_role="Staff Engineer", speaker_in_product=True, assignee="eid_x"
+    )
+    assert policy.decide("issue_status", staff).outcome == "unauthorized"
+    lead = policy.Facts(**{**staff.__dict__, "speaker_authority": "lead"})
+    verdict = policy.decide("issue_status", lead)
+    assert verdict.outcome == "authorized" and "Staff Engineer" in verdict.reason
+    assert policy.is_lead("Staff Engineer", "lead") and not policy.is_lead("Staff Engineer")

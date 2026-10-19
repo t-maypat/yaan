@@ -279,3 +279,57 @@ def test_the_api_serves_the_belief_at_a_moment(base, monkeypatch):
     then = client.get(f"/decision/{issue}/belief", params={"known_at_ms": 15}).json()
     assert [d["value"] for d in then["chains"]["status"]] == ["reported"]
     assert client.get("/decision/msg:m1/belief").status_code == 404
+
+
+def test_an_explicit_authority_lets_a_team_lead_by_another_title_decide(base):
+    # Cy is a "Software Engineer": his dismissal is refused. Given `authority: lead`
+    # (people.yaml, D102), the same claim applies.
+    event_store.load(EVENTS, base, observed_ms=1)
+    fold.fold_product("W", base)
+    issue = "iss:W:" + fold_issue_hash()
+    assert fold.belief(issue, "W", base, None)["chains"]["status"][-1]["value"] == "reopened"
+    db.run_text(
+        "MATCH (p:Person {id: 'eid_c3'}) SET p.authority = 'lead'",
+        label="a",
+        graph=base,
+        readonly=False,
+    )
+    fold.fold_product("W", base)
+    assert fold.belief(issue, "W", base, None)["chains"]["status"][-1]["value"] == "dismissed"
+
+
+# --- live-vs-batch parity (D102) -------------------------------------------------------------
+def test_parity_reads_each_message_in_the_window_the_live_path_would(monkeypatch):
+    from app.eval import parity
+    from app.ingest.normalize import Artifact
+
+    def msg(i, channel, day):
+        return Artifact(
+            id=f"msg:{i}",
+            kind="message",
+            product_hint="W",
+            channel_id=channel,
+            ts_ms=day * 86_400_000 + i,
+            ts_iso="t",
+            author_eid="eid_a1",
+            text=f"m{i}",
+            raw_ref="r",
+            meta={"channel_name": f"{channel}-W"},
+        )
+
+    arts = [msg(i, "bug", 10) for i in range(10)] + [msg(20, "planning", 10), msg(21, "bug", 30)]
+    monkeypatch.setattr(parity, "read_jsonl", lambda path: arts)
+    got = {a.id: [m.id for m in u.messages] for a, u in parity.windows("W")}
+    assert "msg:20" not in got  # a planning channel isn't extracted
+    assert got["msg:9"] == [f"msg:{i}" for i in range(1, 10)]  # 8 earlier messages, then it
+    assert got["msg:21"] == ["msg:21"]  # 20 days later: none of the earlier ones in its week
+
+
+def test_parity_compares_events_and_folded_outcomes(base):
+    from app.eval import parity
+
+    same = parity.compare("W", EVENTS, EVENTS, base)
+    assert (same["precision"], same["recall"], same["final_state_agreement"]) == (1.0, 1.0, 1.0)
+    fewer = parity.compare("W", EVENTS[:2], EVENTS, base)
+    assert fewer["precision"] == 1.0 and fewer["recall"] < 1.0
+    assert fewer["final_state_agreement"] < 1.0  # without the re-report the issue stays resolved
