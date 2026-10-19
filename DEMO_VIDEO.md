@@ -1,7 +1,7 @@
 # Yaan demo video
 
-**YouTube:** _coming soon (link will be added here)_
+**YouTube:** https://youtu.be/slBvE1oek38
 
 Website: https://yaan-brain.vercel.app/
 
-Until then, see the [README](README.md) to run Yaan locally.
+To run Yaan yourself, see the [README](README.md).
