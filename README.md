@@ -96,7 +96,7 @@ claude mcp add --transport http yaan http://127.0.0.1:8000/mcp
 ## How it works
 
 1. **Ingest.** Every source goes through one pipeline: normalize, build the structural graph (people, teams, channels, PR chains), chunk and embed locally, link ids and names, then extract events with an LLM. Every extracted quote must match its message exactly.
-2. **Fold decisions.** A policy decides who may change what (assignees, QA, leads). Refused claims stay visible next to the decision they tried to change.
+2. **Fold decisions.** Verified events are kept in the graph and never deleted; claims, decisions and issues are folded from them, product by product, rewriting only what changed. A policy decides who may change what (assignees, QA, leads). Refused claims stay visible next to the decision they tried to change, and `yaan belief <issue or PR> --at <date>` replays what Yaan knew at an earlier moment.
 3. **Derive.** Expertise, collaboration, communities, PageRank, betweenness, truck factor and precedents.
 4. **Answer.** A plain tool loop over 17 read-only tools, each one `.cypher` file, with a citation validator and viewer-scoped redaction.
 5. **Watch.** The Change Sentinel flags regressions, reversals, unauthorized changes and key-person risks, drafts follow-ups from the blast radius, and records your Approve as a decision.
@@ -107,7 +107,7 @@ Diagrams: [architecture](docs/diagrams/lore-overview.svg) · [graph data model](
 
 | | Nodes | Key relationships |
 |---|---|---|
-| What is true, since when | `Decision` (value, `valid_from_ms`, `valid_to_ms`), `Claim`, `Issue`, `Area`, `Alert`, `Action` | `SUPERSEDES`, `DECIDED_BY`, `EVIDENCED_BY {quote}`, `AFFECTS`, `CONFLICTS_WITH`, `FLAGS` |
+| What is true, since when | `Event` (what was said, `observed_ms`, `retracted_ms`), `Decision` (value, `valid_from_ms`, `valid_to_ms`), `Claim`, `Issue`, `Area`, `Alert`, `Action` | `SUPERSEDES`, `DECIDED_BY`, `EVIDENCED_BY {quote}`, `AFFECTS`, `CONFLICTS_WITH`, `FLAGS` |
 | Who | `Person`, `Team`, `Customer`, `Company`, `Community` | `AUTHORED`, `REVIEWED`, `KNOWS {score}`, `COLLAB {w}`, `WORKS_AT`, `REPORTED_BY`, `ASSIGNED_TO` |
 | What was said | `Message`, `Meeting`, `Doc`, `PR`, `Link` (all `:Artifact`), `Chunk` (384-d vector), `Channel`, `Product` | `IN_PRODUCT`, `IN_CHANNEL`, `MENTIONS`, `FIXES`, `HAS_CHUNK` |
 
@@ -128,7 +128,7 @@ FalkorDB features Yaan depends on: Cypher over a property graph, a **full-text i
 | [`connection_path`](backend/queries/connection_path.cypher) | the shortest chain of collaborators between two people |
 | [`find_missing`](backend/queries/find_missing.cypher) | what isn't there: unfixed issues, unreviewed PRs, single-author areas |
 
-All 166 queries, one parameterized statement per file, each with a fixture test: **[docs/queries.md](docs/queries.md)**.
+All 191 queries, one parameterized statement per file, each with a fixture test: **[docs/queries.md](docs/queries.md)**.
 
 ## Results
 
@@ -166,7 +166,7 @@ Built for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB): **Tra
 - **Data quality:** no LLM output enters the graph unverified (487/488 extracted quotes matched on held-out); a policy decides who may change a status; a health report counts isolated nodes, duplicate ids and unresolved mentions.
 - **Scale and latency:** product-scoped, index-first queries; bounded paths, `LIMIT` on every read, 2 s timeouts; 5–27 ms p50 per tool on 38.5k nodes and 96k edges.
 - **Explainability:** a verbatim, code-checked quote per sentence; the UI shows the tool walk, each step's `.cypher`, the evidence subgraph and the decision timeline.
-- **Privacy and multi-tenancy:** viewer-scoped answers redact sources before the model reads them; generated Cypher runs as a read-only ACL user.
+- **Privacy and multi-tenancy:** viewer-scoped answers redact sources before the model reads them, and derived facts (an issue, a decision) are visible only if one of their sources is; with your own data every request answers as a signed-in person; generated Cypher runs as a read-only ACL user.
 - **Freshness:** a new message, PR, ticket or page is in the graph and judged by the Sentinel in 1.5–12 s.
 
 **Track 01:** the Sentinel drafts follow-ups from the blast radius and sends them to Jira, GitHub, Notion and Slack once approved; `rank`, `who_knows`, `find_missing`, `impact_of` and `connection_path` are graph algorithms exposed as agent tools, also over MCP.

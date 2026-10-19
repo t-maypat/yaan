@@ -15,12 +15,18 @@ Per topic, claims are applied in time order with the §9.4 rules:
 Issue events are decisive by nature (a report, a fix, a dismissal, a reopening); PR intents
 keep the model's flag, since "should we revert?" and "please revert" differ.
 
-`rebuild` turns a whole extraction into rows for the queries in LOAD_ORDER; `load` clears the
-derived layer and writes them, so a late claim just means re-running the fold.
+`rebuild` turns events into rows for the queries in LOAD_ORDER. Since D101 the events live in
+the graph (events.py) and the fold runs per product (`fold_product`): its context (roles,
+customers, PRs, who works where) is read from the graph too, and `write` compares each derived
+node's rows with the hash stamped on it, rewrites only what changed and removes only what went
+stale. Nothing is cleared wholesale, so readers never see an empty layer, and an interrupted
+write is redone by the next fold (the hash is stamped last). A late claim still just means
+folding its product again. `belief` replays the events known at an earlier moment.
 Spec: docs/CONTEXT.md §9.3 (S8), §9.4; PLAN.md 7.5, 8.3-8.5.
 """
 
 import hashlib
+import json
 import re
 import time
 from collections import defaultdict
@@ -28,6 +34,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app import db, policy
+from app.ingest import events as event_store
+from app.ingest import resolve
 from app.ingest.normalize import Artifact
 from app.ingest.resolve import Issue, Resolution, norm_title
 
@@ -90,27 +98,6 @@ class Context:
     active: dict[str, set[str]]  # product -> eids that authored anything there
     prs: dict[str, Artifact]  # pr id -> PR
     observed_ms: int = field(default_factory=lambda: int(time.time() * 1000))
-
-    @classmethod
-    def build(cls, meta, products: dict[str, list[Artifact]], observed_ms: int | None = None):
-        active: dict[str, set[str]] = defaultdict(set)
-        prs: dict[str, Artifact] = {}
-        for product, arts in products.items():
-            for a in arts:
-                if a.author_eid:
-                    active[product].add(a.author_eid)
-                if a.kind == "pr" and not a.external:
-                    prs[a.id] = a
-                    for r in a.meta.get("reviews", []):
-                        if r.get("reviewer_eid"):
-                            active[product].add(r["reviewer_eid"])
-        return cls(
-            roles={eid: e["role"] for eid, e in meta.employees.items()},
-            customers={c["id"] for c in meta.customers},
-            active=dict(active),
-            prs=prs,
-            observed_ms=observed_ms if observed_ms is not None else int(time.time() * 1000),
-        )
 
 
 def claim_id(e: dict[str, Any]) -> str:
@@ -228,7 +215,8 @@ def fold_topic(topic, claims, ctx, assigned, rows, stats) -> list[dict[str, Any]
                 "confidence": round(confidence, 3),
                 "origin": "extracted",
                 "ts_inferred": False,
-                "observed_ms": ctx.observed_ms,
+                "observed_ms": e.get("observed_ms") or ctx.observed_ms,  # when Lore learned it
+                "product_id": e["product"],
                 "_reason": e.get("reason"),
             }
             if active:
@@ -273,7 +261,7 @@ def fold_topic(topic, claims, ctx, assigned, rows, stats) -> list[dict[str, Any]
                 "reason": e.get("reason"),
                 "resolved_how": e.get("issue_how") or e.get("pr_how"),
                 "product_id": e["product"],
-                "observed_ms": ctx.observed_ms,
+                "observed_ms": e.get("observed_ms") or ctx.observed_ms,
             }
         )
         rows["link_claim_from"].append(
@@ -393,16 +381,222 @@ def _unique(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def load(rows: dict[str, list[dict[str, Any]]], graph: str | None = None) -> dict[str, dict]:
-    """Clear the derived extraction layer, then write every query's rows in LOAD_ORDER."""
-    report = {
-        "clear_extracted": {
-            "rows": 0,
-            **db.run("clear_extracted", {}, graph=graph, readonly=False).stats,
+# --- the fold over the graph (D101) -------------------------------------------------------
+NODES = {"Issue": "upsert_issues", "Claim": "upsert_claims", "Decision": "upsert_decisions"}
+# link query -> (the derived node that owns the edge, its id's key in the row). An edge belongs
+# to the node it starts from, except FIXES (PR -> issue), which the issue owns.
+OWNER = {
+    "link_claim_from": ("Claim", "claim_id"),
+    "link_asserted_by": ("Claim", "claim_id"),
+    "link_claim_about_issue": ("Claim", "claim_id"),
+    "link_claim_about_pr": ("Claim", "claim_id"),
+    "link_supports": ("Claim", "claim_id"),
+    "link_conflicts_with": ("Claim", "claim_id"),
+    "link_affects_issue": ("Decision", "decision_id"),
+    "link_affects": ("Decision", "decision_id"),
+    "link_decided_by": ("Decision", "decision_id"),
+    "link_evidenced_by": ("Decision", "decision_id"),
+    "link_supersedes": ("Decision", "new_id"),
+    "link_issue_in_product": ("Issue", "issue_id"),
+    "link_reported_by": ("Issue", "issue_id"),
+    "link_reported_in": ("Issue", "issue_id"),
+    "link_assigned_to": ("Issue", "issue_id"),
+    "link_fixes": ("Issue", "issue_id"),
+}
+CLEAR = {
+    "Claim": ("clear_claim_edges",),
+    "Decision": ("clear_decision_edges",),
+    "Issue": ("clear_issue_edges", "clear_issue_fixes"),
+}
+DELETE = {"Claim": "delete_claims", "Issue": "delete_issues", "Decision": "delete_decisions"}
+STAMP = {"Claim": "set_claim_hash", "Issue": "set_issue_hash", "Decision": "set_decision_hash"}
+STATE_CAP = 500_000
+
+
+def desired(rows: dict[str, list[dict[str, Any]]]) -> dict[tuple[str, str], dict[str, Any]]:
+    """(label, id) -> the node's row, the link rows it owns, and a hash over both."""
+    nodes: dict[tuple[str, str], dict[str, Any]] = {}
+    for label, query in NODES.items():
+        for r in rows[query]:  # a repeated id: the last row wins, as MERGE + SET did
+            nodes[(label, r["id"])] = {"row": r, "links": defaultdict(list)}
+    for query, (label, key) in OWNER.items():
+        for r in rows[query]:
+            nodes[(label, r[key])]["links"][query].append(r)
+    for node in nodes.values():
+        links = {
+            q: sorted(json.dumps(x, sort_keys=True) for x in rs) for q, rs in node["links"].items()
         }
+        blob = json.dumps({"row": node["row"], "links": links}, sort_keys=True, default=str)
+        node["hash"] = hashlib.sha1(blob.encode("utf-8")).hexdigest()
+    return nodes
+
+
+def write(rows: dict[str, list[dict[str, Any]]], product: str, graph: str | None) -> dict:
+    """Bring one product's derived layer to `rows`: rewrite the nodes whose rows or owned edges
+    changed, delete the ones no longer derived, leave the rest alone."""
+    want = desired(rows)
+    have = {
+        (r["label"], r["id"]): r["hash"]
+        for r in db.run_all(
+            "derived_state", {"product_id": product}, cap=STATE_CAP, graph=graph, timeout_ms=30_000
+        )
     }
-    for name in LOAD_ORDER:
-        if rows.get(name):
-            result = db.run(name, {"rows": rows[name]}, graph=graph, readonly=False)
-            report[name] = {"rows": len(rows[name]), **result.stats}
-    return report
+    changed = {k for k, v in want.items() if have.get(k) != v["hash"]}
+    stale = sorted(k for k in have if k not in want)
+
+    def ids(keys, label: str) -> list[dict[str, str]]:
+        return [{"id": i} for lab, i in sorted(keys) if lab == label]
+
+    def run(query: str, query_rows: list[dict[str, Any]]) -> None:
+        if query_rows:
+            db.run(query, {"rows": query_rows}, graph=graph, readonly=False)
+
+    for label, query in DELETE.items():
+        run(query, ids(stale, label))
+    for label, queries in CLEAR.items():
+        for query in queries:
+            run(query, ids(changed & set(have), label))
+    for label, query in NODES.items():
+        run(query, [want[k]["row"] for k in sorted(changed) if k[0] == label])
+    for query in LOAD_ORDER:
+        if query in OWNER:
+            run(query, [r for k in sorted(changed) for r in want[k]["links"].get(query, [])])
+    actions = rows["set_pr_action"]
+    run("set_pr_action", actions)
+    keep = [r["pr_id"] for r in actions]
+    cleared = db.run(
+        "clear_pr_actions", {"product_id": product, "keep": keep}, graph=graph, readonly=False
+    ).rows[0]["cleared"]
+    for label, query in STAMP.items():  # last: an interrupted write leaves the old hash
+        run(
+            query,
+            [
+                {"id": i, "hash": want[(lab, i)]["hash"]}
+                for lab, i in sorted(changed)
+                if lab == label
+            ],
+        )
+    return {
+        "product": product,
+        "nodes": len(want),
+        "changed": len(changed),
+        "stale": len(stale),
+        "unchanged": len(want) - len(changed),
+        "pr_actions_cleared": cleared,
+    }
+
+
+def migrate_legacy(graph: str | None) -> int:
+    """A graph whose derived layer predates D101 (extracted decisions without product_id): its
+    claims, issues and extracted decisions are deleted once, in batches, so the next fold of
+    each product writes them afresh. Returns how many nodes went."""
+    n = db.run("legacy_derived", {}, graph=graph).rows[0]["n"]
+    if not n:
+        return 0
+    found = db.run_all("all_derived", {}, cap=STATE_CAP, graph=graph, timeout_ms=60_000)
+    for label, query in DELETE.items():
+        rows = [{"id": r["id"]} for r in found if r["label"] == label]
+        if rows:
+            db.run(query, {"rows": rows}, graph=graph, readonly=False)
+    return len(found)
+
+
+def graph_context(product: str, graph: str | None) -> tuple[Context, list[Artifact]]:
+    """The fold's context for one product, read from the graph, and its PRs for resolution."""
+    roles = {
+        r["id"]: r["role"]
+        for r in db.run_all("fold_people", {}, cap=STATE_CAP, graph=graph, timeout_ms=30_000)
+    }
+    customers = {
+        r["id"]
+        for r in db.run_all("fold_customers", {}, cap=STATE_CAP, graph=graph, timeout_ms=30_000)
+    }
+    active = {
+        r["id"]
+        for r in db.run_all(
+            "fold_product_active",
+            {"product_id": product},
+            cap=STATE_CAP,
+            graph=graph,
+            timeout_ms=30_000,
+        )
+    }
+    prs = [
+        Artifact(
+            id=r["id"],
+            kind="pr",
+            product_hint=product,
+            ts_ms=r["ts_ms"],
+            ts_iso=r["ts_iso"],
+            author_eid=r["author"],
+            text="",
+            raw_ref=r["id"],
+            external=bool(r["external"]),
+            meta={
+                "repo": r["repo"],
+                "number": r["number"],
+                "reviews": [{"reviewer_eid": x} for x in r["reviewers"]],
+            },
+        )
+        for r in db.run_all(
+            "fold_product_prs",
+            {"product_id": product},
+            cap=STATE_CAP,
+            graph=graph,
+            timeout_ms=30_000,
+        )
+    ]
+    ctx = Context(
+        roles=roles,
+        customers=customers,
+        active={product: active},
+        prs={p.id: p for p in prs if not p.external},
+    )
+    return ctx, prs
+
+
+def fold_product(
+    product: str, graph: str | None, *, known_at_ms: int | None = None, apply: bool = True
+) -> dict[str, Any]:
+    """Fold one product's events from the graph and (`apply`) write the result. With
+    `known_at_ms`, only the events Lore knew then: the belief at that moment (never written)."""
+    found = event_store.read(product, graph, known_at_ms)
+    ctx, prs = graph_context(product, graph)
+    res = resolve.resolve(found, {product: prs})
+    rows, stats = rebuild(res, ctx)
+    out: dict[str, Any] = {"rows": rows, "stats": stats, "unresolved": len(res.unresolved)}
+    if apply and known_at_ms is None:
+        out["write"] = write(rows, product, graph)
+    return out
+
+
+def belief(
+    subject_id: str, product: str, graph: str | None, known_at_ms: int | None
+) -> dict[str, Any]:
+    """What Lore believed about an issue or PR at `known_at_ms` (None: now): its chains as the
+    fold derives them from the events known then. Read-only: nothing is written."""
+    rows = fold_product(product, graph, known_at_ms=known_at_ms, apply=False)["rows"]
+    chains: dict[str, list[dict[str, Any]]] = {}
+    for d in sorted(rows["upsert_decisions"], key=lambda d: d["valid_from_ms"]):
+        if d["topic"].split("/")[0] == subject_id:
+            facet = d["topic"].rsplit("/", 1)[1]
+            chains.setdefault(facet, []).append(
+                {
+                    k: d[k]
+                    for k in (
+                        "id",
+                        "value",
+                        "statement",
+                        "valid_from_ms",
+                        "valid_to_ms",
+                        "status",
+                        "observed_ms",
+                    )
+                }
+            )
+    claims = [
+        {k: c[k] for k in ("id", "value", "quote", "ts_iso", "outcome", "authority", "observed_ms")}
+        for c in sorted(rows["upsert_claims"], key=lambda c: c["ts_ms"] or 0)
+        if c["topic"].split("/")[0] == subject_id
+    ]
+    return {"subject": subject_id, "known_at_ms": known_at_ms, "chains": chains, "claims": claims}

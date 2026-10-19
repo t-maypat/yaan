@@ -306,6 +306,27 @@ def decision_lineage(
     return out
 
 
+@app.get("/decision/{subject_id}/belief")
+def decision_belief(
+    subject_id: str,
+    request: Request,
+    known_at_ms: int | None = Query(default=None, ge=0, le=MAX_MS),
+) -> dict:
+    """What Lore believed about an issue or PR at `known_at_ms` (transaction time; None =
+    now): the fold replayed over the events it had learned by then (D101). The Timeline's
+    `as_of_ms` is event time; this is when Lore knew it."""
+    from app.ingest import fold
+
+    if not subject_id.startswith(("iss:", "pr:")):
+        raise HTTPException(404, "a belief belongs to an issue (iss:…) or a pull request (pr:…)")
+    rows = db.run("subject_product", {"id": subject_id}, graph=graph()).rows
+    product = rows[0]["product_id"] if rows else None
+    if not product:
+        raise HTTPException(404, f"no issue or pull request {subject_id!r} in the graph")
+    out = fold.belief(subject_id, product, graph(), known_at_ms)
+    return for_viewer(request, out)
+
+
 @app.get("/entity/{entity_id}")
 def entity(
     entity_id: str, request: Request, product_id: str | None = Query(default=None, max_length=100)
@@ -498,11 +519,12 @@ def demo_injections() -> dict:
 
     if org.active():
         return {"graph": graph(), "injections": []}
-    done = live.injected_ids(graph())
-    out = []
-    for path in sorted(INJECT_DIR.glob("*.json")):
-        msg = json.loads(path.read_text(encoding="utf-8"))
-        out.append({"name": path.stem, **msg, "injected": msg["id"] in done})
+    msgs = {
+        path.stem: json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted(INJECT_DIR.glob("*.json"))
+    }
+    done = live.present_ids(graph(), [m["id"] for m in msgs.values()])  # the graph says (D101)
+    out = [{"name": name, **msg, "injected": msg["id"] in done} for name, msg in msgs.items()]
     return {"graph": graph(), "injections": out}
 
 

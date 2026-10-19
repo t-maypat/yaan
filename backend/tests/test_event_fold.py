@@ -1,0 +1,281 @@
+"""D101: events in the graph are the derived layer's system of record; the fold reads them per
+product and writes only what changed. The key property: folding events one at a time, in any
+order, ends in exactly the layer one full fold gives, and a second fold changes nothing."""
+
+import random
+
+import pytest
+
+from app import db
+from app.ingest import events as event_store
+from app.ingest import fold
+
+pytestmark = pytest.mark.db
+
+BASE = """
+CREATE (w:Product:Entity {id: 'W', name: 'W', aliases: []}),
+  (ann:Person:Entity {id: 'eid_a1', name: 'Ann', role: 'Engineering Lead'}),
+  (bo:Person:Entity {id: 'eid_b2', name: 'Bo', role: 'Software Engineer'}),
+  (cy:Person:Entity {id: 'eid_c3', name: 'Cy', role: 'Software Engineer'}),
+  (dee:Customer:Entity {id: 'CUST-0001', name: 'Dee'}),
+  (ch:Channel {id: 'ch-bug', name: 'bug-W', stage: 'support', product_id: 'W'}),
+  (pr:PR:Artifact {id: 'pr:w1', kind: 'pr', number: 1, repo: 'x/w', external: false,
+                   ts_ms: 500, ts_iso: 't500', product_id: 'W', title: 'Faster export'}),
+  (pr)-[:IN_PRODUCT]->(w), (bo)-[:AUTHORED]->(pr), (ann)-[:REVIEWED]->(pr)
+WITH w, ann, bo, cy, ch
+UNWIND range(1, 6) AS i
+CREATE (m:Message:Artifact {id: 'msg:m' + toString(i), kind: 'message', text: 'm', ts_ms: i * 1000,
+                            product_id: 'W', channel_id: 'ch-bug'})
+CREATE (m)-[:IN_PRODUCT]->(w), (m)-[:IN_CHANNEL]->(ch)
+WITH m, ann, bo, cy, i
+FOREACH (_ IN CASE WHEN i IN [1, 3, 4] THEN [1] ELSE [] END | CREATE (ann)-[:AUTHORED]->(m))
+FOREACH (_ IN CASE WHEN i IN [2, 6] THEN [1] ELSE [] END | CREATE (bo)-[:AUTHORED]->(m))
+FOREACH (_ IN CASE WHEN i = 5 THEN [1] ELSE [] END | CREATE (cy)-[:AUTHORED]->(m))
+"""
+
+
+def ev(i, type_, speaker, quote, **kw):
+    e = dict.fromkeys(event_store.FIELDS)
+    e |= {
+        "type": type_,
+        "artifact_id": f"msg:m{i}",
+        "quote": quote,
+        "speaker": speaker,
+        "ts_ms": i * 1000,
+        "ts_iso": f"t{i}",
+        "product": "W",
+        "channel": "bug-W",
+        "decisive": True,
+        "confidence": 0.9,
+        "start": 0,
+        "end": len(quote),
+    }
+    return e | kw
+
+
+EVENTS = [
+    ev(
+        1,
+        "issue_reported",
+        "eid_a1",
+        "Issue 'Slow export' hurts CUST-0001, @eid_b2 take it",
+        issue="Slow export",
+        customer="CUST-0001",
+        person="eid_b2",
+    ),
+    ev(
+        2,
+        "issue_resolved",
+        "eid_b2",
+        "Slow export is fixed by PR#1",
+        issue="Slow export",
+        pr="PR#1",
+    ),
+    ev(
+        3,
+        "issue_reported",
+        "eid_a1",
+        "There's a 'Slow export' issue again for CUST-0001",
+        issue="Slow export",
+        customer="CUST-0001",
+    ),
+    ev(4, "pr_to_close", "eid_a1", "Let's not merge PR#1 for now", pr="PR#1"),
+    ev(5, "issue_dismissed", "eid_c3", "Slow export needs no fix", issue="Slow export"),
+    ev(
+        6,
+        "pr_reverted",
+        "eid_b2",
+        "Reverting PR#1, it broke exports",
+        pr="PR#1",
+        reason="introduced_bugs",
+    ),
+]
+
+
+@pytest.fixture
+def base(empty_graph):
+    db.run_text(BASE, label="base", graph=empty_graph, readonly=False)
+    return empty_graph
+
+
+@pytest.fixture
+def second(falkordb):
+    """Another graph with the same base, for comparing two ways of getting there."""
+    import uuid
+
+    from app import schema
+
+    name = f"lore_test_{uuid.uuid4().hex[:12]}"
+    schema.apply(name)
+    db.run_text(BASE, label="base", graph=name, readonly=False)
+    yield name
+    w = db.client(readonly=False)
+    if name in w.list_graphs():
+        w.select_graph(name).delete()
+
+
+DERIVED_EDGES = (
+    "FROM|ASSERTED_BY|ABOUT|SUPPORTS|CONFLICTS_WITH|AFFECTS|DECIDED_BY|EVIDENCED_BY|SUPERSEDES"
+    "|IN_PRODUCT|REPORTED_BY|REPORTED_IN|ASSIGNED_TO"
+)
+
+
+def layer(graph, timeless=True):
+    """The derived layer as comparable data. `timeless` drops when Lore learned things
+    (observed_ms, and the row hash that covers it): two orders of arrival differ there only."""
+    skip = {"observed_ms", "row_hash"} if timeless else set()
+    nodes = {}
+    for label, where in (
+        ("Claim", ""),
+        ("Issue", ""),
+        ("Decision", "WHERE n.origin = 'extracted'"),
+    ):
+        q = f"MATCH (n:{label}) {where} RETURN n.id AS id, properties(n) AS p LIMIT 1000"
+        for r in db.run_text(q, label="n", graph=graph).rows:
+            nodes[r["id"]] = {k: v for k, v in r["p"].items() if k not in skip}
+    q = (
+        "MATCH (n)-[e:" + DERIVED_EDGES + "]->(m) WHERE n:Claim OR n:Issue OR n:Decision "
+        "RETURN n.id AS s, type(e) AS t, m.id AS d, properties(e) AS p LIMIT 10000"
+    )
+    edges = {
+        (r["s"], r["t"], r["d"], tuple(sorted(r["p"].items())))
+        for r in db.run_text(q, label="e", graph=graph).rows
+    }
+    q = "MATCH (p:PR)-[:FIXES]->(i:Issue) RETURN p.id AS s, i.id AS d LIMIT 100"
+    edges |= {(r["s"], "FIXES", r["d"], ()) for r in db.run_text(q, label="f", graph=graph).rows}
+    q = "MATCH (p:PR) RETURN p.id AS id, p.current_action AS a, p.action_reason AS r LIMIT 100"
+    actions = {r["id"]: (r["a"], r["r"]) for r in db.run_text(q, label="a", graph=graph).rows}
+    return nodes, edges, actions
+
+
+# --- events ----------------------------------------------------------------------------------
+def test_an_event_keeps_when_lore_first_learned_it(base):
+    event_store.load(EVENTS[:2], base, observed_ms=100)
+    event_store.load(EVENTS[:3], base, observed_ms=200)  # the first two again, and one new
+    got = {e["artifact_id"]: e["observed_ms"] for e in event_store.read("W", base)}
+    assert got == {"msg:m1": 100, "msg:m2": 100, "msg:m3": 200}
+    assert event_store.read("W", base)[0]["product"] == "W"
+
+
+def test_a_retracted_event_is_closed_not_deleted_and_replayable(base):
+    event_store.load(EVENTS[:3], base, observed_ms=100)
+    assert event_store.retract("msg:m2", [], base, now_ms=150) == 1
+    assert {e["artifact_id"] for e in event_store.read("W", base)} == {"msg:m1", "msg:m3"}
+    before = {e["artifact_id"] for e in event_store.read("W", base, known_at_ms=120)}
+    assert before == {"msg:m1", "msg:m2", "msg:m3"}  # what Lore knew before the retraction
+    assert event_store.read("W", base, known_at_ms=50) == []  # before it learned anything
+    event_store.load([EVENTS[1]], base, observed_ms=300)  # the newer version says it again
+    assert len(event_store.read("W", base)) == 3
+
+
+# --- the lock --------------------------------------------------------------------------------
+def test_one_writer_at_a_time_and_a_dead_holder_stops_counting(base):
+    with db.writer_lock(base, ttl_ms=60_000):
+        with pytest.raises(db.LockBusy):
+            with db.writer_lock(base, wait_s=0.3):
+                pass
+    with db.writer_lock(base, wait_s=0.3):  # given back
+        pass
+    with db.writer_lock(base, ttl_ms=1):  # a holder whose lease runs out...
+        with db.writer_lock(base, wait_s=2):  # ...doesn't block the next writer for long
+            pass
+
+
+# --- the fold --------------------------------------------------------------------------------
+def test_one_event_at_a_time_in_any_order_ends_where_one_full_fold_does(base, second):
+    event_store.load(EVENTS, base, observed_ms=1)
+    fold.fold_product("W", base)
+    full = layer(base)
+    assert any(
+        c["value"] == "reopened" for c in full[0].values() if c.get("topic", "").endswith("/status")
+    )
+
+    order = EVENTS[:]
+    random.Random(7).shuffle(order)
+    for n, e in enumerate(order, 1):
+        event_store.load([e], second, observed_ms=n)
+        fold.fold_product("W", second)
+    assert layer(second) == full
+
+
+def test_a_second_fold_changes_nothing(base):
+    event_store.load(EVENTS, base, observed_ms=1)
+    first = fold.fold_product("W", base)["write"]
+    assert first["changed"] == first["nodes"] > 0
+    again = fold.fold_product("W", base)["write"]
+    assert (again["changed"], again["stale"]) == (0, 0)
+
+
+def test_a_retraction_ends_where_never_having_the_event_does(base, second):
+    event_store.load(EVENTS, base, observed_ms=1)
+    fold.fold_product("W", base)
+    event_store.retract("msg:m3", [], base, now_ms=2)  # the re-report was edited away
+    report = fold.fold_product("W", base)["write"]
+    assert report["stale"] > 0  # the reopened state and what hung off it went
+    event_store.load([e for e in EVENTS if e["artifact_id"] != "msg:m3"], second, observed_ms=1)
+    fold.fold_product("W", second)
+    assert layer(base) == layer(second)
+
+
+def test_an_interrupted_write_is_finished_by_the_next_fold(base, monkeypatch):
+    event_store.load(EVENTS, base, observed_ms=1)
+    real = db.run
+
+    def crash(name, *a, **k):  # dies after the nodes and edges are written, before the hashes
+        if name.startswith("set_") and name.endswith("_hash"):
+            raise RuntimeError("process killed")
+        return real(name, *a, **k)
+
+    monkeypatch.setattr(db, "run", crash)
+    with pytest.raises(RuntimeError):
+        fold.fold_product("W", base)
+    monkeypatch.setattr(db, "run", real)
+    redo = fold.fold_product("W", base)["write"]
+    assert redo["changed"] == redo["nodes"]  # no hash was stamped: everything is redone
+    assert fold.fold_product("W", base)["write"]["changed"] == 0
+
+
+def test_the_belief_at_a_moment_is_the_fold_of_what_was_known_then(base, second):
+    issue = "iss:W:" + fold_issue_hash()
+    for n, e in enumerate(EVENTS, 1):  # learned one by one, at observed time n * 10
+        event_store.load([e], base, observed_ms=n * 10)
+        fold.fold_product("W", base)
+    then = fold.belief(issue, "W", base, known_at_ms=25)  # after the 2nd event, before the 3rd
+    assert [d["value"] for d in then["chains"]["status"]] == ["reported", "resolved"]
+    now = fold.belief(issue, "W", base, known_at_ms=None)
+    assert [d["value"] for d in now["chains"]["status"]][-1] == "reopened"  # Cy may not dismiss
+
+    event_store.load(EVENTS[:2], second, observed_ms=1)  # a graph that only ever knew those two
+    fold.fold_product("W", second)
+    written = sorted(
+        (
+            d
+            for d in layer(second)[0].values()
+            if d.get("topic") == f"{issue}/status" and "status" in d
+        ),
+        key=lambda d: d["valid_from_ms"],
+    )
+    assert [d["value"] for d in written] == [d["value"] for d in then["chains"]["status"]]
+    assert [d["status"] for d in written] == [d["status"] for d in then["chains"]["status"]]
+
+
+def fold_issue_hash() -> str:
+    from app.ingest.resolve import issue_id
+
+    return issue_id("W", "Slow export").split(":")[-1]
+
+
+def test_the_api_serves_the_belief_at_a_moment(base, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app import main
+
+    for n, e in enumerate(EVENTS, 1):
+        event_store.load([e], base, observed_ms=n * 10)
+    fold.fold_product("W", base)
+    monkeypatch.setattr(main, "graph", lambda: base)
+    issue = "iss:W:" + fold_issue_hash()
+    client = TestClient(main.app)
+    then = client.get(f"/decision/{issue}/belief", params={"known_at_ms": 15}).json()
+    assert [d["value"] for d in then["chains"]["status"]] == ["reported"]
+    assert client.get("/decision/msg:m1/belief").status_code == 404

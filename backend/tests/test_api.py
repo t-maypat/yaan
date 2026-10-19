@@ -300,7 +300,7 @@ def test_demo_writes_refuse_the_main_graph(monkeypatch):
 
 def test_only_the_labeled_injection_files_can_be_injected(monkeypatch):
     monkeypatch.setattr(live, "ingest", lambda msg, graph=None: {"artifact_id": msg["id"]})
-    monkeypatch.setattr(live, "injected_ids", lambda graph: {"msg:synthetic-20270309-1"})
+    monkeypatch.setattr(live, "present_ids", lambda graph, ids: {"msg:synthetic-20270309-1"})
     monkeypatch.setattr(main, "demo_limiter", main.RateLimiter(10))
     client = TestClient(main.app)
     listed = client.get("/demo/injections").json()["injections"]

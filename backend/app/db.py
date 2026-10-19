@@ -18,9 +18,12 @@ Errors propagate as QueryError (QueryTimeout for a timeout), naming the query, g
 """
 
 import math
+import os
 import re
+import threading
 import time
 from collections import deque
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -164,6 +167,38 @@ def run_capped(
     model reads: it says "at least N" instead of taking a cut list for the whole (D098)."""
     rows = run(name, {**params, "limit": cap + 1}, graph=graph, **kw).rows
     return rows[:cap], len(rows) > cap
+
+
+class LockBusy(RuntimeError):
+    """Another writer held the graph's lock for longer than we wait."""
+
+
+@contextmanager
+def writer_lock(
+    graph: str | None = None, *, name: str = "derived", ttl_ms: int = 120_000, wait_s: float = 60
+):
+    """One writer of a graph's derived layer at a time, across processes (the API, the
+    connector loop, a batch ingest): a `:Lock` node taken by compare-and-set in one statement
+    (D101). A holder that dies stops counting after `ttl_ms`; a held lock is retried until
+    `wait_s`, then LockBusy."""
+    holder = f"{os.getpid()}-{threading.get_ident()}-{time.time_ns()}"
+    deadline = time.monotonic() + wait_s
+    while True:
+        params = {
+            "name": name,
+            "holder": holder,
+            "now_ms": int(time.time() * 1000),
+            "ttl_ms": ttl_ms,
+        }
+        if run("acquire_lock", params, graph=graph, readonly=False).rows:
+            break
+        if time.monotonic() > deadline:
+            raise LockBusy(f"graph {graph!r}: the {name} lock stayed taken for {wait_s:g} s")
+        time.sleep(0.1)
+    try:
+        yield holder
+    finally:
+        run("release_lock", {"name": name, "holder": holder}, graph=graph, readonly=False)
 
 
 def run_text(

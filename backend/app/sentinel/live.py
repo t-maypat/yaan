@@ -5,10 +5,13 @@
 - S2 write it and its AUTHORED / IN_CHANNEL / IN_PRODUCT edges (its channel already exists);
 - S3 chunk + embed it;
 - S4 link its mentions;
-- S5-S6 extract its events (one unit, one cached LLM call) and verify each quote;
-- S7-S8 resolve + fold over every product's events plus the live ones, so the new claim
-  lands in the right chain with the same rules as the batch;
+- S5-S6 extract its events (one unit, one cached LLM call) and verify each quote, before any
+  graph write, so a slow model call never holds the writer lock;
+- the kept events become `:Event` nodes (D101), and S7-S8 fold the artifact's product from
+  the graph's events: only the derived nodes that changed are rewritten;
 - the Sentinel judges the result.
+Graph writes run under the graph's writer lock (db.writer_lock), shared with the connector loop
+and batch ingests in other processes.
 
 It returns the freshness lag: wall-clock time from receiving the message to its alert being
 in the graph, per stage. Live artifacts and events are kept in data/live/<graph>/ so the next
@@ -36,7 +39,8 @@ from typing import Any
 
 from app import db, llm, org
 from app.config import get_settings
-from app.ingest import chunk_embed, extract, fold, linker, resolve, structural
+from app.ingest import chunk_embed, extract, fold, linker, structural
+from app.ingest import events as event_store
 from app.ingest.normalize import Artifact, normalized_dir, parse_ts, read_jsonl
 from app.sentinel import engine
 
@@ -143,8 +147,7 @@ def ingest_artifact(
         raise LiveError(f"live ingestion takes {LIVE_KINDS}, not {a.kind!r}")
     if a.author_eid not in meta.employees:
         raise LiveError(f"unknown author {a.author_eid!r}")
-    seen = injected_ids(graph)
-    if a.id in seen and not replace:
+    if present_ids(graph, [a.id]) and not replace:
         raise LiveError(f"{a.id!r} is already in {graph!r}: run `lore demo reset` to replay it")
     if a.channel_id and not db.run("get_channel", {"id": a.channel_id}, graph=graph).rows:
         raise LiveError(f"channel {a.channel_id!r} is not in {graph!r}: run `lore demo reset`")
@@ -152,6 +155,38 @@ def ingest_artifact(
         raise LiveError("a live message needs its channel")
     stages["s1_validate"] = _ms(t0)
 
+    t = time.perf_counter()
+    if events is None:
+        units = extract.units(product, [a])
+        kept, dropped, xstats = (
+            extract.run(units, workers=1) if units else ([], [], {"cost_usd": 0})
+        )
+    else:  # structured facts from the source: no LLM, but every quote must be in the text
+        kept = [e for e in events if llm.quote_in(e["quote"], a.text)]
+        dropped = [e for e in events if not llm.quote_in(e["quote"], a.text)]
+        xstats = {"cost_usd": 0}
+    stages["s5_s6_extract_verify"] = _ms(t)
+
+    with db.writer_lock(graph):
+        upgrade(graph)
+        out = _write(a, graph, product, meta, kept, replace, received_ms, stages)
+    out |= {
+        "events": kept,
+        "dropped": dropped,
+        "llm_cost_usd": xstats.get("cost_usd", 0),
+        "freshness_lag_ms": _ms(t0),
+    }
+    log = {k: out[k] for k in ("artifact_id", "freshness_lag_ms", "stages_ms", "llm_cost_usd")}
+    _append(graph, "log.jsonl", [log | {"alerts": [x["id"] for x in out["alerts"]]}])
+    return out
+
+
+def _write(a, graph, product, meta, kept, replace, received_ms, stages) -> dict[str, Any]:
+    """The graph writes of one live artifact (under the writer lock): S2-S4, its events,
+    the fold of its product, S9 and the Sentinel."""
+    again = bool(present_ids(graph, [a.id]))
+    if again and not replace:  # another writer took it while the model read it
+        raise LiveError(f"{a.id!r} is already in {graph!r}: run `lore demo reset` to replay it")
     t = time.perf_counter()
     rows = structural.product_rows(product, [a], set(meta.employees), received_ms)
     rows["upsert_channels"] = []  # the channel exists (checked above); don't overwrite it
@@ -176,38 +211,20 @@ def ingest_artifact(
     stages["s4_link"] = _ms(t)
 
     t = time.perf_counter()
-    if events is None:
-        units = extract.units(product, [a])
-        kept, dropped, xstats = (
-            extract.run(units, workers=1) if units else ([], [], {"cost_usd": 0})
-        )
-    else:  # structured facts from the source: no LLM, but every quote must be in the text
-        kept = [e for e in events if llm.quote_in(e["quote"], a.text)]
-        dropped = [e for e in events if not llm.quote_in(e["quote"], a.text)]
-        xstats = {"cost_usd": 0}
-    if a.id in seen:  # a newer version replaces the old row and the events read from it
+    # the events become graph facts; a newer version of the artifact closes the ones it no
+    # longer states (never deletes them). The artifact log is only the linker's context now.
+    event_store.load(kept, graph, observed_ms=received_ms)
+    if again:
+        event_store.retract(a.id, [event_store.event_id(e) for e in kept], graph, received_ms)
         _rewrite(graph, "artifacts.jsonl", lambda r: r["id"] != a.id)
-        _rewrite(graph, "events.jsonl", lambda r: r["artifact_id"] != a.id)
     _append(graph, "artifacts.jsonl", [a.model_dump()])
-    _append(graph, "events.jsonl", kept)
-    stages["s5_s6_extract_verify"] = _ms(t)
-
-    t = time.perf_counter()
-    events, arts = _base(graph)
-    live_arts = [Artifact(**r) for r in _read(graph, "artifacts.jsonl")]
-    arts = {p: list(v) for p, v in arts.items()}
-    for la in live_arts:
-        arts.setdefault(la.product_hint, []).append(la)
-    res = resolve.resolve(
-        events + _read(graph, "events.jsonl"),
-        {p: [x for x in v if x.kind == "pr"] for p, v in arts.items()},
-    )
-    fold_rows, fstats = fold.rebuild(res, fold.Context.build(meta, arts))
-    fold.load(fold_rows, graph)
+    folded = fold.fold_product(product, graph)
+    fstats = folded["stats"]
     stages["s7_s8_resolve_fold"] = _ms(t)
 
-    # S9: the fold recreated the issues and decisions, so re-derive what hangs off them
-    # (areas, KNOWS, truck factor, similarity precedents); COLLAB and communities are unchanged
+    # S9: re-derive what hangs off the issues and decisions (areas, KNOWS, truck factor,
+    # similarity precedents); COLLAB and communities are unchanged. Still whole-graph: the
+    # next step for scale (D101).
     from app.ingest import derive
 
     t = time.perf_counter()
@@ -221,24 +238,33 @@ def ingest_artifact(
     sentinel.pop("report")
     stages["sentinel"] = _ms(t)
 
-    alerts = engine.list_alerts(graph=graph, artifact_id=a.id)
-    lag_ms = _ms(t0)
-    out = {
+    return {
         "graph": graph,
         "artifact_id": a.id,
         "received_ms": received_ms,
-        "events": kept,
-        "dropped": dropped,
-        "llm_cost_usd": xstats.get("cost_usd", 0),
         "fold": {k: v for k, v in fstats.items() if k.startswith(("claims_", "authority_"))},
+        "fold_write": folded["write"],
         "sentinel": sentinel,
-        "alerts": alerts,
-        "freshness_lag_ms": lag_ms,
+        "alerts": engine.list_alerts(graph=graph, artifact_id=a.id),
         "stages_ms": stages,
     }
-    log = {k: out[k] for k in ("artifact_id", "freshness_lag_ms", "stages_ms", "llm_cost_usd")}
-    _append(graph, "log.jsonl", [log | {"alerts": [x["id"] for x in alerts]}])
-    return out
+
+
+def upgrade(graph: str) -> int:
+    """A graph whose derived layer predates D101 has no `:Event` nodes: load the events its
+    claims came from (HERB's extraction in the demo, the old live log in org mode), rewrite
+    its derived layer once, and fold every product. Returns how many events were loaded."""
+    if not db.run("legacy_derived", {}, graph=graph).rows[0]["n"]:
+        return 0
+    from app import schema
+
+    schema.apply(graph)  # the Event and product_id indexes, before the bulk MERGE
+    old = [*_base(graph)[0], *_read(graph, "events.jsonl")]
+    event_store.load(old, graph)
+    fold.migrate_legacy(graph)
+    for product in event_store.products(graph):
+        fold.fold_product(product, graph)
+    return len(old)
 
 
 @lru_cache
@@ -270,9 +296,12 @@ def _load_base(version: tuple) -> tuple[list[dict[str, Any]], dict[str, list[Art
     return events, arts
 
 
-def injected_ids(graph: str) -> set[str]:
-    """Ids of the live messages already in `graph` since its last reset."""
-    return {r["id"] for r in _read(graph, "artifacts.jsonl")}
+def present_ids(graph: str, ids: list[str]) -> set[str]:
+    """Which of `ids` are artifacts in `graph`: the graph says, not a log file (D101)."""
+    if not ids:
+        return set()
+    rows = db.run("artifacts_present", {"ids": ids, "limit": len(ids)}, graph=graph).rows
+    return {r["id"] for r in rows}
 
 
 def _read(graph: str, name: str) -> list[dict[str, Any]]:

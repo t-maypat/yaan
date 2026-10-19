@@ -1,0 +1,4 @@
+// set_issue_hash.cypher — the hash of the rows that wrote a issue, stamped last, so an interrupted write is redone by the next fold (D101)
+UNWIND $rows AS r
+MATCH (n:Issue {id: r.id})
+SET n.row_hash = r.hash

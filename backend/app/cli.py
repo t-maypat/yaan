@@ -100,6 +100,34 @@ def cmd_token(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_belief(args: argparse.Namespace) -> int:
+    """What Lore believed about an issue or PR at a moment (D101): the fold replayed over the
+    events it had learned by then. Read-only."""
+    from app import db
+    from app.agent.tools import parse_as_of
+    from app.config import get_settings
+    from app.ingest import fold
+
+    graph = args.graph or get_settings().lore_graph
+    known_at = parse_as_of(args.at) if args.at else None
+    rows = db.run("subject_product", {"id": args.subject}, graph=graph).rows
+    if not rows or not rows[0]["product_id"]:
+        print(
+            f"lore belief: no issue or pull request {args.subject!r} in {graph!r}", file=sys.stderr
+        )
+        return 1
+    out = fold.belief(args.subject, rows[0]["product_id"], graph, known_at)
+    when = args.at or "now"
+    if not out["chains"]:
+        print(f"{args.subject}: Lore knew nothing about it at {when}")
+        return 0
+    for facet, chain in out["chains"].items():
+        print(f"{args.subject} {facet}, as Lore knew it at {when}:")
+        for d in chain:
+            print(f"  {d['value']:<10} {d['status']:<10} {d['statement']}")
+    return 0
+
+
 def cmd_fetch_herb(args: argparse.Namespace) -> int:
     from app.ingest.herb_fetch import HERB_REVISION, fetch_herb, product_files
 
@@ -157,6 +185,53 @@ INGEST_STAGES = (
 )  # fold: events -> claims
 
 
+def derived_stages(args: argparse.Namespace, graph: str, report: dict) -> None:
+    """`lore ingest`'s fold, derive and sentinel stages: the derived layer (D101)."""
+    if "fold" in args.stages:
+        # every product with extracted events (`lore extract`) becomes graph events; then each
+        # product with events is folded from the graph, writing only what changed (D101)
+        from app.ingest import events as event_store
+        from app.ingest import extract, fold
+
+        have = sorted(p.name for p in extract.out_dir("x").parent.glob("*") if p.name[0] != "_")
+        report["upsert_events"] = event_store.load(
+            [e for p in have for e in extract.read_events(p)], graph
+        )
+        if gone := fold.migrate_legacy(graph):
+            print(f"derived layer from before D101: {gone} nodes rewritten", file=sys.stderr)
+        for product in event_store.products(graph):
+            out = fold.fold_product(product, graph)
+            print(
+                f"fold {product}: {out['stats']}; unresolved {out['unresolved']}; {out['write']}",
+                file=sys.stderr,
+            )
+    if "derive" in args.stages:
+        from app.ingest import derive
+
+        report["derive_works_on"] = derive.works_on(graph)
+        out = derive.collab(graph)
+        report |= out["report"]
+        print(f"collab: {out['pairs']} pairs; PageRank top {out['top']}", file=sys.stderr)
+        out = derive.communities(graph)
+        report |= out["report"]
+        print(f"communities: {out['communities']}; bridges {out['bridges']}", file=sys.stderr)
+        out = derive.expertise(graph)
+        report |= out["report"]
+        print(f"expertise: {out['areas']} areas; truck factor {out['truck']}", file=sys.stderr)
+        report |= derive.uses(graph)
+        out = derive.precedents(graph)
+        report |= out["report"]
+        print(
+            f"precedents: {out['links']} links over {out['decisions']} decisions", file=sys.stderr
+        )
+    if "sentinel" in args.stages:  # after fold and derive: the radius reads WORKS_ON
+        from app.sentinel import engine
+
+        out = engine.run(graph)
+        report |= out.pop("report")
+        print(f"sentinel: {out}", file=sys.stderr)
+
+
 def cmd_ingest(args: argparse.Namespace) -> int:
     from app import schema
     from app.config import get_settings
@@ -189,50 +264,11 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         report |= linker.load(rows, graph)
         log = linker.write_unresolved(unresolved)
         print(f"unresolved mentions: {len(unresolved)} -> {log}", file=sys.stderr)
-    if "fold" in args.stages:
-        # every product with extracted events (`lore extract`), so a partial run never
-        # drops another product's claims: clear_extracted wipes the whole derived layer
-        from app.ingest import extract, fold, resolve
+    from app import db
 
-        have = sorted(p.name for p in extract.out_dir("x").parent.glob("*") if p.name[0] != "_")
-        events = [e for p in have for e in extract.read_events(p)]
-        arts = {
-            p: artifacts.get(p) or read_jsonl(normalized_dir(p) / "artifacts.jsonl") for p in have
-        }
-        res = resolve.resolve(
-            events, {p: [a for a in v if a.kind == "pr"] for p, v in arts.items()}
-        )
-        rows, stats = fold.rebuild(res, fold.Context.build(structural.load_metadata(), arts))
-        report |= fold.load(rows, graph)
-        print(
-            f"fold over {', '.join(have)}: {stats}; unresolved {len(res.unresolved)}",
-            file=sys.stderr,
-        )
-    if "derive" in args.stages:
-        from app.ingest import derive
-
-        report["derive_works_on"] = derive.works_on(graph)
-        out = derive.collab(graph)
-        report |= out["report"]
-        print(f"collab: {out['pairs']} pairs; PageRank top {out['top']}", file=sys.stderr)
-        out = derive.communities(graph)
-        report |= out["report"]
-        print(f"communities: {out['communities']}; bridges {out['bridges']}", file=sys.stderr)
-        out = derive.expertise(graph)
-        report |= out["report"]
-        print(f"expertise: {out['areas']} areas; truck factor {out['truck']}", file=sys.stderr)
-        report |= derive.uses(graph)
-        out = derive.precedents(graph)
-        report |= out["report"]
-        print(
-            f"precedents: {out['links']} links over {out['decisions']} decisions", file=sys.stderr
-        )
-    if "sentinel" in args.stages:  # after fold and derive: the radius reads WORKS_ON
-        from app.sentinel import engine
-
-        out = engine.run(graph)
-        report |= out.pop("report")
-        print(f"sentinel: {out}", file=sys.stderr)
+    if {"fold", "derive", "sentinel"} & set(args.stages):
+        with db.writer_lock(graph):  # the derived layer has one writer at a time (D101)
+            derived_stages(args, graph, report)
     print(f"{'query':<24}{'rows':>8}{'nodes+':>9}{'edges+':>9}{'props set':>11}")
     for query, r in report.items():
         print(
@@ -606,6 +642,7 @@ COMMANDS = {
     "schema": ("create and verify the indexes for a graph (queries/00_schema.cypher)", cmd_schema),
     "init": ("org mode: create your graph, its product, channels and people (D097)", cmd_init),
     "token": ("org mode: issue or revoke a person's sign-in token (D100)", cmd_token),
+    "belief": ("what Lore believed about an issue or PR at a moment (D101)", cmd_belief),
     "fetch-herb": ("download the HERB dataset (pinned revision) into data/herb", cmd_fetch_herb),
     "rank-dev": ("rank products by change signals to pick the dev products (D017)", cmd_rank_dev),
     "normalize": ("HERB products -> data/normalized/<product>/artifacts.jsonl (S1)", cmd_normalize),
@@ -637,6 +674,11 @@ COMMANDS = {
 OPTIONS: dict[str, list[tuple[str, dict]]] = {
     "schema": [("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"})],
     "init": [("--graph", {"help": "graph name (default: LORE_ORG_GRAPH, e.g. yaan_org)"})],
+    "belief": [
+        ("subject", {"help": "an issue (iss:...) or PR (pr:...) id"}),
+        ("--at", {"help": "ISO date or datetime (UTC): what Lore knew then; default now"}),
+        ("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"}),
+    ],
     "token": [
         ("action", {"choices": ("issue", "revoke")}),
         ("person", {"help": "a people.yaml name, email or eid_ id (quote a full name)"}),
