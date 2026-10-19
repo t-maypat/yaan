@@ -91,6 +91,18 @@ The judge is Haiku 5.5, the same model family as the answers, so it was checked 
 
 So the shared model family doesn't show up as leniency: the judge, if anything, under-scores. A human pass on a sample would still be the stronger check.
 
+## 3d. Dev re-run with the grounding validator (19 Oct, run `20261019T1148Z`, D099)
+The citation validator now also asks that a quote back its sentence (at least 3 words, a word or id in common, every id in a cited record), not only that it appear in the source. The same agent, prompts and tools, re-run on dev:
+
+| | Content | People | Customer | Artifact | **Avg** | Unanswerable declined | Answerable abstained | Sentences dropped |
+|---|---|---|---|---|---|---|---|---|
+| 17 Oct | 73.9 | 88.4 | 88.4 | 82.2 | 83.2 | 87.5% | 4.2% | 19 |
+| 19 Oct | 78.3 | 89.7 | 83.4 | 81.8 | **83.3** | 91.3% | 2.1% | 12 |
+
+- **The stricter check costs no score:** the paired difference is +0.1 (95% interval −6.6 to +5.8); the category moves (Content up, Customer down) are within one run's sampling spread.
+- **The validator found a problem in 35% of first answers and the repair round fixed almost all**; 12 sentences dropped, none turned into an abstention.
+- **Most answers were generated afresh, not replayed:** the graph's derived layer was rewritten (D101) and query results without an `ORDER BY` came back in a different order, which changed the cached conversations' keys. Cost $0.44 answers + judging.
+
 ## 4. HERB-Drift: right about now, and about then (13.1)
 24 hand-labeled dev questions (`eval/drift_set.json`): 11 about the current status of an issue or PR, 10 "as of <date>", 3 "why". Ground truth was read from the raw messages by hand, never from Lore's graph, and every item lists its message ids. A Haiku judge classifies each answer as correct, stale (a state that held at another time), abstained or wrong.
 
