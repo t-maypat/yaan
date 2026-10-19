@@ -316,6 +316,11 @@ def test_a_second_response_and_bad_input_are_refused(company):
         approve.respond(f"alert:{REOPENED}", "approved", "eid_c3", action_ids=["x"], graph=company)
     with pytest.raises(approve.AlertError, match="verdict"):
         approve.respond(f"alert:{REOPENED}", "maybe", "eid_c3", graph=company)
+    # D100: answering for the team takes being notified, or being a lead
+    notified = {n["id"] for n in alerts_by_id(company)[f"alert:{REOPENED}"]["notifies"]}
+    assert "eid_e5" not in notified  # Ed Moss, Marketing Manager
+    with pytest.raises(approve.AlertError, match="Ed Moss isn't notified .* isn't a lead"):
+        approve.respond(f"alert:{REOPENED}", "approved", "eid_e5", graph=company)
     assert alerts_by_id(company)[f"alert:{REOPENED}"]["status"] == "open"
 
 

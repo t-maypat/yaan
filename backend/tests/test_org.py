@@ -310,7 +310,12 @@ def test_the_api_serves_the_org_graph_and_turns_the_demo_off(org_mode, monkeypat
         )
 
     monkeypatch.setattr(main.db, "run", run)
-    client = TestClient(main.app)
+    from app import auth
+
+    anon = TestClient(main.app)
+    assert anon.get("/products").status_code == 401  # a team's data needs sign-in (D100)
+    assert anon.get("/health").status_code in (200, 503)  # but not the uptime check
+    client = TestClient(main.app, headers={"Authorization": f"Bearer {auth.issue('eid_0000beef')}"})
     got = client.get("/products").json()
     assert (got["mode"], seen) == ("org", ["yaan_org"])
     assert client.get("/demo/injections").json()["injections"] == []

@@ -41,9 +41,12 @@ def test_the_tools_are_the_agents_minus_raw_cypher_plus_ask(monkeypatch):
     assert who.input_schema["properties"]["product_id"] == mcp_server.PRODUCT  # no "" default
     assert who.annotations.read_only_hint is True
     # the registry's own schema is untouched (the agent still means "" = the question's product)
-    assert "empty string" in tools.REGISTRY["who_knows"].spec["input_schema"]["properties"][
-        "product_id"
-    ]["description"]
+    assert (
+        "empty string"
+        in tools.REGISTRY["who_knows"].spec["input_schema"]["properties"]["product_id"][
+            "description"
+        ]
+    )
     monkeypatch.setattr(get_settings(), "lore_mcp_ask", False)
     assert "ask" not in [t.name for t in mcp_server.tool_list()]
     with pytest.raises(loop.ToolError, match="unknown tool"):
@@ -124,3 +127,38 @@ def test_mcp_errors_are_tool_errors_the_client_can_fix(company):
     assert raw.is_error and "unknown tool" in raw.content[0].text
     scoped = call(company, "who_knows", {"topic": "Export", "product_id": ""})
     assert scoped.is_error and "needs a product" in scoped.content[0].text
+
+
+@pytest.mark.db
+def test_a_signed_in_mcp_client_sees_only_what_its_person_may(company, tmp_path, monkeypatch):
+    """D100: over HTTP the tools run for the token's person, redacted like the agent's own."""
+    from app import auth
+    from app.agent import access
+
+    monkeypatch.setenv("LORE_AUTH", "token")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    monkeypatch.setattr(mcp_server, "graph", lambda: company)
+    policy = tmp_path / "permissions.yaml"
+    policy.write_text("private_channels: ['bug-*']\nmeetings: attendees\n", encoding="utf-8")
+    monkeypatch.setattr(access, "POLICY", policy)  # Access reads it through access.policy()
+    access.policy.cache_clear()
+    try:
+        ann = auth.issue("eid_a1")  # never posted in bug-Widget
+        rpc = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "get_artifact", "arguments": {"artifact_id": "msg:r1"}},
+        }
+        with TestClient(main.app, base_url="http://127.0.0.1:8000") as client:
+            assert client.post("/mcp", headers=HEADERS, json=rpc).status_code == 401
+            signed = {**HEADERS, "Authorization": f"Bearer {ann}"}
+            got = client.post("/mcp", headers=signed, json=rpc).json()["result"]
+            assert json.loads(got["content"][0]["text"]) == {"hidden_by_permissions": True}
+            rpc["params"]["arguments"] = {"artifact_id": "msg:m1"}  # the open planning channel
+            got = client.post("/mcp", headers=signed, json=rpc).json()["result"]
+            assert json.loads(got["content"][0]["text"])["id"] == "msg:m1"
+    finally:
+        get_settings.cache_clear()
+        access.policy.cache_clear()

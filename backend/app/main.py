@@ -34,7 +34,7 @@ from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from app import __version__, db, mcp_server
+from app import __version__, auth, db, mcp_server
 from app.config import REPO_ROOT, get_settings
 
 mcp_http = mcp_server.HttpEndpoint()  # /mcp (17.1): Lore's tools for any MCP client
@@ -90,6 +90,39 @@ ask_global_limiter = RateLimiter(_s.lore_ask_global_per_minute)  # one key for e
 ask_slots = threading.BoundedSemaphore(_s.lore_ask_concurrency)
 request_limiter = RateLimiter(_s.lore_requests_per_ip_per_minute)
 UNLIMITED_PATHS = {"/health"}
+# The routes that read or write the graph (D100). /ingest/artifact has its own secret; /health
+# and the built UI's files are public, and the UI signs in when an API call answers 401.
+API_PREFIXES = (
+    "/ask",
+    "/artifact",
+    "/decision",
+    "/entity",
+    "/graph",
+    "/eval",
+    "/products",
+    "/alerts",
+    "/demo",
+    "/query",
+    "/mcp",
+    "/me",
+)
+
+
+@app.middleware("http")
+async def identify(request: Request, call_next):
+    """Who is asking (app/auth.py): the principal every route below reads, never the body.
+    Defined before the rate limit, so the limit wraps it and guessing tokens is limited too."""
+    request.state.principal = None
+    if request.url.path.startswith(API_PREFIXES):
+        try:
+            request.state.principal = auth.principal(request.headers)
+        except auth.AuthError as e:
+            return JSONResponse(
+                {"detail": str(e), "auth": auth.mode()},
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -102,6 +135,8 @@ async def limit_requests(request: Request, call_next):
             headers={"Retry-After": "60"},
         )
     return await call_next(request)
+
+
 DEMO_PER_MINUTE = 6  # per IP: injections, resets, approvals and dismissals
 demo_limiter = RateLimiter(DEMO_PER_MINUTE)
 demo_lock = threading.Lock()  # one demo write at a time: a fold rebuild must not interleave
@@ -114,6 +149,32 @@ def graph() -> str:
 
 def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
+
+
+def principal(request: Request) -> str | None:
+    """The signed-in person (the `identify` middleware), or None in the demo."""
+    return getattr(request.state, "principal", None)
+
+
+def as_principal(request: Request, given: str | None, what: str) -> str | None:
+    """The person a request acts as: the signed-in one. Naming someone else is refused; in
+    the demo (no sign-in) the body's choice stands, a labeled persona switch (D100)."""
+    who = principal(request)
+    if who is None:
+        return given
+    if given not in (None, who):
+        raise HTTPException(403, f"signed in as {who}: {what} is you, not {given}")
+    return who
+
+
+def for_viewer(request: Request, value: dict) -> dict:
+    """`value` as the signed-in person may see it (agent/access.py); unchanged in the demo."""
+    who = principal(request)
+    if who is None:
+        return value
+    from app.agent import access
+
+    return access.Access(who, graph()).redact(value)[0]
 
 
 def demo_write(request: Request, work):
@@ -152,6 +213,7 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
     from app.agent import loop
 
     ip = client_ip(request)
+    viewer = as_principal(request, body.viewer_id, "the viewer")
     # The slot first: a request turned away as busy doesn't use up the asker's limits (D098).
     if not ask_slots.acquire(blocking=False):
         raise HTTPException(503, "Lore is busy answering; try again shortly", {"Retry-After": "10"})
@@ -176,7 +238,7 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
                 graph=graph(),
                 on_event=lambda n, d: events.put((n, d)),
                 as_of_ms=body.as_of_ms,
-                viewer_id=body.viewer_id,
+                viewer_id=viewer,
                 cancel=cancel,
             )
         except Exception as e:  # shown to the viewer as an error event, never a fake answer
@@ -213,19 +275,19 @@ async def relay(events: queue.Queue, cancel: threading.Event, request) -> AsyncI
 
 
 @app.get("/artifact/{artifact_id:path}")
-def artifact(artifact_id: str) -> dict:
+def artifact(artifact_id: str, request: Request) -> dict:
     """One artifact's text and the people around it (agent tool 3), for citation hovers."""
     from app.agent import tools
 
-    out = tools.get_artifact(artifact_id, graph())
-    if "error" in out:
-        raise HTTPException(404, out["error"])
+    out = for_viewer(request, tools.get_artifact(artifact_id, graph()))
+    if "error" in out or out.get("hidden_by_permissions"):  # hidden reads as absent
+        raise HTTPException(404, out.get("error") or f"no artifact with id {artifact_id!r}")
     return out
 
 
 @app.get("/decision/{subject_id}/lineage")
 def decision_lineage(
-    subject_id: str, as_of_ms: int | None = Query(default=None, ge=0, le=MAX_MS)
+    subject_id: str, request: Request, as_of_ms: int | None = Query(default=None, ge=0, le=MAX_MS)
 ) -> dict:
     """How an issue's or PR's state changed, who decided each step and why (agent tool 6),
     for the Timeline (12.4). The product comes from the subject itself."""
@@ -237,15 +299,17 @@ def decision_lineage(
     product = rows[0]["product_id"] if rows else None
     if not product:
         raise HTTPException(404, f"no issue or pull request {subject_id!r} in the graph")
-    out = tools.decision_lineage(subject_id, product, as_of_ms, graph())
-    if not out["subjects"]:
+    out = for_viewer(request, tools.decision_lineage(subject_id, product, as_of_ms, graph()))
+    if not out.get("subjects"):
         raise HTTPException(404, f"{subject_id!r} has no recorded states")
     out["cypher"] = ["subject_product.cypher", *out["cypher"]]
     return out
 
 
 @app.get("/entity/{entity_id}")
-def entity(entity_id: str, product_id: str | None = Query(default=None, max_length=100)) -> dict:
+def entity(
+    entity_id: str, request: Request, product_id: str | None = Query(default=None, max_length=100)
+) -> dict:
     """One person, customer, company, product, issue or area: its properties and links
     counted by type; a person also gets their profile (agent tool 4). Artifacts have
     `/artifact/{id}`."""
@@ -266,6 +330,9 @@ def entity(entity_id: str, product_id: str | None = Query(default=None, max_leng
     }
     if "Person" in row["labels"]:
         out["profile"] = tools.person_profile(entity_id, product_id, graph())
+    out = for_viewer(request, out)
+    if out.get("hidden_by_permissions"):  # e.g. an issue reported only where they can't see
+        raise HTTPException(404, f"no entity {entity_id!r} in the graph")
     return out
 
 
@@ -305,9 +372,25 @@ def products() -> dict:
     return {"products": rows, "mode": mode, "cypher": ["list_products.cypher"]}
 
 
+@app.get("/me")
+def me(request: Request) -> dict:
+    """How this API identifies people and who is signed in (D100): the UI hides its persona
+    and responder pickers when the answer is a person."""
+    from app import org
+
+    who = principal(request)
+    you = None
+    if who:
+        rows = db.run("entity_card", {"id": who}, graph=graph()).rows
+        props = rows[0]["props"] if rows else {}
+        you = {"id": who, "name": props.get("name"), "role": props.get("role")}
+    return {"auth": auth.mode(), "mode": "org" if org.active() else "demo", "you": you}
+
+
 class AlertResponse(BaseModel):
     alert_id: str = Field(min_length=1, max_length=300)
-    person_id: str = Field(min_length=1, max_length=100)
+    # who responds: the signed-in person; named here only in the demo (D100)
+    person_id: str | None = Field(default=None, min_length=1, max_length=100)
     note: str | None = Field(default=None, max_length=500)
     action_ids: list[str] | None = Field(default=None, max_length=50)
     # the text a connector will post for each approved action: bounded like a Slack message
@@ -317,20 +400,22 @@ class AlertResponse(BaseModel):
 
 
 @app.get("/alerts")
-def alerts(status: str | None = None, product_id: str | None = None) -> dict:
+def alerts(request: Request, status: str | None = None, product_id: str | None = None) -> dict:
     """The Inbox: Sentinel alerts, newest change first (11.1)."""
     from app.sentinel import engine
 
     rows = engine.list_alerts(status, product_id, graph=graph())
-    return {"graph": graph(), "alerts": rows, "cypher": ["list_alerts.cypher"]}
+    out = {"graph": graph(), "alerts": rows, "cypher": ["list_alerts.cypher"]}
+    return for_viewer(request, out)
 
 
 @app.get("/alerts/detail")
-def alert_detail(id: str) -> dict:
+def alert_detail(id: str, request: Request) -> dict:
     """One alert with its blast radius (11.2) and drafted actions (11.3)."""
     from app.sentinel import blast_radius, engine
 
-    found = engine.list_alerts(graph=graph(), alert_id=id, limit=1)
+    found = for_viewer(request, {"alerts": engine.list_alerts(graph=graph(), alert_id=id, limit=1)})
+    found = found["alerts"]
     if not found:
         raise HTTPException(404, f"no alert {id!r}")
     alert = found[0]
@@ -346,26 +431,29 @@ def alert_detail(id: str) -> dict:
         if alert["decision_id"]
         else []
     )
-    return {
+    out = {
         "alert": alert,
         "radius": radius,
         "precedents": precedents,
         "actions": engine.alert_actions(id, graph=graph()),
         "cypher": ["list_alerts.cypher", "impact_of.cypher", "alert_actions.cypher"],
     }
+    return for_viewer(request, out)
 
 
 @app.post("/alerts/approve")
 def alert_approve(body: AlertResponse, request: Request) -> dict:
-    """Approve an alert's drafts (all, or `action_ids`) as `person_id` (11.4)."""
+    """Approve an alert's drafts (all, or `action_ids`) as the signed-in person, or in the
+    demo as `person_id` (11.4, D100)."""
     from app.sentinel import approve
 
+    person = responder(request, body)
     return demo_write(
         request,
         lambda g: approve.respond(
             body.alert_id,
             "approved",
-            body.person_id,
+            person,
             note=body.note,
             action_ids=body.action_ids,
             edits=body.edits,
@@ -376,15 +464,22 @@ def alert_approve(body: AlertResponse, request: Request) -> dict:
 
 @app.post("/alerts/dismiss")
 def alert_dismiss(body: AlertResponse, request: Request) -> dict:
-    """Dismiss an alert as `person_id`; recorded as a decision too (11.4)."""
+    """Dismiss an alert as the signed-in person (or the demo's `person_id`); recorded as a
+    decision too (11.4)."""
     from app.sentinel import approve
 
+    person = responder(request, body)
     return demo_write(
         request,
-        lambda g: approve.respond(
-            body.alert_id, "dismissed", body.person_id, note=body.note, graph=g
-        ),
+        lambda g: approve.respond(body.alert_id, "dismissed", person, note=body.note, graph=g),
     )
+
+
+def responder(request: Request, body: AlertResponse) -> str:
+    person = as_principal(request, body.person_id, "the responder")
+    if not person:
+        raise HTTPException(422, "person_id: who responds (the demo has no sign-in)")
+    return person
 
 
 def injection(name: str) -> dict:

@@ -50,6 +50,38 @@ export type Artifact = {
 };
 export type Product = { id: string; name: string; aliases: string[]; artifacts: number };
 
+// Sign-in (D100). In org mode the API names a person on every call: a token from
+// `lore token issue`, kept in this browser, or a sign-in proxy's header (nothing to store).
+// A 401 tells the app to ask for a token; the demo never answers 401.
+const TOKEN_KEY = "yaan_token";
+export const SIGN_IN_EVENT = "yaan:sign-in";
+
+export function getToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setToken(token: string | null): void {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* storage blocked: the token lasts until the page reloads */
+  }
+}
+
+async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = getToken();
+  const headers = new Headers(init.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const r = await fetch(path, { ...init, headers });
+  if (r.status === 401) window.dispatchEvent(new Event(SIGN_IN_EVENT));
+  return r;
+}
+
 async function failLoudly(r: Response): Promise<never> {
   let detail = r.statusText;
   try {
@@ -68,7 +100,7 @@ export async function ask(
   asOfMs?: number | null,
   viewerId?: string | null,
 ): Promise<void> {
-  const r = await fetch("/ask", {
+  const r = await authFetch("/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -100,7 +132,7 @@ export async function ask(
 const cache = new Map<string, Promise<unknown>>();
 function getJson<T>(path: string): Promise<T> {
   if (!cache.has(path)) {
-    const p = fetch(path).then((r) => (r.ok ? r.json() : failLoudly(r)));
+    const p = authFetch(path).then((r) => (r.ok ? r.json() : failLoudly(r)));
     p.catch(() => cache.delete(path)); // a failure is retried on the next hover
     cache.set(path, p);
   }
@@ -188,7 +220,7 @@ export type IngestResult = {
 export type ResponseResult = { status: string; decision: { id: string; statement: string } };
 
 async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const r = await fetch(path, {
+  const r = await authFetch(path, {
     method,
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -201,7 +233,8 @@ export const getAlertDetail = (id: string) =>
   send<AlertDetail>("GET", `/alerts/detail?id=${encodeURIComponent(id)}`);
 export const respond = (
   verdict: "approve" | "dismiss",
-  body: { alert_id: string; person_id: string; note?: string; action_ids?: string[]; edits?: Record<string, string> },
+  // person_id: the demo's chosen responder; signed in, the API uses the signed-in person
+  body: { alert_id: string; person_id?: string; note?: string; action_ids?: string[]; edits?: Record<string, string> },
 ) => send<ResponseResult>("POST", `/alerts/${verdict}`, body);
 export const getInjections = () => send<{ injections: Injection[] }>("GET", "/demo/injections");
 export const inject = (name: string) => send<IngestResult>("POST", `/demo/inject/${encodeURIComponent(name)}`);
@@ -214,6 +247,13 @@ export const getQuery = (name: string) =>
 // suggested questions and example viewers don't apply.
 export type DataMode = "demo" | "org";
 export const getProducts = () => getJson<{ products: Product[]; mode?: DataMode }>("/products");
+// How the API identifies people, and who is signed in (null in the demo).
+export type Me = {
+  auth: "none" | "token" | "header";
+  mode: DataMode;
+  you: { id: string; name: string | null; role: string | null } | null;
+};
+export const getMe = () => getJson<Me>("/me");
 
 // The Timeline (12.4): an issue's or PR's chain of states, each with its validity window.
 export type Decider = { id: string; name: string | null; role?: string | null };

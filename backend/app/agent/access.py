@@ -1,17 +1,22 @@
-"""Viewer-scoped answers (R2 W7, D077; CONTEXT §9.11 permission personas).
+"""Viewer-scoped answers (R2 W7, D077; provenance-aware since D100; CONTEXT §9.11 personas).
 
 One choke point: every tool result passes through `Access.redact` before the model sees it or
-the loop records it, so a hidden source can't be read, quoted or cited. The answer reports how
-many sources were hidden. With no viewer nothing is filtered (today's behavior; cached answers
-stay valid).
+the loop records it, and so does every API or MCP read made for an authenticated viewer, so a
+hidden source can't be read, quoted or cited. The answer reports how many sources were hidden.
+With no viewer nothing is filtered (the demo's default; cached answers stay valid).
 
 The policy is `permissions.yaml` (repo root). HERB has no access rules, so it is synthetic and
 labeled as such: messages in channels whose names match `private_channels` are visible to the
 channel's members (people who posted there), and meeting transcripts to the people who attended
 or spoke in them. Everything else is visible to everyone in the company.
 
-Known limit: counts and rankings the graph computes (`rank`, `who_knows`) still count every
-artifact; the redaction removes the hidden items they list, not their contribution to a number.
+Derived nodes inherit from their sources (D100): an issue, claim, decision or alert is visible
+only if the viewer may see at least one artifact it was derived from (`derived_sources.cypher`).
+Without that, an issue reported only in a private channel kept its title, status and customers.
+
+Fail-closed: an id the policy can't place (not in the graph, or a derived node with no source)
+is hidden. When anything is hidden, the result's counts (`counts_by_status`, `count`, a
+ranking's `n` ...) are left out, since they were computed over everything; a note says so.
 """
 
 import re
@@ -27,6 +32,13 @@ from app.config import REPO_ROOT
 
 POLICY = REPO_ROOT / "permissions.yaml"
 ARTIFACT_ID = re.compile(r"^(msg|mtg|chat|doc|pr|url):")
+DERIVED_ID = re.compile(r"^(iss|dec|clm|alert):")
+ID_KEYS = ("artifact_id", "id", "issue_id", "decision_id", "report_id")  # a row's own ids
+AGGREGATES = frozenset(
+    {"counts_by_status", "counts_by_kind", "count", "total_ranked", "reopen_count", "size"}
+)
+RANKED = frozenset({"n", "rank"})  # in a ranking's rows: computed over everything
+HIDDEN_NOTE = "some sources are hidden from you, so counts computed over all of them are left out"
 _DROP = object()
 
 
@@ -40,6 +52,10 @@ class Policy:
 def policy() -> Policy:
     raw = yaml.safe_load(POLICY.read_text(encoding="utf-8")) if POLICY.is_file() else {}
     return Policy(tuple(raw.get("private_channels") or ()), raw.get("meetings") or "attendees")
+
+
+def scoped(value: str) -> bool:
+    return bool(ARTIFACT_ID.match(value) or DERIVED_ID.match(value))
 
 
 @dataclass
@@ -60,42 +76,63 @@ class Access:
     def private(self, channel: str | None) -> bool:
         return bool(channel) and any(fnmatch(channel, p) for p in self.rules.private_channels)
 
-    def allowed(self, artifact_ids: set[str]) -> set[str]:
-        """The ids this viewer may see (looked up once per id)."""
-        unknown = sorted(a for a in artifact_ids if a not in self._known)
-        if unknown:
-            rows = db.run(
-                "artifact_access", {"ids": unknown, "limit": len(unknown)}, graph=self.graph
-            ).rows
-            for r in rows:
-                if r["kind"] == "meeting" and self.rules.meetings == "attendees":
-                    ok = r["id"] in self.meetings
-                elif self.private(r["channel"]):
-                    ok = r["channel_id"] in self.channels
-                else:
-                    ok = True
-                self._known[r["id"]] = ok
-            for a in unknown:  # not in the graph: nothing to hide
-                self._known.setdefault(a, True)
-        return {a for a in artifact_ids if self._known.get(a, True)}
+    def allowed(self, ids: set[str]) -> set[str]:
+        """The ids this viewer may see (each looked up once). Unknown ids are hidden."""
+        unknown = sorted(i for i in ids if i not in self._known)
+        derived = [i for i in unknown if DERIVED_ID.match(i)]
+        sources: dict[str, set[str]] = {}
+        if derived:
+            for r in db.run_all(
+                "derived_sources", {"ids": derived}, cap=200_000, graph=self.graph
+            ):
+                sources.setdefault(r["id"], set()).add(r["source"])
+        artifacts = sorted(
+            {i for i in unknown if ARTIFACT_ID.match(i)} | {s for v in sources.values() for s in v}
+        )
+        self._place(artifacts)
+        for i in derived:  # visible iff one of its sources is
+            self._known[i] = any(self._known.get(s, False) for s in sources.get(i, ()))
+        return {i for i in ids if self._known.get(i, False)}
+
+    def _place(self, artifact_ids: list[str]) -> None:
+        todo = [a for a in artifact_ids if a not in self._known]
+        if not todo:
+            return
+        rows = db.run("artifact_access", {"ids": todo, "limit": len(todo)}, graph=self.graph)
+        for r in rows.rows:
+            if r["kind"] == "meeting" and self.rules.meetings == "attendees":
+                ok = r["id"] in self.meetings
+            elif self.private(r["channel"]):
+                ok = r["channel_id"] in self.channels
+            else:
+                ok = True
+            self._known[r["id"]] = ok
+        for a in todo:  # not in the graph: nothing proves the viewer may see it
+            self._known.setdefault(a, False)
 
     def redact(self, value: Any) -> tuple[Any, set[str]]:
-        """The tool result without what the viewer can't see, and the ids removed. A row that
-        is a hidden artifact (or points at one) goes; so does a hidden id in a list."""
+        """The result without what the viewer can't see, and the ids removed. A row that is
+        (or names, by one of its own ids) a hidden artifact or derived node goes; so does a
+        hidden id in a list. With anything hidden, counts over everything go too."""
         found: set[str] = set()
         _ids(value, found)
         hidden = found - self.allowed(found)
         if not hidden:
             return value, set()
 
-        def walk(v: Any) -> Any:
+        def walk(v: Any, in_ranking: bool = False) -> Any:
             if isinstance(v, dict):
-                aid = v.get("artifact_id") or v.get("id")
-                if isinstance(aid, str) and aid in hidden:
+                if any(isinstance(v.get(k), str) and v[k] in hidden for k in ID_KEYS):
                     return _DROP
-                return {k: w for k, x in v.items() if (w := walk(x)) is not _DROP}
+                out = {}
+                for k, x in v.items():
+                    if k in AGGREGATES or (in_ranking and k in RANKED):
+                        continue
+                    if (w := walk(x, k == "ranking")) is not _DROP:
+                        out[k] = w
+                return out
             if isinstance(v, list):
-                return [w for x in v if (w := walk(x)) is not _DROP]
+                return [w for x in v if (w := walk(x, in_ranking)) is not _DROP]
             if isinstance(v, str) and v in hidden:
                 return _DROP
             return v
@@ -103,6 +140,8 @@ class Access:
         out = walk(value)
         if out is _DROP:  # e.g. get_artifact on a hidden source
             out = {"hidden_by_permissions": True}
+        elif isinstance(out, dict):
+            out["counts_hidden"] = HIDDEN_NOTE
         return out, hidden
 
 
@@ -113,5 +152,5 @@ def _ids(value: Any, found: set[str]) -> None:
     elif isinstance(value, list):
         for v in value:
             _ids(v, found)
-    elif isinstance(value, str) and ARTIFACT_ID.match(value):
+    elif isinstance(value, str) and scoped(value):
         found.add(value)

@@ -58,7 +58,7 @@ Org mode points Yaan at your team's tools instead of the demo. Your data goes in
 
 1. In `.env`, set `LORE_DATA_MODE=org` and each tool's token.
 2. `cp connectors.org.example.yaml connectors.yaml`, then name your product and the channels Yaan reads. A channel's name starts with `bug-`, `develop-` or `planning-`, which tells Yaan what to read from it.
-3. Optional: list people in [`people.yaml`](people.yaml) with their role and their account in each tool. Yaan registers everyone else the first time they appear.
+3. List the people who will use Yaan in [`people.yaml`](people.yaml), with their email, role and account in each tool. Yaan registers everyone else the first time they appear in a tool, but only listed people can sign in.
 4. Create the graph and start the connectors:
 
 ```sh
@@ -66,6 +66,15 @@ docker compose --profile app up -d --force-recreate api
 docker compose --profile app exec api yaan init                 # your graph, product, channels and people
 docker compose --profile app exec -d api yaan connectors run    # Slack over Socket Mode; the rest polled every 30 s
 ```
+
+5. Sign people in. In org mode every API, web UI and `/mcp` request answers as a signed-in person, who sees only the sources they may see, and approvals are recorded as theirs:
+
+```sh
+docker compose --profile app exec api yaan token issue "Priya Shah"   # prints her token once; paste it into the web UI
+docker compose --profile app exec api yaan token revoke "Priya Shah"
+```
+
+   Behind a single-sign-on proxy (oauth2-proxy, Cloudflare Access), set `LORE_AUTH=header` instead: the proxy sends the user's email in `X-Forwarded-Email` and `LORE_AUTH_PROXY_SECRET` in `X-Lore-Proxy-Secret`. In Slack, `@yaan` answers as the Slack user who asked.
 
 | Tool | In | Out, once you approve |
 |---|---|---|

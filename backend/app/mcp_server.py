@@ -158,13 +158,33 @@ def ask(args: dict[str, Any], graph_name: str) -> dict:
     }
 
 
-def run(name: str, args: dict[str, Any], graph_name: str | None = None) -> dict:
-    """One MCP tool call, blocking (the handlers run it in a worker thread)."""
+def run(
+    name: str, args: dict[str, Any], graph_name: str | None = None, viewer: str | None = None
+) -> dict:
+    """One MCP tool call, blocking (the handlers run it in a worker thread). `viewer` is the
+    signed-in person of an HTTP client (D100): `ask` answers as them and every tool result is
+    redacted to what they may see. stdio has no viewer: it is the local user's own process."""
     graph_name = graph_name or graph()
     if name == "ask" and get_settings().lore_mcp_ask:
+        if viewer:
+            if args.get("viewer_id") not in (None, "", viewer):
+                raise loop.ToolError(f"signed in as {viewer}: answers are for you")
+            args = {**args, "viewer_id": viewer}
         return ask(args, graph_name)
     allowed = frozenset(tools.REGISTRY) - EXCLUDED
-    return loop.call_tool(name, args, tools.Scope(None, None, graph_name), allowed)
+    out = loop.call_tool(name, args, tools.Scope(None, None, graph_name), allowed)
+    if viewer:
+        from app.agent import access
+
+        out = access.Access(viewer, graph_name).redact(out)[0]
+    return out
+
+
+def viewer_of(ctx: Any) -> str | None:
+    """The signed-in person behind an MCP request over HTTP (main.identify set it)."""
+    request = getattr(ctx, "request", None)
+    state = getattr(request, "state", None)
+    return getattr(state, "principal", None)
 
 
 def build(graph_name: str | None = None) -> Server:
@@ -176,7 +196,9 @@ def build(graph_name: str | None = None) -> Server:
     async def call_tool(ctx: Any, params: types.CallToolRequestParams) -> types.CallToolResult:
         args = params.arguments or {}
         try:
-            out = await anyio.to_thread.run_sync(run, params.name, args, graph_name)
+            out = await anyio.to_thread.run_sync(
+                run, params.name, args, graph_name, viewer_of(ctx)
+            )
         except (loop.ToolError, db.QueryError, llm.LLMError) as e:
             # shown to the client, as to the agent: it can fix its arguments and retry
             return types.CallToolResult(

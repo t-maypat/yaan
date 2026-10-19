@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     # people.yaml or are registered on first sight, and nothing is copied from HERB.
     lore_data_mode: Literal["demo", "org"] = "demo"
     lore_org_graph: str = "yaan_org"
+    # Who is asking (D100, app/auth.py): auto = token in org mode, none in the demo
+    lore_auth: Literal["auto", "none", "token", "header"] = "auto"
+    lore_auth_header: str = "X-Forwarded-Email"  # set by a sign-in proxy in `header` mode
+    # The proxy also sends X-Lore-Proxy-Secret with this value, so a request that reaches Lore
+    # around the proxy can't name itself (an IP check breaks once uvicorn trusts the proxy's
+    # X-Forwarded-For for per-IP limits: the client address becomes the user's).
+    lore_auth_proxy_secret: str | None = None
     # MCP server (17.1): offer `ask` (the full agent, an LLM call) besides the read-only tools;
     # extra Host values `/mcp` accepts beyond localhost (DNS-rebinding guard), as a JSON list
     lore_mcp_ask: bool = True

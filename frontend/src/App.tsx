@@ -5,6 +5,7 @@ import { EvalPage } from "./components/EvalPage";
 import { EvidenceGraph } from "./components/EvidenceGraph";
 import { GraphHealthPage } from "./components/GraphHealthPage";
 import { Inbox } from "./components/Inbox";
+import { SignIn } from "./components/SignIn";
 import { Sources } from "./components/Sources";
 import { Timeline } from "./components/Timeline";
 import { type Step, Walk } from "./components/Walk";
@@ -217,6 +218,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
+      <SignIn />
       <header className="topbar">
         <div className="max-w-[90rem] mx-auto px-4 sm:px-8 py-2.5 flex flex-wrap items-center gap-x-6 gap-y-2">
           <button

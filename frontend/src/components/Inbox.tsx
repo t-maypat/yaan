@@ -8,8 +8,10 @@ import {
   getAlertDetail,
   getAlerts,
   getInjections,
+  getMe,
   type IngestResult,
   type Injection,
+  type Me,
   inject,
   type RadiusRow,
   respond,
@@ -581,6 +583,13 @@ function Respond({ detail, actions, onDone }: { detail: AlertDetail; actions: Ac
   const people = radius.people;
   const lead = people.find((p) => /lead|manager|vp/i.test(p.role ?? "")) ?? people[0];
   const [person, setPerson] = useState(lead?.id ?? "");
+  // Signed in (org mode, D100), you respond as yourself: the API takes the person from the
+  // sign-in and the picker goes. The demo keeps it, a labeled persona switch.
+  const [me, setMe] = useState<Me | null>(null);
+  useEffect(() => {
+    getMe().then(setMe, () => setMe(null));
+  }, []);
+  const you = me?.you ?? null;
   const [chosen, setChosen] = useState<Set<string>>(() => new Set(actions.map((a) => a.id)));
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
@@ -598,7 +607,7 @@ function Respond({ detail, actions, onDone }: { detail: AlertDetail; actions: Ac
     setError(null);
     respond(verdict, {
       alert_id: alert.id,
-      person_id: person,
+      ...(you ? {} : { person_id: person }),
       note: note || undefined,
       ...(verdict === "approve" ? { action_ids: [...chosen], edits: changed } : {}),
     })
@@ -655,6 +664,13 @@ function Respond({ detail, actions, onDone }: { detail: AlertDetail; actions: Ac
 
       {open && !result && (
         <div className="mt-6 flex flex-wrap items-end gap-x-4 gap-y-3 border-t border-rule pt-4">
+          {you ? (
+            <p className="text-sm">
+              <span className="block text-[0.78rem] text-muted">Responding as</span>
+              {you.name ?? you.id}
+              {you.role ? `, ${you.role}` : ""}
+            </p>
+          ) : (
           <div>
             <label htmlFor="as" className="block text-[0.78rem] text-muted">
               Respond as
@@ -673,6 +689,7 @@ function Respond({ detail, actions, onDone }: { detail: AlertDetail; actions: Ac
               ))}
             </select>
           </div>
+          )}
           <div className="flex-1 min-w-[12rem]">
             <label htmlFor="note" className="block text-[0.78rem] text-muted">
               Note (kept with the decision)

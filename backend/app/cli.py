@@ -65,6 +65,41 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_token(args: argparse.Namespace) -> int:
+    """Sign-in tokens (D100): issue one for a people.yaml person (shown once; only its hash is
+    kept), or revoke all of a person's tokens."""
+    from app import auth, org
+
+    want = args.person.strip().casefold()
+    try:
+        people = list(org.roster().values())
+    except org.OrgError as e:
+        print(f"lore token: {e}", file=sys.stderr)
+        return 1
+    found = [
+        p
+        for p in people
+        if want in (p["id"].casefold(), (p.get("email") or "").casefold(), p["name"].casefold())
+    ]
+    if len(found) != 1:
+        what = "nobody" if not found else f"{len(found)} people"
+        print(f"lore token: {what} in people.yaml matches {args.person!r}", file=sys.stderr)
+        return 1
+    person = found[0]
+    if args.action == "issue":
+        token = auth.issue(person["id"], label=args.label or "")
+        print(f"token for {person['name']} ({person['id']}), shown once; keep it secret:")
+        print(token)
+        if auth.mode() != "token":
+            print(
+                f"note: LORE_AUTH is {auth.mode()!r}; tokens are read in token mode",
+                file=sys.stderr,
+            )
+    else:
+        print(f"revoked {auth.revoke(person['id'])} token(s) of {person['name']}")
+    return 0
+
+
 def cmd_fetch_herb(args: argparse.Namespace) -> int:
     from app.ingest.herb_fetch import HERB_REVISION, fetch_herb, product_files
 
@@ -570,6 +605,7 @@ def cmd_connectors(args: argparse.Namespace) -> int:
 COMMANDS = {
     "schema": ("create and verify the indexes for a graph (queries/00_schema.cypher)", cmd_schema),
     "init": ("org mode: create your graph, its product, channels and people (D097)", cmd_init),
+    "token": ("org mode: issue or revoke a person's sign-in token (D100)", cmd_token),
     "fetch-herb": ("download the HERB dataset (pinned revision) into data/herb", cmd_fetch_herb),
     "rank-dev": ("rank products by change signals to pick the dev products (D017)", cmd_rank_dev),
     "normalize": ("HERB products -> data/normalized/<product>/artifacts.jsonl (S1)", cmd_normalize),
@@ -601,6 +637,11 @@ COMMANDS = {
 OPTIONS: dict[str, list[tuple[str, dict]]] = {
     "schema": [("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"})],
     "init": [("--graph", {"help": "graph name (default: LORE_ORG_GRAPH, e.g. yaan_org)"})],
+    "token": [
+        ("action", {"choices": ("issue", "revoke")}),
+        ("person", {"help": "a people.yaml name, email or eid_ id (quote a full name)"}),
+        ("--label", {"help": "issue: what the token is for, e.g. 'laptop' or 'claude code'"}),
+    ],
     "normalize": [
         ("--products", {"nargs": "+", "help": "product names (default: the dev products)"})
     ],

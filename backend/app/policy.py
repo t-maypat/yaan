@@ -42,6 +42,11 @@ class Verdict:
     reason: str
 
 
+def is_lead(role: str | None) -> bool:
+    """A role that may act for the team beyond its own work (respond to any alert, D100)."""
+    return role in LEADS
+
+
 def decide(kind: Literal["issue_status", "pr_action"], facts: Facts) -> Verdict:
     """The §9.4 authority table as code."""
     if not facts.speaker:

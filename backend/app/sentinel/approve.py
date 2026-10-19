@@ -21,7 +21,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from app import db
+from app import db, policy
 from app.sentinel import engine
 
 VERDICTS = ("approved", "dismissed")
@@ -59,6 +59,18 @@ def respond(
         raise AlertError(f"alert {alert_id!r} is {alert['status']}, not open")
     if not alert["person_id"]:
         raise AlertError(f"no person {person_id!r} to record as the one who responded")
+    # Who may answer for the team (D100): the people the alert notifies, or a lead. Approving
+    # sends drafted text to the team's tools, so it is not open to anyone with an id.
+    notified = {
+        n["id"]
+        for a in engine.list_alerts(graph=graph, alert_id=alert_id, limit=1)
+        for n in a["notifies"]
+    }
+    if person_id not in notified and not policy.is_lead(alert["person_role"]):
+        who = alert["person_name"] or person_id
+        raise AlertError(
+            f"{who} isn't notified by this alert and isn't a lead: only those may respond to it"
+        )
     actions = engine.alert_actions(alert_id, graph=graph)
     known = {a["id"] for a in actions}
     chosen = known if action_ids is None else set(action_ids)

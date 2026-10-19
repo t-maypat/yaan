@@ -96,6 +96,7 @@ def parse_roster(path: Path) -> dict[str, dict[str, Any]]:
             "id": eid,
             "name": e["name"],
             "role": e.get("role"),  # None: unknown, which the policy treats as unverified
+            "email": e.get("email") or "",  # sign-in by proxy header (auth.py); not in the graph
             "location": e.get("location") or "",
             "org": e.get("org") or "",
             "accounts": accounts,
