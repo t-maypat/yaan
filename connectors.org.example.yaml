@@ -1,0 +1,26 @@
+# connectors.yaml for your own tools (org mode, LORE_DATA_MODE=org). Copy it over the demo's:
+#   cp connectors.org.example.yaml connectors.yaml
+# then run `yaan init`, which creates the product and the channels below in your graph.
+#
+# Every Yaan channel name starts with what kind of talk it holds, because that decides what Yaan
+# reads from it: bug-… (issues reported, fixed, reopened), develop-… (pull requests and
+# development decisions), planning-… (documents and their review; not read for events).
+product: Acme Platform              # the product everything below belongs to
+
+slack:
+  channels:                         # Slack channel name -> the Yaan channel it feeds
+    support: bug-support
+    backend: develop-backend
+  alerts_channel: yaan-alerts       # alert cards with Approve / Dismiss, and notifications
+  people: {}                        # optional: Slack member id -> person id (people.yaml is easier)
+
+github:
+  people: {}                        # optional: GitHub login -> person id
+
+jira:
+  channel: bug-tickets              # ticket changes are filed as messages in this channel
+  people: {}
+
+notion:
+  channel: planning-docs            # where Notion pages are shared for review
+  people: {}

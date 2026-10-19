@@ -67,7 +67,7 @@ class GitHubConnector:
             if self._own is None:
                 self._own = self._get("/user")["login"]
             own = self._own
-        return self.maps.person("github", login, text, own)
+        return self.maps.person("github", login, text, own, name=login)
 
     def pr_id(self, number: int) -> str:
         return base.synthetic_id("pr", "github", f"{self.repo}-{number}")
@@ -114,7 +114,7 @@ class GitHubConnector:
                 "state": pr["state"],
                 "merged": bool(pr.get("merged_at")),
                 "login": author,
-                "synthetic": True,
+                "synthetic": base.is_demo(),
                 "source": "github",
                 "reviews": [
                     {

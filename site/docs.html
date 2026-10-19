@@ -175,8 +175,13 @@ cd yaan</code></pre>
         </article>
       </div>
       <h3 class="h3-doc">Start the connectors</h3>
-      <p>Tell Yaan which product each channel, repository, project and page belongs to. Edit <code>connectors.yaml</code>. Then apply your settings and check them:</p>
+      <p>Switch Yaan from the demo to your own data. In <code>.env</code>, set <code>LORE_DATA_MODE=org</code>. Your data then goes into its own graph, <code>yaan_org</code>. Nothing from the demo graph is mixed in.</p>
+      <p>Copy the example map, then edit it. Name your product and the channels Yaan reads. Each channel name starts with <code>bug-</code>, <code>develop-</code> or <code>planning-</code>. The prefix tells Yaan what to read from it.</p>
+      <pre class="code"><code>cp connectors.org.example.yaml connectors.yaml</code></pre>
+      <p>Optional: list your people in <code>people.yaml</code>, with their role and their account in each tool. A role decides who may close or reopen an issue. Yaan adds everyone else the first time they appear.</p>
+      <p>Apply your settings, create your graph, and check the connectors:</p>
       <pre class="code"><code>docker compose --profile app up -d --force-recreate api
+docker compose --profile app exec api yaan init
 docker compose --profile app exec api yaan connectors status</code></pre>
       <p>Start the connectors. They keep running in the background:</p>
       <pre class="code"><code>docker compose --profile app exec -d api yaan connectors run</code></pre>

@@ -30,6 +30,41 @@ def cmd_schema(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_init(args: argparse.Namespace) -> int:
+    """Org mode (D097): create your graph with its indexes, then the product, the channels
+    connectors.yaml declares and the people in people.yaml. Safe to run again."""
+    from app import org, schema
+    from app.connectors import base, runner
+    from app.sentinel import live
+
+    if not org.active():
+        print(
+            "lore init sets up a graph for your own tools: set LORE_DATA_MODE=org in .env first "
+            "(the demo graph comes from `lore seed`)",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        graph = live.demo_graph(args.graph)
+        org.check(base.maps().product, base.maps().sources)  # before the graph is touched
+        for spec, outcome in schema.apply(graph):
+            print(f"  {outcome:<8} {spec}")
+        if found := schema.verify(graph):
+            for problem in found:
+                print(f"  ! {problem}", file=sys.stderr)
+            return 1
+        made = runner.prepare(graph)
+    except (base.ConnectorError, org.OrgError, live.LiveError) as e:
+        print(f"lore init: {e}", file=sys.stderr)
+        return 1
+    print(
+        f"graph {graph!r} ready: product {base.maps().product!r}, {made['channels']} channels, "
+        f"{made['people']} {'person' if made['people'] == 1 else 'people'} listed in "
+        f"{org.PEOPLE_FILE.name}"
+    )
+    return 0
+
+
 def cmd_fetch_herb(args: argparse.Namespace) -> int:
     from app.ingest.herb_fetch import HERB_REVISION, fetch_herb, product_files
 
@@ -386,7 +421,12 @@ def cmd_health(args: argparse.Namespace) -> int:
 
 
 def cmd_demo(args: argparse.Namespace) -> int:
+    from app import org
     from app.sentinel import live
+
+    if org.active():
+        print("lore demo: the HERB demo is off in org mode (LORE_DATA_MODE=org)", file=sys.stderr)
+        return 1
 
     if args.action == "reset":
         print(json.dumps(live.reset_demo(args.graph)))
@@ -437,8 +477,15 @@ def cmd_snapshot(args: argparse.Namespace) -> int:
 def cmd_seed(args: argparse.Namespace) -> int:
     import json
 
-    from app import snapshot
+    from app import org, snapshot
 
+    if org.active():
+        print(
+            "lore seed loads the HERB demo, which is off in org mode: set LORE_DATA_MODE=demo "
+            "to try it, or run `lore init` for your own graph",
+            file=sys.stderr,
+        )
+        return 1
     try:
         out = snapshot.seed(args.source or snapshot.SNAPSHOT, force=args.force)
     except (snapshot.SnapshotError, OSError) as e:
@@ -499,10 +546,15 @@ def cmd_connectors(args: argparse.Namespace) -> int:
             runner.run_forever(graph, every_s=args.every)
             return 0
         connectors = runner.configured(graph)
+        if args.action == "seed" and not base.is_demo():
+            print("lore connectors seed writes the demo story: off in org mode", file=sys.stderr)
+            return 1
         if args.action == "seed":
             print(json.dumps(seed_sandboxes(args.act, connectors), indent=1))
             return 0
         if args.action == "status":
+            mode = "demo" if base.is_demo() else "org"
+            print(f"mode: {mode}, graph {graph!r}")
             print(f"maps: {base.CONFIG.name}, product {base.maps().product}")
             print(f"configured: {[c.name for c in connectors] or 'none (see docs/connectors.md)'}")
             print(json.dumps(runner.load_state(graph), indent=1)[:2000])
@@ -517,6 +569,7 @@ def cmd_connectors(args: argparse.Namespace) -> int:
 # command -> (help text, handler)
 COMMANDS = {
     "schema": ("create and verify the indexes for a graph (queries/00_schema.cypher)", cmd_schema),
+    "init": ("org mode: create your graph, its product, channels and people (D097)", cmd_init),
     "fetch-herb": ("download the HERB dataset (pinned revision) into data/herb", cmd_fetch_herb),
     "rank-dev": ("rank products by change signals to pick the dev products (D017)", cmd_rank_dev),
     "normalize": ("HERB products -> data/normalized/<product>/artifacts.jsonl (S1)", cmd_normalize),
@@ -547,6 +600,7 @@ COMMANDS = {
 # command -> [(flag, argparse options)]
 OPTIONS: dict[str, list[tuple[str, dict]]] = {
     "schema": [("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"})],
+    "init": [("--graph", {"help": "graph name (default: LORE_ORG_GRAPH, e.g. yaan_org)"})],
     "normalize": [
         ("--products", {"nargs": "+", "help": "product names (default: the dev products)"})
     ],
@@ -593,7 +647,7 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
     "connectors": [
         ("action", {"choices": ("sync", "run", "status", "seed"), "help": "what to do"}),
         ("--act", {"choices": ("setup", "regression"), "default": "setup", "help": "seed act"}),
-        ("--graph", {"help": "the demo graph (default: LORE_DEMO_GRAPH)"}),
+        ("--graph", {"help": "default: LORE_DEMO_GRAPH, or LORE_ORG_GRAPH in org mode"}),
         ("--every", {"type": float, "default": 30, "help": "run: seconds between polls"}),
     ],
     "eval": [

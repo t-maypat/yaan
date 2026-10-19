@@ -13,6 +13,10 @@ approved actions to `post`.
 person each sandbox account plays. The demo sandboxes hold only labeled synthetic items, and a
 seeded item can name the person it is written as: "[synthetic demo · as Ian Davis
 (eid_7017b913)]", so one human account can play the story's several people.
+
+In org mode (LORE_DATA_MODE=org, app/org.py, D097) the same connectors read a team's own tools:
+no label is required or written, ids drop `synthetic-` (`msg:slack-…`), and an account maps to
+its people.yaml entry, or to a person registered on first sight, never to a stand-in.
 """
 
 import re
@@ -22,6 +26,7 @@ from typing import Any, Protocol
 
 import yaml
 
+from app import org
 from app.config import REPO_ROOT
 from app.ingest.normalize import Artifact
 
@@ -55,20 +60,33 @@ class Maps:
     people (source account id -> eid)."""
 
     product: str
-    default_person: str
+    default_person: str | None  # demo only: who an unmapped sandbox account plays
     sources: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def source(self, name: str) -> dict[str, Any]:
         return self.sources.get(name) or {}
 
     def person(
-        self, source: str, account: str | None, text: str = "", own: str | None = None
+        self,
+        source: str,
+        account: str | None,
+        text: str = "",
+        own: str | None = None,
+        name: str | None = None,
     ) -> str:
         """Who an item is by: the persona its label names, else the account's mapping (the
-        key "self" means the connector's own account, `own`), else the default person."""
+        key "self" means the connector's own account, `own`), else the default person. In org
+        mode there is no persona and no stand-in: an unmapped account is its people.yaml entry
+        or a person registered under it (`name` is the tool's display name, if it gave one)."""
+        people = self.source(source).get("people") or {}
+        if org.active():
+            if own and account == own and "self" in people:
+                return people["self"]
+            if account and account in people:
+                return people[account]
+            return org.person_id(source, account, name)
         if m := PERSONA.search(text or ""):
             return m.group(1)
-        people = self.source(source).get("people") or {}
         if own and account == own and "self" in people:
             return people["self"]
         return people.get(account or "", self.default_person)
@@ -82,7 +100,7 @@ def maps() -> Maps:
     try:
         return Maps(
             product=raw["product"],
-            default_person=raw["default_person"],
+            default_person=raw.get("default_person") if org.active() else raw["default_person"],
             sources={k: v for k, v in raw.items() if isinstance(v, dict)},
         )
     except KeyError as e:
@@ -93,10 +111,26 @@ def labeled(text: str) -> bool:
     return LABEL in (text or "")
 
 
+def is_demo() -> bool:
+    return not org.active()
+
+
+def tag() -> str:
+    """What a message a connector writes itself (a Jira status line, a Notion share) opens
+    with: the demo label, or nothing in org mode."""
+    return f"{LABEL}] " if is_demo() else ""
+
+
+def id_prefix(kind_prefix: str, source: str) -> str:
+    """`msg:synthetic-slack-` in the demo (the live path's rule-5 shape), `msg:slack-` in org
+    mode: what every id a connector makes starts with."""
+    return f"{kind_prefix}:synthetic-{source}-" if is_demo() else f"{kind_prefix}:{source}-"
+
+
 def synthetic_id(kind_prefix: str, source: str, key: str) -> str:
-    """`msg:synthetic-slack-…`, `pr:synthetic-github-…`: the live path's rule-5 id shape."""
+    """`msg:synthetic-slack-…`, `pr:synthetic-github-…`; `msg:slack-…` in org mode."""
     safe = re.sub(r"[^A-Za-z0-9._-]+", "-", key).strip("-")
-    return f"{kind_prefix}:synthetic-{source}-{safe}"
+    return id_prefix(kind_prefix, source) + safe
 
 
 def structured_event(

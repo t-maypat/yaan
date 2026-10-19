@@ -113,14 +113,14 @@ class JiraConnector:
             raise ConnectorError(f"Jira {method} {path}: {r.status_code} {detail}")
         return r.json()
 
-    def who(self, account: str | None, text: str = "") -> str:
+    def who(self, account: str | None, text: str = "", name: str | None = None) -> str:
         """The person a Jira account plays; "self" in the map is the token's own account."""
         own = None
         if "self" in (self.maps.source("jira").get("people") or {}):
             if self._own is None:
                 self._own = self._req("GET", "/rest/api/3/myself")["accountId"]
             own = self._own
-        return self.maps.person("jira", account, text, own)
+        return self.maps.person("jira", account, text, own, name=name)
 
     def msg_id(self, key: str, part: str) -> str:
         return base.synthetic_id("msg", "jira", f"{key}-{part}")
@@ -187,7 +187,7 @@ class JiraConnector:
             meta={
                 "channel_name": channel_name,
                 "sender": author,
-                "synthetic": True,
+                "synthetic": base.is_demo(),
                 "source": "jira",
                 "jira_key": key,
             },
@@ -197,8 +197,13 @@ class JiraConnector:
         key, f = issue["key"], issue["fields"]
         title = f["summary"]
         description = adf_text(f.get("description")).strip()
-        reporter = self.who((f.get("reporter") or {}).get("accountId"), description)
-        assignee = self.who(f["assignee"].get("accountId")) if f.get("assignee") else None
+        rep = f.get("reporter") or {}
+        reporter = self.who(rep.get("accountId"), description, rep.get("displayName"))
+        assignee = (
+            self.who(f["assignee"].get("accountId"), name=f["assignee"].get("displayName"))
+            if f.get("assignee")
+            else None
+        )
         component = (f.get("components") or [{}])[0].get("name") if f.get("components") else None
         customers = CUSTOMER.findall(description)
         created = ms(f["created"])
@@ -234,7 +239,8 @@ class JiraConnector:
                 kind = change_kind(change.get("fromString"), change.get("toString"))
                 if change.get("field") != "status" or not kind:
                     continue
-                who = self.who((h.get("author") or {}).get("accountId"))
+                by = h.get("author") or {}
+                who = self.who(by.get("accountId"), name=by.get("displayName"))
                 stamp = ms(h["created"])
                 named = [u for t, u in mentions if t <= stamp]
                 fix = named[-1:] if kind == "issue_resolved" else []
@@ -242,7 +248,7 @@ class JiraConnector:
                     f"Jira {key} '{title}' moved from {change.get('fromString')} to "
                     f"{change.get('toString')}"
                 )
-                body = f"{base.LABEL}] {line} by @{who}" + (f", fixed by {fix[0]}." if fix else ".")
+                body = f"{base.tag()}{line} by @{who}" + (f", fixed by {fix[0]}." if fix else ".")
                 b = self._artifact(key, f"change-{h['id']}", stamp, who, body, channel_name)
                 event = base.structured_event(
                     kind, b, line, who, issue=title, pr=fix[0] if fix else None
@@ -250,7 +256,8 @@ class JiraConnector:
                 items.append(Item(b, updated_ms=stamp, events=[event]))
         for c in comments:
             body = adf_text(c.get("body")).strip()
-            who = self.who((c.get("author") or {}).get("accountId"), body)
+            by = c.get("author") or {}
+            who = self.who(by.get("accountId"), body, by.get("displayName"))
             stamp = ms(c["created"])
             text = f"{body}\n(on Jira {key} '{title}')"
             items.append(

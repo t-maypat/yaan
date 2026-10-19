@@ -68,6 +68,9 @@ services:
     volumes:
       - ./data:/app/data # embedding model, caches, the live path's data (seeded)
       - ./snapshots:/app/snapshots
+      # connector maps and the people directory (org mode): an edit applies on restart
+      - ./connectors.yaml:/app/connectors.yaml:ro
+      - ./people.yaml:/app/people.yaml:ro
     restart: unless-stopped
 
 volumes:

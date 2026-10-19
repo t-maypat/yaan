@@ -128,7 +128,7 @@ class GitLabConnector(HttpConnector):
                 "state": "open" if mr["state"] == "opened" else "closed",
                 "merged": merged,
                 "login": author,
-                "synthetic": True,
+                "synthetic": base.is_demo(),
                 "source": "gitlab",
                 "reviews": [
                     {

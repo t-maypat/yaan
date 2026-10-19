@@ -21,7 +21,7 @@ RUN uv sync --project backend --frozen --no-dev
 COPY exports/ exports/
 COPY eval/results/ eval/results/
 COPY docs/schema_card.md docs/schema_card.md
-COPY connectors.yaml ./
+COPY connectors.yaml people.yaml ./
 COPY --from=web /web/dist frontend/dist
 ENV FALKORDB_HOST=falkordb
 EXPOSE 8000

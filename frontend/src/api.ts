@@ -210,7 +210,10 @@ export const resetDemo = () => send<{ ms: number }>("POST", "/demo/reset");
 export const getArtifact = (id: string) => getJson<Artifact>(`/artifact/${encodeURIComponent(id)}`);
 export const getQuery = (name: string) =>
   getJson<{ name: string; text: string }>(`/query/${encodeURIComponent(name)}`);
-export const getProducts = () => getJson<{ products: Product[] }>("/products");
+// "org": the graph holds a team's own data (LORE_DATA_MODE=org), so the HERB demo's
+// suggested questions and example viewers don't apply.
+export type DataMode = "demo" | "org";
+export const getProducts = () => getJson<{ products: Product[]; mode?: DataMode }>("/products");
 
 // The Timeline (12.4): an issue's or PR's chain of states, each with its validity window.
 export type Decider = { id: string; name: string | null; role?: string | null };

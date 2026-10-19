@@ -81,7 +81,7 @@ class HttpConnector:
             meta={
                 "channel_name": channel_name,
                 "sender": author,
-                "synthetic": True,
+                "synthetic": base.is_demo(),
                 "source": self.name,
                 **meta,
             },
@@ -119,12 +119,12 @@ class HttpConnector:
                 "version": "base",
                 "base_id": doc_id,
                 "feedback": None,
-                "synthetic": True,
+                "synthetic": base.is_demo(),
                 "source": self.name,
             },
         )
         items = [Item(doc, updated_ms=edited)]
-        share = f"{base.LABEL}] @{author} shared the {title} for review: {url or title}"
+        share = f"{base.tag()}@{author} shared the {title} for review: {url or title}"
         items.append(
             Item(
                 self.message(f"{ref}-shared", created + 1, author, share, channel_name),

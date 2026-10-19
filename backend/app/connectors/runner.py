@@ -4,14 +4,17 @@
 to the live path (S1-S8 + Sentinel on the demo graph), then hands the approved, unsent Actions
 to the connectors until one delivers each. The cursor and the version seen per item live in
 data/live/<graph>/connectors.json, next to the live artifacts, so `lore demo reset` clears both.
+
+In org mode (D097) the round writes to the org graph, first creates the product, the declared
+channels and the people.yaml roster there (org.prepare), and takes items without the demo label.
 """
 
 import json
 import time
 from typing import Any
 
-from app import db
-from app.connectors import render
+from app import db, org
+from app.connectors import base, render
 from app.connectors.base import Connector, ConnectorError, labeled
 from app.sentinel import live
 
@@ -48,6 +51,8 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
     """One round: ingest what changed, then deliver approved actions. Fails loudly per item:
     an item the live path refuses is reported, never silently skipped."""
     graph = live.demo_graph(graph)
+    if org.active():
+        prepare(graph, connectors)
     state = load_state(graph)
     report: dict[str, Any] = {"ingested": [], "refused": [], "sent": [], "unsent": []}
     for c in connectors:
@@ -58,7 +63,7 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
             a = item.artifact
             if mine["seen"].get(a.id, -1) >= item.updated_ms:
                 continue
-            if not labeled(a.text):  # rule 5: the sandboxes hold labeled synthetic items only
+            if base.is_demo() and not labeled(a.text):  # rule 5: labeled synthetic items only
                 report["refused"].append({"id": a.id, "why": "not labeled [synthetic demo]"})
                 mine["seen"][a.id] = item.updated_ms
                 continue
@@ -81,6 +86,16 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
         save_state(graph, state)
     report["sent"], report["unsent"] = deliver(connectors, graph)
     return report
+
+
+def prepare(graph: str, connectors: list[Connector] | None = None) -> dict[str, int]:
+    """Org mode: the product, the channels connectors.yaml declares and the people.yaml roster,
+    created in `graph` (idempotent). Raises ConnectorError on a channel name it can't use."""
+    maps = next((c.maps for c in connectors or [] if hasattr(c, "maps")), None) or base.maps()
+    try:
+        return org.prepare(graph, maps.product, maps.sources)
+    except org.OrgError as e:
+        raise ConnectorError(str(e)) from e
 
 
 EVERYWHERE = {"ticket_comment"}  # the same comment belongs on the ticket and on its fix PR
@@ -211,9 +226,12 @@ def experimental(graph: str, st: Any) -> list[Connector]:
 
 
 def from_connector(alert: dict[str, Any]) -> bool:
-    """An alert raised by an item a connector brought in (not by HERB's batch data)."""
+    """An alert raised by an item a connector brought in (not by HERB's batch data): its id is
+    `<kind>:synthetic-<source>-…` in the demo, `<kind>:<source>-…` in org mode."""
     aid = alert.get("artifact_id") or ""
-    return any(f":synthetic-{s}-" in aid for s in SOURCES)
+    kind_free = aid.partition(":")[2]
+    shape = "synthetic-{}-" if base.is_demo() else "{}-"
+    return any(kind_free.startswith(shape.format(s)) for s in SOURCES)
 
 
 def run_forever(graph: str | None = None, every_s: float = 30, say=print) -> None:
@@ -226,6 +244,8 @@ def run_forever(graph: str | None = None, every_s: float = 30, say=print) -> Non
 
     graph = live.demo_graph(graph)
     connectors = configured(graph)
+    if connectors and org.active():
+        prepare(graph, connectors)  # before Slack's bot looks up its channels
     if not connectors:
         raise ConnectorError("no connector is configured: see docs/connectors.md")
     wake = threading.Event()

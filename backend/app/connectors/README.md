@@ -4,6 +4,17 @@ Lore reads a company's tools and writes its approved actions back into them. Thi
 
 Put every token in `.env` (never commit it). The variable names are in `.env.example`.
 
+## Your own tools (org mode)
+The setup steps below are the same for a team's real workspace. What changes is the data mode: set `LORE_DATA_MODE=org` in `.env`, and the connectors write to your own graph (`LORE_ORG_GRAPH`, default `yaan_org`) instead of the demo:
+
+- **No label.** Items need no "[synthetic demo]" prefix, and their ids drop `synthetic-` (`msg:slack-…`, `pr:github-…`).
+- **Your channels.** Copy `connectors.org.example.yaml` over `connectors.yaml`. Each Yaan channel's name starts with `bug-` (issues reported, fixed, reopened), `develop-` (pull requests, development decisions) or `planning-` (documents and their review). Extraction reads `bug-` and `develop-` channels.
+- **Your people.** `people.yaml` lists people with their role (what the authority policy reads) and their account in each tool, so one person's Slack, GitHub and Jira accounts are one node. Anyone not listed is registered the first time they appear, under their name in that tool, with no role: their claims apply, marked unverified.
+- **Set up once:** `lore init` creates the graph, its indexes, the product, the channels and the listed people. It checks both files first and changes nothing if one is wrong. Then run `lore connectors run` as below.
+- **The demo stays out.** In org mode, `lore seed`, `lore demo` and `lore connectors seed` refuse, live writes refuse the HERB graphs, and the web UI hides the demo's sample questions, viewers and injections.
+
+`connectors.yaml` and `people.yaml` are mounted into the `api` container, so an edit applies on `docker compose --profile app restart api`. One product per install: everything the connectors read belongs to the product `connectors.yaml` names.
+
 ## MCP server (no account needed)
 Any MCP client (Claude Code, Claude Desktop, Cursor, your own agent) can use Lore's read-only graph tools and, unless `LORE_MCP_ASK=0`, `ask` for a cited answer.
 

@@ -56,7 +56,7 @@ mutation CommentCreate($input: CommentCreateInput!) {
   commentCreate(input: $input) { success comment { id url } }
 }
 """
-ID = re.compile(r"^msg:synthetic-linear-([A-Z][A-Z0-9]*-\d+)-")
+ID = re.compile(r"([A-Z][A-Z0-9]*-\d+)-")  # the issue key after the id prefix
 
 
 class LinearConnector(HttpConnector):
@@ -102,7 +102,8 @@ class LinearConnector(HttpConnector):
         return self.maps.person("linear", account, text, own)
 
     def ident_of(self, artifact_id: str) -> str | None:
-        m = ID.match(artifact_id)
+        prefix = base.id_prefix("msg", "linear")
+        m = ID.match(artifact_id.removeprefix(prefix)) if artifact_id.startswith(prefix) else None
         return m.group(1) if m else None
 
     # --- reading ---------------------------------------------------------------------------
@@ -162,7 +163,7 @@ class LinearConnector(HttpConnector):
                 f"{key}-state",
                 to_ms(stamp),
                 who,
-                f"{base.LABEL}] {line} by @{who}.",
+                f"{base.tag()}{line} by @{who}.",
                 channel_name,
                 linear_key=key,
             )

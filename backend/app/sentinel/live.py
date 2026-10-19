@@ -15,7 +15,10 @@ in the graph, per stage. Live artifacts and events are kept in data/live/<graph>
 live message folds over them too; `reset_demo` copies lore_herb into lore_demo (GRAPH.COPY)
 and clears that folder.
 
-Writes go to the demo graph only: `ingest` and `reset_demo` refuse the main graph.
+Writes go to the demo graph only: `ingest` and `reset_demo` refuse the main graph. In org mode
+(LORE_DATA_MODE=org, app/org.py, D097) they go to the org graph instead: no rule-5 id check,
+people are registered on first sight, the fold reads only that graph's own live events, and
+`reset_demo` refuses, so nothing from HERB ever reaches a team's graph.
 
 `ingest_artifact` (17.2, D074) is the same path for any artifact a connector brings: a message,
 a pull request, a document. A connector may pass deterministic `events` (a Jira status change
@@ -31,7 +34,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from app import db, llm
+from app import db, llm, org
 from app.config import get_settings
 from app.ingest import chunk_embed, extract, fold, linker, resolve, structural
 from app.ingest.normalize import Artifact, normalized_dir, parse_ts, read_jsonl
@@ -46,7 +49,13 @@ class LiveError(ValueError):
 
 
 def demo_graph(graph: str | None) -> str:
+    """The graph live writes go to: the demo graph, or in org mode the org graph."""
     s = get_settings()
+    if org.active():
+        graph = graph or s.lore_org_graph
+        if graph in (s.lore_graph, s.lore_demo_graph):
+            raise LiveError(f"org mode writes to your own graph, never the HERB graph {graph!r}")
+        return graph
     graph = graph or s.lore_demo_graph
     if graph == s.lore_graph:
         raise LiveError(f"live writes go to the demo graph only, never {graph!r}")
@@ -59,6 +68,8 @@ def live_dir(graph: str) -> Path:
 
 def reset_demo(graph: str | None = None) -> dict[str, Any]:
     """lore_demo := a copy of lore_herb (nodes, edges, indexes), and no live messages."""
+    if org.active():
+        raise LiveError("org mode never copies the HERB demo into your graph: demo reset is off")
     graph = demo_graph(graph)
     t0 = time.perf_counter()
     writer = db.client(readonly=False)
@@ -76,7 +87,7 @@ def artifact(msg: dict[str, Any]) -> Artifact:
     )
     if missing:
         raise LiveError(f"message lacks {sorted(missing)}")
-    if not str(msg["id"]).startswith(SYNTHETIC_PREFIX):
+    if not org.active() and not str(msg["id"]).startswith(SYNTHETIC_PREFIX):
         raise LiveError(f"live message ids must start with {SYNTHETIC_PREFIX!r} (rule 5)")
     ts_ms, ts_iso = parse_ts(str(msg["ts_iso"]).removesuffix("Z"))
     return Artifact(
@@ -88,8 +99,12 @@ def artifact(msg: dict[str, Any]) -> Artifact:
         ts_iso=ts_iso,
         author_eid=msg["author_eid"],
         text=msg["text"],
-        raw_ref=f"synthetic:{msg['id']}",
-        meta={"channel_name": msg["channel_name"], "sender": msg["author_eid"], "synthetic": True},
+        raw_ref=f"{'api' if org.active() else 'synthetic'}:{msg['id']}",
+        meta={
+            "channel_name": msg["channel_name"],
+            "sender": msg["author_eid"],
+            "synthetic": not org.active(),
+        },
     )
 
 
@@ -118,8 +133,12 @@ def ingest_artifact(
     stages: dict[str, float] = {}
 
     product = a.product_hint
-    meta = _metadata()
-    check_synthetic(a.id)
+    if org.active():  # a team's own item: register the people it involves, then read the org
+        org.ensure_people(graph, org.people_in(a))
+        meta = org.metadata(graph)
+    else:
+        meta = _metadata()
+        check_synthetic(a.id)
     if a.kind not in LIVE_KINDS:
         raise LiveError(f"live ingestion takes {LIVE_KINDS}, not {a.kind!r}")
     if a.author_eid not in meta.employees:
@@ -135,7 +154,9 @@ def ingest_artifact(
 
     t = time.perf_counter()
     rows = structural.product_rows(product, [a], set(meta.employees), received_ms)
-    rows["upsert_products"], rows["upsert_channels"] = [], []  # both exist; don't overwrite
+    rows["upsert_channels"] = []  # the channel exists (checked above); don't overwrite it
+    if not org.active():  # HERB's product carries codenames; an org's is created here if new
+        rows["upsert_products"] = []
     structural.load(rows, graph)
     stages["s2_structural"] = _ms(t)
 
@@ -147,7 +168,7 @@ def ingest_artifact(
     # linked against everything already loaded (HERB's and earlier live artifacts): a url in
     # the text finds its PR, doc or link, and "Revert PR# N" finds N, whichever came first
     known = [
-        *_base_events_and_artifacts()[1].get(product, []),
+        *_base(graph)[1].get(product, []),
         *(Artifact(**r) for r in _read(graph, "artifacts.jsonl") if r["id"] != a.id),
     ]
     link_rows, _ = linker.build_rows(meta, {product: [a]}, context={product: known})
@@ -172,7 +193,7 @@ def ingest_artifact(
     stages["s5_s6_extract_verify"] = _ms(t)
 
     t = time.perf_counter()
-    events, arts = _base_events_and_artifacts()
+    events, arts = _base(graph)
     live_arts = [Artifact(**r) for r in _read(graph, "artifacts.jsonl")]
     arts = {p: list(v) for p, v in arts.items()}
     for la in live_arts:
@@ -223,6 +244,12 @@ def ingest_artifact(
 @lru_cache
 def _metadata():
     return structural.load_metadata()
+
+
+def _base(graph: str) -> tuple[list[dict[str, Any]], dict[str, list[Artifact]]]:
+    """What the live fold folds over besides the graph's own live items: HERB's batch data in
+    demo mode, nothing in org mode (a team's graph holds only its own events)."""
+    return ([], {}) if org.active() else _base_events_and_artifacts()
 
 
 @lru_cache

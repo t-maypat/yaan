@@ -126,7 +126,7 @@ class GoogleMeetConnector(HttpConnector):
             raw_ref=f"gmeet:{rec['name']}",
             meta={
                 "document_type": "Google Meet transcript",
-                "synthetic": True,
+                "synthetic": base.is_demo(),
                 "source": "gmeet",
                 "transcript": transcript["name"],
             },

@@ -52,12 +52,18 @@ Open **http://127.0.0.1:8000**: Ask, Inbox, Timeline, Graph health. Yaan and Fal
 
 > Yaan was called Lore while it was built: settings (`LORE_…`), container names and some files still use that name, and `lore` works as the command too.
 
-## Connect your tools
+## Use your own data
 
-Put each tool's token in `.env`, map its channels, repos, projects and pages to a product in [`connectors.yaml`](connectors.yaml), then:
+Org mode points Yaan at your team's tools instead of the demo. Your data goes into its own graph, and nothing from the demo is mixed in.
+
+1. In `.env`, set `LORE_DATA_MODE=org` and each tool's token.
+2. `cp connectors.org.example.yaml connectors.yaml`, then name your product and the channels Yaan reads. A channel's name starts with `bug-`, `develop-` or `planning-`, which tells Yaan what to read from it.
+3. Optional: list people in [`people.yaml`](people.yaml) with their role and their account in each tool. Yaan registers everyone else the first time they appear.
+4. Create the graph and start the connectors:
 
 ```sh
 docker compose --profile app up -d --force-recreate api
+docker compose --profile app exec api yaan init                 # your graph, product, channels and people
 docker compose --profile app exec -d api yaan connectors run    # Slack over Socket Mode; the rest polled every 30 s
 ```
 
@@ -140,7 +146,7 @@ Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.
 
 ## License and data
 
-Code: [Apache-2.0](LICENSE). Data: [HERB](https://huggingface.co/datasets/Salesforce/HERB) by Salesforce AI Research, a public, **synthetic** enterprise dataset under **CC BY-NC 4.0** ([paper](https://arxiv.org/abs/2506.23139)); the demo snapshot redistributes HERB-derived data under the same license, with attribution. Yaan uses no real company's or person's data, and demo items are labelled `[synthetic demo …]`.
+Code: [Apache-2.0](LICENSE). Data: [HERB](https://huggingface.co/datasets/Salesforce/HERB) by Salesforce AI Research, a public, **synthetic** enterprise dataset under **CC BY-NC 4.0** ([paper](https://arxiv.org/abs/2506.23139)); the demo snapshot redistributes HERB-derived data under the same license, with attribution. The demo uses no real company's or person's data, and its items are labelled `[synthetic demo …]`.
 
 <details>
 <summary><b>Graph Hacks submission notes</b></summary>

@@ -140,7 +140,7 @@ class NotionConnector:
                 "version": "base",
                 "base_id": self.doc_id(block["id"]),
                 "feedback": None,
-                "synthetic": True,
+                "synthetic": base.is_demo(),
                 "source": "notion",
             },
         )
@@ -160,12 +160,12 @@ class NotionConnector:
                 meta={
                     "channel_name": channel_name,
                     "sender": who,
-                    "synthetic": True,
+                    "synthetic": base.is_demo(),
                     "source": "notion",
                 },
             )
 
-        share = f"{base.LABEL}] @{author} shared the {title} for review: {page['url']}"
+        share = f"{base.tag()}@{author} shared the {title} for review: {page['url']}"
         items.append(Item(message("shared", created + 1, author, share), updated_ms=created + 1))
         for c in comments:
             words = rich(c.get("rich_text")).strip()

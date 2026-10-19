@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     # The graph the API serves (Ask, Inbox, live demo). Eval and batch ingest use lore_graph.
     lore_api_graph: str = "lore_demo"
     lore_ingest_secret: str | None = None  # POST /ingest/artifact needs it in X-Lore-Secret
+    # Data mode (D097). "demo": the HERB company, and connectors take only labeled synthetic
+    # items into lore_demo. "org": a team's own tools feed lore_org_graph, people come from
+    # people.yaml or are registered on first sight, and nothing is copied from HERB.
+    lore_data_mode: Literal["demo", "org"] = "demo"
+    lore_org_graph: str = "yaan_org"
     # MCP server (17.1): offer `ask` (the full agent, an LLM call) besides the read-only tools;
     # extra Host values `/mcp` accepts beyond localhost (DNS-rebinding guard), as a JSON list
     lore_mcp_ask: bool = True
@@ -104,6 +109,10 @@ class Settings(BaseSettings):
     cache_dir: Path = REPO_ROOT / "data" / "cache"  # embedding (and later LLM) disk caches
     eval_dir: Path = REPO_ROOT / "eval"
     queries_dir: Path = REPO_ROOT / "backend" / "queries"
+
+    def api_graph(self) -> str:
+        """The graph the API and the MCP server serve: the org graph in org mode."""
+        return self.lore_org_graph if self.lore_data_mode == "org" else self.lore_api_graph
 
 
 @lru_cache

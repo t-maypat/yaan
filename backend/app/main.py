@@ -106,7 +106,7 @@ INJECT_DIR = REPO_ROOT / "exports" / "inject"
 
 
 def graph() -> str:
-    return get_settings().lore_api_graph
+    return get_settings().api_graph()
 
 
 def client_ip(request: Request) -> str:
@@ -270,9 +270,13 @@ def eval_latest() -> dict:
 
 @app.get("/products")
 def products() -> dict:
-    """The products in the graph with their codenames, for the UI's product picker."""
+    """The products in the graph with their codenames, for the UI's product picker, and the
+    data mode: in org mode the UI leaves out what belongs to the HERB demo (D097)."""
+    from app import org
+
     rows = db.run("list_products", {"limit": 100}, graph=graph()).rows
-    return {"products": rows, "cypher": ["list_products.cypher"]}
+    mode = "org" if org.active() else "demo"
+    return {"products": rows, "mode": mode, "cypher": ["list_products.cypher"]}
 
 
 class AlertResponse(BaseModel):
@@ -363,9 +367,13 @@ def injection(name: str) -> dict:
 
 @app.get("/demo/injections")
 def demo_injections() -> dict:
-    """The labeled synthetic messages the demo can inject (exports/inject/, 11.7)."""
+    """The labeled synthetic messages the demo can inject (exports/inject/, 11.7); none in
+    org mode, where the graph holds a team's own data (D097)."""
+    from app import org
     from app.sentinel import live
 
+    if org.active():
+        return {"graph": graph(), "injections": []}
     done = live.injected_ids(graph())
     out = []
     for path in sorted(INJECT_DIR.glob("*.json")):
@@ -377,8 +385,11 @@ def demo_injections() -> dict:
 @app.post("/demo/inject/{name}")
 def demo_inject(name: str, request: Request) -> dict:
     """Inject one labeled synthetic message live: S1-S8 + Sentinel, with the freshness lag."""
+    from app import org
     from app.sentinel import live
 
+    if org.active():
+        raise HTTPException(409, "demo injections are off in org mode (LORE_DATA_MODE=org)")
     msg = injection(name)
     return demo_write(request, lambda g: live.ingest(msg, g))
 
@@ -394,7 +405,8 @@ def demo_reset(request: Request) -> dict:
 @app.post("/ingest/artifact")
 def ingest_artifact(msg: dict[str, Any], request: Request) -> dict:
     """Ingest any message live (11.6). Needs LORE_INGEST_SECRET in the X-Lore-Secret header,
-    since arbitrary text costs an LLM call; ids must still start `msg:synthetic-`."""
+    since arbitrary text costs an LLM call; ids start `msg:synthetic-` in the demo (any id in
+    org mode)."""
     from app.sentinel import live
 
     secret = get_settings().lore_ingest_secret

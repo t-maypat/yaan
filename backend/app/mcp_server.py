@@ -80,7 +80,7 @@ ASK = types.Tool(
 
 
 def graph() -> str:
-    return get_settings().lore_api_graph
+    return get_settings().api_graph()
 
 
 def tool_list() -> list[types.Tool]:

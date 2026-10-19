@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { type AnswerEvent, ask, type Citation, getProducts, type Product, type Subgraph } from "./api";
+import { type AnswerEvent, ask, type Citation, type DataMode, getProducts, type Product, type Subgraph } from "./api";
 import { Answer } from "./components/Answer";
 import { EvalPage } from "./components/EvalPage";
 import { EvidenceGraph } from "./components/EvidenceGraph";
@@ -13,6 +13,7 @@ import { when } from "./words";
 
 // W7: answer as a person. HERB has no access rules, so the policy is synthetic
 // (permissions.yaml): the PM planning channels are for their members, meetings for attendees.
+// These are HERB people: the picker shows only in demo mode.
 const VIEWERS: { id: string; label: string }[] = [
   { id: "eid_2d14387c", label: "David Miller, Product Manager (in the PM channel)" },
   { id: "eid_9e9883de", label: "Hannah Garcia, Software Engineer (not in it)" },
@@ -80,6 +81,7 @@ export default function App() {
     return () => window.removeEventListener("hashchange", on);
   }, []);
   const [products, setProducts] = useState<Product[]>([]);
+  const [mode, setMode] = useState<DataMode>("demo");
   const [productError, setProductError] = useState<string | null>(null);
   const [product, setProduct] = useState<string | null>(null);
   const [viewer, setViewer] = useState<string | null>(null);
@@ -90,7 +92,10 @@ export default function App() {
 
   useEffect(() => {
     getProducts().then(
-      (r) => setProducts(r.products),
+      (r) => {
+        setProducts(r.products);
+        setMode(r.mode ?? "demo");
+      },
       (e: Error) => setProductError(e.message),
     );
   }, []);
@@ -189,17 +194,19 @@ export default function App() {
         </div>
         <div className="query-scope">
           <ProductPicker products={products} value={product} onChange={setProduct} error={productError} />
-          <span className="scope-select" title="Answer as this person: sources they can't see are left out (synthetic policy)">
-            <label htmlFor="viewer">view as</label>
-            <select id="viewer" value={viewer ?? ""} onChange={(e) => setViewer(e.target.value || null)}>
-              <option value="">Anyone</option>
-              {VIEWERS.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
-          </span>
+          {mode === "demo" && (
+            <span className="scope-select" title="Answer as this person: sources they can't see are left out (synthetic policy)">
+              <label htmlFor="viewer">view as</label>
+              <select id="viewer" value={viewer ?? ""} onChange={(e) => setViewer(e.target.value || null)}>
+                <option value="">Anyone</option>
+                {VIEWERS.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+            </span>
+          )}
           <span className="ml-auto text-[0.8rem] text-muted hidden md:inline">
             Every sentence comes with a quote checked word for word.
           </span>
@@ -274,15 +281,17 @@ export default function App() {
         ) : compact ? (
           <div className="pt-5 pb-4 max-w-[64rem]">
             {form}
-            <details className="mt-3 group">
-              <summary className="text-sm text-link cursor-pointer w-fit hover:underline underline-offset-2">
-                Try another question
-              </summary>
-              <QuestionIndex onPick={pick} disabled={!!run?.running} products={products} />
-            </details>
+            {mode === "demo" && (
+              <details className="mt-3 group">
+                <summary className="text-sm text-link cursor-pointer w-fit hover:underline underline-offset-2">
+                  Try another question
+                </summary>
+                <QuestionIndex onPick={pick} disabled={!!run?.running} products={products} />
+              </details>
+            )}
           </div>
         ) : (
-          <Opening form={form} onPick={pick} products={products} />
+          <Opening form={form} onPick={pick} products={products} demo={mode === "demo"} />
         )}
         {view === "ask" && run && (
           <RunView
@@ -297,7 +306,17 @@ export default function App() {
   );
 }
 
-function Opening({ form, onPick, products }: { form: ReactNode; onPick: (s: Suggestion) => void; products: Product[] }) {
+function Opening({
+  form,
+  onPick,
+  products,
+  demo,
+}: {
+  form: ReactNode;
+  onPick: (s: Suggestion) => void;
+  products: Product[];
+  demo: boolean;
+}) {
   return (
     <section className="pt-14 sm:pt-20 max-w-[64rem] mx-auto rise">
       <h1 className="font-serif text-[2.6rem] sm:text-[4rem] leading-none tracking-[-0.028em] max-w-[18ch] text-balance">
@@ -308,18 +327,20 @@ function Opening({ form, onPick, products }: { form: ReactNode; onPick: (s: Sugg
         links to a quote you can check against its source. When nothing supports an answer, Yaan says so.
       </p>
       {form}
-      <div className="mt-14">
-        <h2 className="font-serif text-[1.6rem] tracking-[-0.01em]">Try a question from the data</h2>
-        <p className="text-sm text-muted mt-0.5">
-          The data is{" "}
-          <a className="text-link underline underline-offset-2" href="https://arxiv.org/abs/2506.23139">
-            HERB
-          </a>
-          , Salesforce AI Research's enterprise benchmark (EMNLP 2025): a synthetic company. Each product also goes by a
-          codename in its chats.
-        </p>
-        <QuestionIndex onPick={onPick} products={products} />
-      </div>
+      {demo && (
+        <div className="mt-14">
+          <h2 className="font-serif text-[1.6rem] tracking-[-0.01em]">Try a question from the data</h2>
+          <p className="text-sm text-muted mt-0.5">
+            The data is{" "}
+            <a className="text-link underline underline-offset-2" href="https://arxiv.org/abs/2506.23139">
+              HERB
+            </a>
+            , Salesforce AI Research's enterprise benchmark (EMNLP 2025): a synthetic company. Each product also goes by a
+            codename in its chats.
+          </p>
+          <QuestionIndex onPick={onPick} products={products} />
+        </div>
+      )}
     </section>
   );
 }

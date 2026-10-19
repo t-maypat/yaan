@@ -89,6 +89,8 @@ export function Inbox({ onCount }: { onCount: (open: number) => void }) {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("open");
   const [selected, setSelected] = useState<string | null>(null);
+  const [demo, setDemo] = useState(true); // false in org mode: no demo messages to send (D097)
+  const demoLoaded = useCallback((injections: number) => setDemo(injections > 0), []);
 
   const reload = useCallback(
     (select?: string) =>
@@ -128,7 +130,11 @@ export function Inbox({ onCount }: { onCount: (open: number) => void }) {
         </p>
       </header>
 
-      <LiveDemo onIngested={(r) => reload(r.alerts[0]?.id)} onReset={() => reload().then(() => setSelected(null))} />
+      <LiveDemo
+        onIngested={(r) => reload(r.alerts[0]?.id)}
+        onReset={() => reload().then(() => setSelected(null))}
+        onLoaded={demoLoaded}
+      />
 
       {error && (
         <div className="border-l-4 border-warn bg-warn-soft px-4 py-3 mt-8 max-w-[68ch]" role="alert">
@@ -166,7 +172,11 @@ export function Inbox({ onCount }: { onCount: (open: number) => void }) {
           {alerts === null && !error && <p className="text-muted text-sm">Loading alerts.</p>}
           {alerts && !shown.length && (
             <p className="text-muted text-sm">
-              {filter === "open" ? "No open alerts. Send a demo message above to raise one." : "Nothing here yet."}
+              {filter !== "open"
+                ? "Nothing here yet."
+                : demo
+                  ? "No open alerts. Send a demo message above to raise one."
+                  : "No open alerts. New ones appear as the connectors bring in changes."}
             </p>
           )}
           <ul className="divide-y divide-rule border-y border-rule">
@@ -208,12 +218,30 @@ export function Inbox({ onCount }: { onCount: (open: number) => void }) {
   );
 }
 
-function LiveDemo({ onIngested, onReset }: { onIngested: (r: IngestResult) => void; onReset: () => void }) {
+function LiveDemo({
+  onIngested,
+  onReset,
+  onLoaded,
+}: {
+  onIngested: (r: IngestResult) => void;
+  onReset: () => void;
+  onLoaded: (injections: number) => void;
+}) {
   const [items, setItems] = useState<Injection[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<IngestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const load = useCallback(() => getInjections().then((r) => setItems(r.injections), (e: Error) => setError(e.message)), []);
+  const load = useCallback(
+    () =>
+      getInjections().then(
+        (r) => {
+          setItems(r.injections);
+          onLoaded(r.injections.length);
+        },
+        (e: Error) => setError(e.message),
+      ),
+    [onLoaded],
+  );
   useEffect(() => {
     load();
   }, [load]);
@@ -244,6 +272,9 @@ function LiveDemo({ onIngested, onReset }: { onIngested: (r: IngestResult) => vo
         load();
       });
   };
+
+  // No injections to offer: org mode (D097), where the graph is a team's own data, not the demo.
+  if (items && items.length === 0) return null;
 
   return (
     <section aria-labelledby="h-live" className="mt-10 max-w-[64rem] card card-pad">

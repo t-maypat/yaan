@@ -45,6 +45,7 @@ class SlackConnector:
         self.conf = self.maps.source("slack")
         self._channels: dict[str, str] | None = None
         self._team_url: str | None = None
+        self._names: dict[str, str | None] = {}  # org mode: Slack user id -> display name
 
     # --- reading ---------------------------------------------------------------------------
     def channel_ids(self) -> dict[str, str]:
@@ -96,17 +97,32 @@ class SlackConnector:
         """Slack markup to the plain text HERB messages have: <url|label> -> label (url),
         <@U123> -> @eid_… of the person that account plays."""
         text = LINK.sub(lambda m: f"{m[2]} ({m[1]})" if m[2] else m[1], text or "")
-        return MENTION.sub(lambda m: "@" + self.maps.person("slack", m[1]), text)
+        return MENTION.sub(lambda m: "@" + self.who(m[1]), text)
+
+    def who(self, user: str | None, text: str = "") -> str:
+        """The person a Slack account is; in org mode with its profile name (one users.info
+        call per account, cached), so a person met here is registered under a real name."""
+        name = self.user_name(user) if user and not base.is_demo() else None
+        return self.maps.person("slack", user, text, name=name)
+
+    def user_name(self, user: str) -> str | None:
+        if user not in self._names:
+            try:
+                profile = self._call("users_info", user=user)["user"]
+                self._names[user] = profile.get("real_name") or profile.get("name")
+            except ConnectorError:  # no users:read scope, or a deleted user: keep the id
+                self._names[user] = None
+        return self._names[user]
 
     def normalize(self, m: dict[str, Any], cid: str, herb_id: str, herb_name: str) -> Item | None:
         text = m.get("text") or ""
         by_bot = bool(m.get("bot_id")) or m.get("subtype") == "bot_message"
         if not text or m.get("subtype") in SKIP_SUBTYPES - {"bot_message"}:
             return None  # channel events aren't company knowledge
-        if by_bot and not text.startswith(SEEDED):
+        if by_bot and not (base.is_demo() and text.startswith(SEEDED)):
             return None  # Lore's own answers, cards and notifications: never read back
         text = self.plain(m["text"])
-        author = self.maps.person("slack", m.get("user"), text)
+        author = self.who(m.get("user"), text)
         created = ts_ms(m["ts"])
         edited = (m.get("edited") or {}).get("ts")
         a = Artifact(
@@ -122,7 +138,7 @@ class SlackConnector:
             meta={
                 "channel_name": herb_name,
                 "sender": author,
-                "synthetic": True,
+                "synthetic": base.is_demo(),
                 "source": "slack",
                 "slack_channel": cid,
                 "slack_ts": m["ts"],
@@ -143,7 +159,7 @@ class SlackConnector:
                 "chat_postMessage", channel=channel, text=text, blocks=blocks, unfurl_links=False
             )
             return self.permalink(channel, r["ts"])
-        prefix = "msg:synthetic-slack-"
+        prefix = base.id_prefix("msg", "slack")
         if target.startswith(prefix):
             cid, _, ts = target.removeprefix(prefix).partition("-")
             r = self._call(
@@ -159,7 +175,7 @@ class SlackConnector:
 
     def link(self, artifact_id: str) -> render.Link | None:
         """A Slack message's label and permalink, built without an API call per message."""
-        prefix = "msg:synthetic-slack-"
+        prefix = base.id_prefix("msg", "slack")
         if not artifact_id.startswith(prefix):
             return None
         cid, _, ts = artifact_id.removeprefix(prefix).partition("-")
@@ -240,7 +256,7 @@ class SlackBot:
         self.handler.connect()  # returns; the socket runs on its own threads
 
     def _permalink(self, artifact_id: str) -> str | None:
-        prefix = "msg:synthetic-slack-"
+        prefix = base.id_prefix("msg", "slack")
         if not artifact_id.startswith(prefix):
             return None
         cid, _, ts = artifact_id.removeprefix(prefix).partition("-")
@@ -259,7 +275,7 @@ class SlackBot:
             say(text=hint, thread_ts=thread)
             return
         try:
-            viewer = self.connector.maps.person("slack", event.get("user"))  # W7
+            viewer = self.connector.who(event.get("user"))  # W7
             out = loop.answer(
                 question, self.connector.maps.product, graph=self.graph, viewer_id=viewer
             )
@@ -280,10 +296,15 @@ class SlackBot:
             ack()
             alert_id = body["actions"][0]["value"]
             user = body["user"]["id"]
-            person = self.connector.maps.person("slack", user)
+            person = self.connector.who(user)
             channel, ts = body["channel"]["id"], body["message"]["ts"]
             try:
-                out = approve.respond(alert_id, verdict, person, graph=live.demo_graph(self.graph))
+                graph = live.demo_graph(self.graph)
+                if not base.is_demo():  # the approver may not have posted anything yet
+                    from app import org
+
+                    org.ensure_people(graph, [person])
+                out = approve.respond(alert_id, verdict, person, graph=graph)
                 statement = out["decision"]["statement"]
                 icon = ":white_check_mark:" if verdict == "approved" else ":no_entry_sign:"
                 note = f"{icon} *{verdict.capitalize()}* by <@{user}> · {statement}"

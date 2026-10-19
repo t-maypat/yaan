@@ -142,7 +142,7 @@ class ZoomConnector(HttpConnector):
             raw_ref=f"zoom:{meeting['uuid']}",
             meta={
                 "document_type": "Zoom transcript",
-                "synthetic": True,
+                "synthetic": base.is_demo(),
                 "source": "zoom",
                 "meeting_id": meeting.get("id"),
             },
