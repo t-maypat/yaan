@@ -221,7 +221,7 @@ def ingest_artifact(
     sentinel.pop("report")
     stages["sentinel"] = _ms(t)
 
-    alerts = [x for x in engine.list_alerts(graph=graph) if x["artifact_id"] == a.id]
+    alerts = engine.list_alerts(graph=graph, artifact_id=a.id)
     lag_ms = _ms(t0)
     out = {
         "graph": graph,
@@ -252,9 +252,18 @@ def _base(graph: str) -> tuple[list[dict[str, Any]], dict[str, list[Artifact]]]:
     return ([], {}) if org.active() else _base_events_and_artifacts()
 
 
-@lru_cache
 def _base_events_and_artifacts() -> tuple[list[dict[str, Any]], dict[str, list[Artifact]]]:
-    """Every product's extracted events and normalized artifacts, as `lore ingest` folds them."""
+    """Every product's extracted events and normalized artifacts, as `lore ingest` folds them.
+    Read once per version of the files: a batch re-extraction while the API runs is picked up
+    on the next live message instead of folding over stale events (D098)."""
+    have = sorted(p.name for p in extract.out_dir("x").parent.glob("*") if p.name[0] != "_")
+    files = [extract.out_dir(p) / "events.jsonl" for p in have]
+    files += [normalized_dir(p) / "artifacts.jsonl" for p in have]
+    return _load_base(tuple((str(f), f.stat().st_mtime_ns if f.is_file() else 0) for f in files))
+
+
+@lru_cache(maxsize=2)
+def _load_base(version: tuple) -> tuple[list[dict[str, Any]], dict[str, list[Artifact]]]:
     have = sorted(p.name for p in extract.out_dir("x").parent.glob("*") if p.name[0] != "_")
     events = [e for p in have for e in extract.read_events(p)]
     arts = {p: read_jsonl(normalized_dir(p) / "artifacts.jsonl") for p in have}

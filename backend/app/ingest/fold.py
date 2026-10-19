@@ -29,7 +29,7 @@ from typing import Any
 
 from app import db, policy
 from app.ingest.normalize import Artifact
-from app.ingest.resolve import Issue, Resolution
+from app.ingest.resolve import Issue, Resolution, norm_title
 
 ISSUE_VALUE = {
     "issue_reported": "reported",
@@ -49,6 +49,11 @@ PR_VALUE = {
 #   not a state change: a reopened bug stays reopened;
 # - "I'll hold off on merging" after the team agreed not to merge is compliance, not a pause.
 RESTATES = {(v, "reported") for v in ISSUE_VALUE.values()} | {("to_close", "on_hold")}
+# ...except a fresh report of a bug the team had settled (D098): when the report names the
+# issue ("there's a 'Cache Invalidation Issue'") after it was resolved or dismissed, the bug is
+# back, so the claim reopens it and the Sentinel sees a regression. A reassignment refers to
+# "the bug" without naming it and still restates.
+SETTLED = ("resolved", "dismissed")
 _CUST = re.compile(r"CUST-\d+")
 _EID = re.compile(r"eid_[0-9a-f]+")
 
@@ -136,9 +141,15 @@ def rebuild(res: Resolution, ctx: Context) -> tuple[dict[str, list[dict]], dict[
         chain = fold_topic(topic, claims, ctx, assigned, rows, stats)
         if chain:
             finals[topic] = chain[-1]
+    reopens: dict[str, int] = defaultdict(int)  # every claim that the issue is back
+    for c in rows["upsert_claims"]:
+        if c["value"] == "reopened":
+            reopens[c["topic"]] += 1
     for issue in res.issues.values():
         current = assigned.get(issue.id, [(0, None)])[-1][1]
-        rows["upsert_issues"].append(_issue_row(issue, res, finals, current))
+        rows["upsert_issues"].append(
+            _issue_row(issue, res, finals, current, reopens[f"{issue.id}/status"])
+        )
         steps = assigned.get(issue.id, [])
         for (start, who), nxt in zip(steps, [*steps[1:], (None, None)], strict=False):
             rows["link_assigned_to"].append(
@@ -183,6 +194,8 @@ def fold_topic(topic, claims, ctx, assigned, rows, stats) -> list[dict[str, Any]
         verdict = _verdict(kind, e, speaker, target, ctx, assigned)
         decisive = True if is_issue else bool(e.get("decisive"))
         active = chain[-1] if chain else None
+        if value == "reported" and active and active["value"] in SETTLED and names_issue(e):
+            value = "reopened"
         cid = claim_id(e)
         if active and (active["value"] == value or (active["value"], value) in RESTATES):
             outcome = "supports"
@@ -281,6 +294,12 @@ def fold_topic(topic, claims, ctx, assigned, rows, stats) -> list[dict[str, Any]
     return chain
 
 
+def names_issue(e: dict[str, Any]) -> bool:
+    """Does the claim's quote name its issue's title (a report, not "the bug")?"""
+    title = norm_title(e.get("issue") or "")
+    return bool(title) and title in norm_title(e.get("quote") or "")
+
+
 def _verdict(kind, e, speaker, target, ctx: Context, assigned) -> policy.Verdict:
     if e["type"] == "issue_reported":
         return policy.Verdict("authorized", "report", "anyone may report an issue")
@@ -339,14 +358,13 @@ def _statement(topic: str, value: str, e: dict[str, Any], ctx: Context) -> str:
     return f"{label}: the team decided it is {words}{why}"
 
 
-def _issue_row(issue: Issue, res: Resolution, finals, assignee: str | None) -> dict[str, Any]:
+def _issue_row(
+    issue: Issue, res: Resolution, finals, assignee: str | None, reopen_count: int
+) -> dict[str, Any]:
     report = next(
         (e for e in res.events if e.get("issue_id") == issue.id and e["type"] == "issue_reported"),
         None,
     )
-    statuses = [
-        e for e in res.events if e.get("issue_id") == issue.id and e["type"] == "issue_reopened"
-    ]
     final = finals.get(f"{issue.id}/status")
     return {
         "id": issue.id,
@@ -360,7 +378,7 @@ def _issue_row(issue: Issue, res: Resolution, finals, assignee: str | None) -> d
         "current_status": final["value"] if final else None,
         "status_since_ms": final["valid_from_ms"] if final else None,
         "current_assignee": assignee,
-        "reopen_count": len(statuses),
+        "reopen_count": reopen_count,
         "first_seen": "reported" if report else "resolved",
     }
 

@@ -31,7 +31,7 @@ def expertise(graph: str | None = None) -> dict:
     from app.ingest import expertise as ex
 
     def read(name: str) -> list[dict]:
-        return db.run(name, {"limit": READ_LIMIT}, graph=graph, timeout_ms=60_000).rows
+        return db.run_all(name, {}, cap=READ_LIMIT, graph=graph, timeout_ms=60_000)
 
     areas = ex.build_areas(
         read("area_issues"), read("area_issue_people"), read("area_prs"), read("area_reviews")
@@ -138,7 +138,7 @@ def collab(graph: str | None = None, min_w: float = COLLAB_MIN_W) -> dict:
     FalkorDB's PageRank on it and store each person's score and rank."""
 
     def read(name: str) -> list[dict]:
-        return db.run(name, {"limit": READ_LIMIT}, graph=graph, timeout_ms=60_000).rows
+        return db.run_all(name, {}, cap=READ_LIMIT, graph=graph, timeout_ms=60_000)
 
     pairs = collab_weights(
         read("collab_meetings"), read("collab_messages"), read("area_prs"), read("area_reviews")
@@ -154,7 +154,7 @@ def collab(graph: str | None = None, min_w: float = COLLAB_MIN_W) -> dict:
     if rows:
         result = db.run("upsert_collab", {"rows": rows}, graph=graph, readonly=False)
         report["upsert_collab"] = {"rows": len(rows), **result.stats}
-    ranked = db.run("person_pagerank", {"limit": READ_LIMIT}, graph=graph, timeout_ms=60_000).rows
+    ranked = db.run_all("person_pagerank", {}, cap=READ_LIMIT, graph=graph, timeout_ms=60_000)
     scores = [
         {"id": r["id"], "score": round(r["score"], 6), "rank": n} for n, r in enumerate(ranked, 1)
     ]
@@ -174,7 +174,7 @@ def communities(graph: str | None = None) -> dict:
     from collections import Counter, defaultdict
 
     def read(name: str) -> list[dict]:
-        return db.run(name, {"limit": READ_LIMIT}, graph=graph, timeout_ms=60_000).rows
+        return db.run_all(name, {}, cap=READ_LIMIT, graph=graph, timeout_ms=60_000)
 
     groups: dict[int, list[str]] = defaultdict(list)
     for r in read("person_communities"):
@@ -231,9 +231,9 @@ def precedents(graph: str | None = None, min_sim: float = PRECEDENT_MIN_SIM) -> 
     (earlier)-[:PRECEDENT_FOR {basis: 'similar_subject', similarity}]->(later)."""
     from app.ingest import chunk_embed
 
-    rows = db.run(
-        "precedent_candidates", {"limit": READ_LIMIT}, graph=graph, timeout_ms=60_000
-    ).rows
+    rows = db.run_all(
+        "precedent_candidates", {}, cap=READ_LIMIT, graph=graph, timeout_ms=60_000
+    )
     vecs = chunk_embed.embed_passages([r["text"][:800] for r in rows]) if rows else []
     links = []
     for i, d in enumerate(rows):

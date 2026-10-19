@@ -51,7 +51,7 @@ class Access:
 
     def __post_init__(self) -> None:
         def ids(name: str) -> set[str]:
-            rows = db.run(name, {"viewer": self.viewer, "limit": 5000}, graph=self.graph).rows
+            rows = db.run_all(name, {"viewer": self.viewer}, cap=50_000, graph=self.graph)
             return {r["id"] for r in rows}
 
         self.channels = ids("viewer_channels")

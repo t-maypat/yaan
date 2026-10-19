@@ -19,15 +19,17 @@ main graph (live.demo_graph). Public demo writes are limited to the labeled file
 exports/inject/, rate-limited per IP and serialized by one lock (D058).
 """
 
+import hmac
 import json
 import queue
 import threading
 import time
 from collections import Counter, defaultdict, deque
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Annotated, Any
 
+import anyio
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -47,6 +49,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Lore", version=__version__, lifespan=lifespan)
 app.router.add_route("/mcp", mcp_http, include_in_schema=False)
 ASK_PER_MINUTE = 6  # per IP; the LLM gateway's daily spend cap is the second guard
+STREAM_POLL_S = 0.5  # /ask checks this often whether the browser is still listening
 
 
 class RateLimiter:
@@ -149,15 +152,21 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
     from app.agent import loop
 
     ip = client_ip(request)
-    if not ask_limiter.allow(ip):
-        raise HTTPException(429, f"at most {ASK_PER_MINUTE} questions per minute")
-    if not ask_daily_limiter.allow(ip):
-        raise HTTPException(429, "this address has asked its questions for today")
-    if not ask_global_limiter.allow("*"):
-        raise HTTPException(429, "Lore is answering many questions right now; try in a minute")
+    # The slot first: a request turned away as busy doesn't use up the asker's limits (D098).
     if not ask_slots.acquire(blocking=False):
         raise HTTPException(503, "Lore is busy answering; try again shortly", {"Retry-After": "10"})
+    refused = None
+    if not ask_limiter.allow(ip):
+        refused = f"at most {ASK_PER_MINUTE} questions per minute"
+    elif not ask_daily_limiter.allow(ip):
+        refused = "this address has asked its questions for today"
+    elif not ask_global_limiter.allow("*"):
+        refused = "Lore is answering many questions right now; try in a minute"
+    if refused:
+        ask_slots.release()
+        raise HTTPException(429, refused)
     events: queue.Queue = queue.Queue()
+    cancel = threading.Event()
 
     def work() -> None:
         try:
@@ -168,6 +177,7 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
                 on_event=lambda n, d: events.put((n, d)),
                 as_of_ms=body.as_of_ms,
                 viewer_id=body.viewer_id,
+                cancel=cancel,
             )
         except Exception as e:  # shown to the viewer as an error event, never a fake answer
             events.put(("error", {"error": type(e).__name__, "message": str(e)[:500]}))
@@ -176,14 +186,30 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
             events.put(None)
 
     threading.Thread(target=work, daemon=True).start()
+    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    return StreamingResponse(
+        relay(events, cancel, request), media_type="text/event-stream", headers=headers
+    )
 
-    def stream() -> Iterator[str]:
-        while (item := events.get()) is not None:
+
+async def relay(events: queue.Queue, cancel: threading.Event, request) -> AsyncIterator[str]:
+    """The agent's events as SSE until it finishes (None). When the browser goes away, either
+    the server closes this generator or the poll sees the disconnect; both reach `finally`,
+    which tells the agent to stop before its next model turn (D098)."""
+    try:
+        while True:
+            try:
+                item = await anyio.to_thread.run_sync(events.get, True, STREAM_POLL_S)
+            except queue.Empty:
+                if await request.is_disconnected():
+                    return
+                continue
+            if item is None:
+                break
             yield sse(*item)
         yield sse("done", {})
-
-    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-    return StreamingResponse(stream(), media_type="text/event-stream", headers=headers)
+    finally:
+        cancel.set()
 
 
 @app.get("/artifact/{artifact_id:path}")
@@ -284,7 +310,10 @@ class AlertResponse(BaseModel):
     person_id: str = Field(min_length=1, max_length=100)
     note: str | None = Field(default=None, max_length=500)
     action_ids: list[str] | None = Field(default=None, max_length=50)
-    edits: dict[str, str] | None = None
+    # the text a connector will post for each approved action: bounded like a Slack message
+    edits: dict[str, Annotated[str, Field(max_length=4000)]] | None = Field(
+        default=None, max_length=50
+    )
 
 
 @app.get("/alerts")
@@ -301,7 +330,7 @@ def alert_detail(id: str) -> dict:
     """One alert with its blast radius (11.2) and drafted actions (11.3)."""
     from app.sentinel import blast_radius, engine
 
-    found = [a for a in engine.list_alerts(graph=graph()) if a["id"] == id]
+    found = engine.list_alerts(graph=graph(), alert_id=id, limit=1)
     if not found:
         raise HTTPException(404, f"no alert {id!r}")
     alert = found[0]
@@ -412,7 +441,8 @@ def ingest_artifact(msg: dict[str, Any], request: Request) -> dict:
     secret = get_settings().lore_ingest_secret
     if not secret:
         raise HTTPException(503, "live ingestion is off: set LORE_INGEST_SECRET")
-    if request.headers.get("x-lore-secret") != secret:
+    given = request.headers.get("x-lore-secret") or ""
+    if not hmac.compare_digest(given.encode("utf-8"), secret.encode("utf-8")):
         raise HTTPException(401, "wrong or missing X-Lore-Secret")
     return demo_write(request, lambda g: live.ingest(msg, g))
 

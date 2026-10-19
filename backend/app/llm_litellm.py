@@ -118,9 +118,13 @@ def check_budget(litellm: Any, model: str, prompt_chars: int, max_tokens: int) -
     return worst
 
 
-def bill(litellm: Any, response: Any, model: str, worst: float, purpose: str) -> float:
-    """The real cost from LiteLLM into the ledger. If LiteLLM can't say, the worst case is
-    recorded (never understate spend) and the call fails loudly."""
+def bill(
+    litellm: Any, response: Any, model: str, worst: float, purpose: str, pay=None
+) -> float:
+    """The real cost from LiteLLM into the ledger (`pay` settles the call's hold, llm.spend).
+    If LiteLLM can't say, the worst case is recorded (never understate spend) and the call
+    fails loudly."""
+    pay = pay or llm.record_spend
     try:
         cost = litellm.completion_cost(completion_response=response)
     except Exception as e:
@@ -129,12 +133,12 @@ def bill(litellm: Any, response: Any, model: str, worst: float, purpose: str) ->
     else:
         reason = "it returned None"
     if cost is None:
-        llm.record_spend(worst)
+        pay(worst)
         raise LLMError(
             f"{purpose}: litellm.completion_cost couldn't price a {model!r} response ({reason}); "
             f"recorded the worst case, ${worst:.4f}, in the ledger"
         )
-    llm.record_spend(float(cost))
+    pay(float(cost))
     return float(cost)
 
 
@@ -205,11 +209,11 @@ def complete(
     }
     if output is not None:
         kwargs["response_format"] = output
-    started = time.perf_counter()
-    response = litellm.completion(**kwargs)
-    elapsed_ms = (time.perf_counter() - started) * 1000
-
-    cost = bill(litellm, response, model, worst, purpose)  # billed even if unusable
+    with llm.spend(worst) as pay:
+        started = time.perf_counter()
+        response = litellm.completion(**kwargs)
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        cost = bill(litellm, response, model, worst, purpose, pay)  # billed even if unusable
     inp, out, cached = usage_of(response)
     message = check_finish(response, model, purpose, max_tokens)
     text = message.content or ""
@@ -374,11 +378,11 @@ def converse(
             "type": "json_schema",
             "json_schema": {"name": "answer", "schema": output_schema, "strict": True},
         }
-    started = time.perf_counter()
-    response = litellm.completion(**kwargs)
-    elapsed_ms = (time.perf_counter() - started) * 1000
-
-    cost = bill(litellm, response, model, worst, purpose)
+    with llm.spend(worst) as pay:
+        started = time.perf_counter()
+        response = litellm.completion(**kwargs)
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        cost = bill(litellm, response, model, worst, purpose, pay)
     inp, out, cached = usage_of(response)
     message = check_finish(response, model, purpose, max_tokens)
     content = from_openai_message(message, purpose)

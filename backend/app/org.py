@@ -128,6 +128,11 @@ def person_id(source: str, account: str | None, name: str | None = None) -> str:
         return eid
     key = f"{source}:{account or 'unknown'}"
     eid = eid_for(key)
+    if eid in roster():  # 32-bit ids: an unlisted account must not inherit a listed person
+        raise OrgError(
+            f"the {source} account {account!r} hashes to {eid}, which people.yaml gives to "
+            f"{roster()[eid]['name']}: list the account under its person in people.yaml"
+        )
     label = (
         f"{SOURCE_NAMES.get(source, source)} user {account}"
         if account

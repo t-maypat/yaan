@@ -84,3 +84,23 @@ def test_the_reader_cannot_write_through_either_lock(graph):
     with pytest.raises(Exception, match="no permissions to run the 'graph.QUERY' command"):
         db.client(readonly=True).select_graph(graph).query("MATCH (p:Person) SET p.hacked = true")
     assert read(graph, "MATCH (p:Person) WHERE p.hacked RETURN count(p) AS n LIMIT 1") == [{"n": 0}]
+
+
+def test_a_complete_read_fails_at_its_cap_and_a_capped_read_says_it_was_cut(graph):
+    """D098: lookups the code relies on fail loudly past their cap; lists the model reads say
+    they were cut. Neither hands back a silently shortened result."""
+    db.run_text(
+        "UNWIND range(1, 3) AS i CREATE (:Product:Entity {id: 'p' + toString(i), name: 'P'})",
+        label="more_products",
+        graph=graph,
+        readonly=False,
+    )
+    n = len(db.run("list_products", {"limit": 100}, graph=graph).rows)
+    assert n >= 4
+    assert len(db.run_all("list_products", {}, cap=n, graph=graph)) == n
+    with pytest.raises(db.TooManyRows, match=f"more than {n - 1} rows"):
+        db.run_all("list_products", {}, cap=n - 1, graph=graph)
+    rows, cut = db.run_capped("list_products", {}, cap=n - 1, graph=graph)
+    assert len(rows) == n - 1 and cut
+    rows, cut = db.run_capped("list_products", {}, cap=n, graph=graph)
+    assert len(rows) == n and not cut

@@ -175,6 +175,17 @@ DOC_WINDOW_MS = 7 * 86_400_000  # a doc discussion with no newer version shared 
 MAX_DOCS = 3
 
 
+def cut_note(cut: bool, shown: int) -> dict[str, str]:
+    """`truncated` for a list cut at its cap, telling the model what that means; nothing for
+    a complete list, so complete results (and the answer cache keyed on them) don't change."""
+    if not cut:
+        return {}
+    return {
+        "truncated": f"only the first {shown} are listed and more exist: say 'at least "
+        f"{shown}' and never present this list or its counts as complete"
+    }
+
+
 def clip(text: str | None, limit: int) -> str | None:
     if text is None or len(text) <= limit:
         return text
@@ -234,8 +245,8 @@ def doc_discussion(doc: str, product_id: str, graph: str | None = None) -> dict:
         by_base.setdefault(d["base_id"] or d["id"], []).append(d)
     documents = []
     for base, versions in list(by_base.items())[:MAX_DOCS]:
-        params = {"doc_id": base, "window_ms": DOC_WINDOW_MS, "limit": 60}
-        messages = db.run("doc_discussion", params, graph=graph).rows
+        params = {"doc_id": base, "window_ms": DOC_WINDOW_MS}
+        messages, cut = db.run_capped("doc_discussion", params, cap=60, graph=graph)
         meetings = db.run("doc_meetings", {"doc_id": base}, graph=graph).rows
         authors = {p for v in versions for p in v["authors"]}
         documents.append(
@@ -269,6 +280,7 @@ def doc_discussion(doc: str, product_id: str, graph: str | None = None) -> dict:
                     }
                     for mt in meetings
                 ],
+                **cut_note(cut, len(messages)),
             }
         )
     return {
@@ -284,10 +296,11 @@ def issue_reports(product_id: str, graph: str | None = None) -> dict:
     """Tool 16: every customer issue report in the product's support channels, with the
     customers' companies (MENTIONS Customer -> WORKS_AT -> Company) and the people mentioned
     (usually the assignee). Slice B replaces it with Issue nodes and their status chains."""
-    rows = db.run("issue_reports", {"product_id": product_id, "limit": 150}, graph=graph).rows
+    rows, cut = db.run_capped("issue_reports", {"product_id": product_id}, cap=150, graph=graph)
     return {
         "product_id": product_id,
         "reports": [{**r, "text": clip(r["text"], LIST_TEXT_CHARS)} for r in rows],
+        **cut_note(cut, len(rows)),
         "cypher": ["issue_reports.cypher"],
     }
 
@@ -310,9 +323,8 @@ def list_prs(
         "product_id": product_id,
         "status": None if as_of else status,
         "action": None if as_of else action,
-        "limit": 200,
     }
-    rows = db.run("product_prs", params, graph=graph).rows
+    rows, cut = db.run_capped("product_prs", params, cap=200, graph=graph)
     cypher = ["product_prs.cypher"]
     states = states_at(product_id, as_of_ms, graph) if as_of else {}
     if as_of:
@@ -344,7 +356,7 @@ def list_prs(
             if (status and r["status"] != status) or (action and r["team_action"] != action):
                 continue
         kept.append(r)
-    out = {"product_id": product_id, "prs": kept, "cypher": cypher}
+    out = {"product_id": product_id, "prs": kept, "cypher": cypher, **cut_note(cut, len(rows))}
     if as_of:
         out["as_of"] = iso(as_of_ms)
     return out
@@ -369,10 +381,11 @@ def list_issues(
     validity window holds it), issues reported later are left out, and the history stops."""
     as_of = as_of_ms is not None
     query_status = None if status == "unresolved" or as_of else status
-    params = {"product_id": product_id, "status": query_status, "limit": 200}
+    params = {"product_id": product_id, "status": query_status}
     states = states_at(product_id, as_of_ms, graph) if as_of else {}
     issues = []
-    for r in db.run("product_issues", params, graph=graph).rows:
+    rows, cut = db.run_capped("product_issues", params, cap=200, graph=graph)
+    for r in rows:
         r["customers"] = [c for c in r["customers"] if c["id"]]
         r["assignees"] = [a for a in r["assignees"] if a["id"]]
         r["fixed_by"] = [p for p in r["fixed_by"] if p["id"]]
@@ -405,6 +418,7 @@ def list_issues(
         "filters": {"status": status, "company": company},
         "counts_by_status": counts,
         "issues": issues,
+        **cut_note(cut, len(rows)),
         "cypher": ["product_issues.cypher"],
     }
     if as_of:
@@ -427,8 +441,13 @@ def product_ids(graph: str | None = None, refresh: bool = False) -> frozenset[st
 
 def links_shared(product_id: str, graph: str | None = None) -> dict:
     """Tool 9: links shared in the product's messages, who shared them and where."""
-    rows = db.run("links_shared", {"product_id": product_id, "limit": 150}, graph=graph).rows
-    return {"product_id": product_id, "links": rows, "cypher": ["links_shared.cypher"]}
+    rows, cut = db.run_capped("links_shared", {"product_id": product_id}, cap=150, graph=graph)
+    return {
+        "product_id": product_id,
+        "links": rows,
+        **cut_note(cut, len(rows)),
+        "cypher": ["links_shared.cypher"],
+    }
 
 
 AREA_MATCH_MIN = 70  # rapidfuzz token-set score for a topic to name an area
@@ -462,11 +481,9 @@ def collab_paths(pairs: list[tuple[str, str]], graph: str | None = None) -> dict
     {(a, b): [names along the path]}; an empty list when they aren't connected (D065)."""
     if not pairs:
         return {}
-    rows = db.run(
-        "collab_paths",
-        {"pairs": [{"a": a, "b": b} for a, b in pairs], "limit": 200},
-        graph=graph,
-    ).rows
+    rows = db.run_all(
+        "collab_paths", {"pairs": [{"a": a, "b": b} for a, b in pairs]}, cap=200, graph=graph
+    )
     return {(r["a"], r["b"]): r["names"] for r in rows}
 
 
@@ -478,7 +495,7 @@ def who_knows(topic: str, product_id: str, graph: str | None = None) -> dict:
     whether an expert is a key person in the product's truck factor. When no author is left,
     `connectors` are the best-connected collaborators (PageRank over COLLAB)."""
     areas = match_areas(
-        topic, db.run("product_areas", {"product_id": product_id, "limit": 500}, graph=graph).rows
+        topic, db.run_all("product_areas", {"product_id": product_id}, cap=2000, graph=graph)
     )
     cypher = ["product_areas.cypher"]
     if not areas:
@@ -491,10 +508,10 @@ def who_knows(topic: str, product_id: str, graph: str | None = None) -> dict:
             "try search_artifacts",
         }
     ids = [a["id"] for a in areas]
-    params = {"ids": ids, "limit": 200}
-    experts = db.run("area_experts", params, graph=graph).rows
-    evidence = db.run("area_evidence", params, graph=graph).rows
-    owners = db.run("area_owners", params, graph=graph).rows
+    params = {"ids": ids}
+    experts = db.run_all("area_experts", params, cap=1000, graph=graph)
+    evidence = db.run_all("area_evidence", params, cap=2000, graph=graph)
+    owners = db.run_all("area_owners", params, cap=1000, graph=graph)
     truck = (db.run("product_truck", {"product_id": product_id}, graph=graph).rows or [{}])[0]
     key_people = set(truck.get("truck_people") or [])
     cypher += [
@@ -646,9 +663,9 @@ def parse_as_of(value: str | None) -> int | None:
 
 def states_at(product_id: str, as_of_ms: int, graph: str | None = None) -> dict[str, dict]:
     """{subject id: {decision kind: value}} for the decisions in force at `as_of_ms`."""
-    rows = db.run(
-        "states_at", {"product_id": product_id, "as_of_ms": as_of_ms, "limit": 2000}, graph=graph
-    ).rows
+    rows = db.run_all(
+        "states_at", {"product_id": product_id, "as_of_ms": as_of_ms}, cap=10_000, graph=graph
+    )
     out: dict[str, dict] = {}
     for r in rows:
         out.setdefault(r["subject_id"], {})[r["kind"]] = r["value"]
@@ -661,7 +678,7 @@ def match_subjects(subject: str, product_id: str, graph: str | None = None) -> l
     from rapidfuzz import fuzz
 
     text = subject.strip()
-    rows = db.run("lineage_subjects", {"product_id": product_id, "limit": 1000}, graph=graph).rows
+    rows = db.run_all("lineage_subjects", {"product_id": product_id}, cap=10_000, graph=graph)
     if text.startswith("dec:"):  # dec:<topic>:<valid_from_ms>, topic = <subject id>/<facet>
         text = text[4:].rsplit(":", 1)[0].rsplit("/", 1)[0]
     if text.startswith(("iss:", "pr:")):
@@ -741,7 +758,7 @@ def decision_lineage(
             "list_prs to find its exact title or number",
         }
     topics = [t for s in subjects for t in topics_of(s)]
-    rows = db.run("decision_chain", {"topics": topics, "limit": 400}, graph=graph).rows
+    rows = db.run_all("decision_chain", {"topics": topics}, cap=2000, graph=graph)
     cypher.append("decision_chain.cypher")
     out_subjects = []
     for s in subjects:
@@ -782,9 +799,9 @@ def impact_of(subject: str, product_id: str, graph: str | None = None) -> dict:
                 "note": "no issue or pull request of this product matches",
             }
         found = subjects[0]
-        rows = db.run(
-            "decision_chain", {"topics": [f"{found['id']}/status"], "limit": 200}, graph=graph
-        ).rows
+        rows = db.run_all(
+            "decision_chain", {"topics": [f"{found['id']}/status"]}, cap=2000, graph=graph
+        )
         cypher.insert(1, "decision_chain.cypher")
         active = [r for r in rows if r["status"] == "active"] or rows[-1:]
         if not active:
@@ -829,9 +846,8 @@ def open_alerts(
     """Tool 12 (R2): the Change Sentinel's alerts (11.1, 11.5): regressions, reopenings,
     reversals, unauthorized changes, work outside the working group, key people; each with
     the change, its evidence quote and who it notifies."""
-    rows = db.run(
-        "list_alerts", {"status": status, "product_id": product_id, "limit": 200}, graph=graph
-    ).rows
+    params = {"status": status, "product_id": product_id, "alert_id": None, "artifact_id": None}
+    rows, cut = db.run_capped("list_alerts", params, cap=200, graph=graph)
     alerts = []
     for r in rows:
         if kind and r["kind"] != kind:
@@ -849,6 +865,7 @@ def open_alerts(
         "filters": {"status": status, "kind": kind},
         "counts_by_kind": counts,
         "alerts": alerts,
+        **cut_note(cut, len(rows)),
         "cypher": ["list_alerts.cypher"],
     }
 
@@ -879,18 +896,14 @@ def rank(
     rank; each row names its evidence."""
     k = min(k or 10, 50)
     if metric in PEOPLE_METRICS:
-        rows = db.run(
-            "rank_people", {"product_id": product_id, "metric": metric, "limit": 200}, graph=graph
-        ).rows
+        params = {"product_id": product_id, "metric": metric}
+        rows, cut = db.run_capped("rank_people", params, cap=200, graph=graph)
         ranking = [{**r, "n": int(r["n"])} for r in rows]
         cypher = ["rank_people.cypher"]
     elif metric in ISSUE_METRICS:
         entity = "customer" if by == "customer" else "company"
-        rows = db.run(
-            "rank_companies",
-            {"product_id": product_id, "entity": entity, "limit": 500},
-            graph=graph,
-        ).rows
+        params = {"product_id": product_id, "entity": entity}
+        rows, cut = db.run_capped("rank_companies", params, cap=500, graph=graph)
         ranking = []
         for r in rows:
             counted = [i for i in r["issues"] if ISSUE_METRICS[metric](i)]
@@ -912,6 +925,7 @@ def rank(
         "product_id": product_id,
         "by": by,
         "total_ranked": len(ranking),
+        **cut_note(cut, len(rows)),
         "ranking": ranking[:k],
         "cypher": cypher,
     }
@@ -932,13 +946,13 @@ def find_missing(kind: str, product_id: str, graph: str | None = None) -> dict:
     assigned, own PRs nobody reviewed, areas only one person holds (no backup)."""
     if kind not in MISSING_KINDS:
         raise ValueError(f"unknown kind {kind!r}")
-    rows = db.run(
-        "find_missing", {"product_id": product_id, "kind": kind, "limit": 200}, graph=graph
-    ).rows
+    params = {"product_id": product_id, "kind": kind}
+    rows, cut = db.run_capped("find_missing", params, cap=200, graph=graph)
     return {
         "kind": kind,
         "product_id": product_id,
         "count": len(rows),
+        **cut_note(cut, len(rows)),
         "items": rows,
         "cypher": ["find_missing.cypher"],
     }
@@ -1006,7 +1020,7 @@ def person_profile(person: str, product_id: str | None, graph: str | None = None
     head = db.run("person_profile", {"id": pid}, graph=graph).rows
     if not head:
         return {"person": person, "cypher": cypher, "note": f"no person {pid}"}
-    activity = db.run("person_activity", {"id": pid, "limit": 60}, graph=graph).rows
+    activity = db.run_all("person_activity", {"id": pid}, cap=1000, graph=graph)
     links = db.run("person_links", {"id": pid, "product_id": product_id}, graph=graph).rows
     cypher += ["person_profile.cypher", "person_activity.cypher", "person_links.cypher"]
     profile = {k: v for k, v in head[0].items() if v not in (None, [])}
@@ -1338,6 +1352,24 @@ def _graph_query_spec() -> dict[str, Any]:
 # --- the registry (R2): one entry per tool, used by the loop and the MCP server ------------
 class ToolInputError(ValueError):
     """Arguments a tool can't use as given; the model sees the message and can retry."""
+
+
+def input_problem(spec: dict[str, Any], args: Any) -> str | None:
+    """Why `args` don't fit the tool's input schema (the first problem), or None. A null
+    value counts as left out, and product_id may be left out: the question's product (or
+    "every product" for the tools that allow it) fills in, as `loop.call_tool` does."""
+    from jsonschema import Draft202012Validator
+
+    if not isinstance(args, dict):
+        return "arguments must be an object"
+    schema = dict(spec["input_schema"])
+    schema["required"] = [k for k in schema.get("required", []) if k != "product_id"]
+    given = {k: v for k, v in args.items() if v is not None}
+    error = next(iter(Draft202012Validator(schema).iter_errors(given)), None)
+    if error is None:
+        return None
+    where = ".".join(str(p) for p in error.absolute_path)
+    return f"{where + ': ' if where else ''}{error.message}"
 
 
 @dataclass(frozen=True)

@@ -21,6 +21,7 @@ import os
 import re
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -97,49 +98,126 @@ def cost_usd(model: str, inp: int, out: int, cache_write: int = 0, cache_read: i
 
 
 # --- spend ledger --------------------------------------------------------------------------
+# The ledger is {day: usd spent, ..., "_held": {hold id: {"day", "usd", "until"}}}. A call holds
+# its worst case before it runs and settles to the real cost after, all under one file lock
+# shared by every process (the API, an eval, the connector loop), so concurrent calls can't
+# each pass the cap check and overshoot it together (D098). A hold left by a crashed process
+# lapses after HOLD_S.
+HOLD_S = 600  # longer than one call with its retries (120 s timeout, 3 retries)
+HELD = "_held"
+
+
 def ledger_path() -> Path:
     return get_settings().cache_dir / "llm_spend.json"
 
 
+def _lock(path: Path):
+    from filelock import FileLock
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return FileLock(str(path.with_name(path.name + ".lock")), timeout=30)
+
+
+def _read_ledger(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def _write_ledger(path: Path, days: dict[str, Any]) -> None:
+    # Atomic: a reader never sees a half-written ledger.
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(json.dumps(days, indent=1) + "\n", encoding="utf-8", newline="\n")
+    os.replace(tmp, path)
+
+
 def spent_today(path: Path | None = None) -> float:
     path = path or ledger_path()
-    with _FILES_LOCK:  # a read during a write saw an empty file and crashed a held-out judge run
-        if not path.exists():
-            return 0.0
-        return float(json.loads(path.read_text(encoding="utf-8")).get(today(), 0.0))
+    with _FILES_LOCK, _lock(path):  # a read mid-write once crashed a held-out judge run
+        return float(_read_ledger(path).get(today(), 0.0))
 
 
 def record_spend(amount: float, path: Path | None = None) -> None:
     path = path or ledger_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with _FILES_LOCK:
-        days = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    with _FILES_LOCK, _lock(path):
+        days = _read_ledger(path)
         days[today()] = round(days.get(today(), 0.0) + amount, 6)
-        # Atomic: another process (the API, a second eval) never reads a half-written ledger.
-        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-        tmp.write_text(json.dumps(days, indent=1) + "\n", encoding="utf-8", newline="\n")
-        os.replace(tmp, path)
+        _write_ledger(path, days)
 
 
 def today() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%d")
 
 
-def check_budget(model: str, prompt_chars: int, max_tokens: int) -> float:
-    """Worst-case cost of a call; raises if it could take today's spend over the cap."""
+def worst_case(model: str, prompt_chars: int, max_tokens: int) -> float:
+    """A call's worst-case cost: every input token plus `max_tokens` of output at list price."""
     est_input = int(prompt_chars / CHARS_PER_TOKEN_WORST)
     if est_input > PROMPT_LIMIT_TOKENS and model == "claude-haiku-5-5":
         raise LLMError(f"prompt of ~{est_input:,} tokens is over Haiku 5.5's cheap-price limit")
-    worst = cost_usd(model, est_input, max_tokens)
-    cap = get_settings().lore_daily_spend_cap_usd
-    spent = spent_today()
-    if spent + worst > cap:
-        raise SpendCapReached(
-            f"today's LLM spend is ${spent:.4f}; this call could add ${worst:.4f}, over the "
-            f"${cap:.2f} cap (LORE_DAILY_SPEND_CAP_USD in .env). Raise the cap or wait until "
-            "00:00 UTC."
-        )
+    return cost_usd(model, est_input, max_tokens)
+
+
+def check_budget(model: str, prompt_chars: int, max_tokens: int) -> float:
+    """Worst-case cost of a call; raises if it could take today's spend over the cap. Only a
+    check: `spend` is what holds the amount while the call runs."""
+    worst = worst_case(model, prompt_chars, max_tokens)
+    with _FILES_LOCK, _lock(ledger_path()):
+        _refuse_over_cap(_read_ledger(ledger_path()), worst)
     return worst
+
+
+def _live_holds(days: dict[str, Any], now: float) -> dict[str, dict[str, Any]]:
+    return {k: h for k, h in (days.get(HELD) or {}).items() if h["until"] > now}
+
+
+def _refuse_over_cap(days: dict[str, Any], worst: float) -> None:
+    cap = get_settings().lore_daily_spend_cap_usd
+    spent = float(days.get(today(), 0.0))
+    held = sum(h["usd"] for h in _live_holds(days, time.time()).values() if h["day"] == today())
+    if spent + held + worst > cap:
+        in_flight = f" plus ${held:.4f} held by calls in flight" if held else ""
+        raise SpendCapReached(
+            f"today's LLM spend is ${spent:.4f}{in_flight}; this call could add ${worst:.4f}, "
+            f"over the ${cap:.2f} cap (LORE_DAILY_SPEND_CAP_USD in .env). Raise the cap or wait "
+            "until 00:00 UTC."
+        )
+
+
+@contextmanager
+def spend(worst: float, path: Path | None = None):
+    """Hold `worst` against today's cap for the length of one call; yields `pay(amount)`, which
+    settles the hold at the real cost. A call that fails before `pay` costs nothing (no
+    response, nothing billed) and its hold is released."""
+    path = path or ledger_path()
+    hold = f"{os.getpid()}-{threading.get_ident()}-{time.time_ns()}"
+    with _FILES_LOCK, _lock(path):
+        days = _read_ledger(path)
+        _refuse_over_cap(days, worst)
+        days[HELD] = _live_holds(days, time.time()) | {
+            hold: {"day": today(), "usd": worst, "until": time.time() + HOLD_S}
+        }
+        _write_ledger(path, days)
+    paid = False
+
+    def pay(amount: float) -> None:
+        nonlocal paid
+        _settle(path, hold, amount)
+        paid = True
+
+    try:
+        yield pay
+    finally:
+        if not paid:
+            _settle(path, hold, 0.0)
+
+
+def _settle(path: Path, hold: str, amount: float) -> None:
+    with _FILES_LOCK, _lock(path):
+        days = _read_ledger(path)
+        held = _live_holds(days, time.time())
+        held.pop(hold, None)
+        days[HELD] = held
+        if amount:
+            days[today()] = round(days.get(today(), 0.0) + amount, 6)
+        _write_ledger(path, days)
 
 
 # --- quotes --------------------------------------------------------------------------------
@@ -221,7 +299,6 @@ def complete(
         return result
 
     refuse_uncached()
-    check_budget(model, len(system) + len(user), max_tokens)
     kwargs: dict[str, Any] = {
         "model": model,
         "max_tokens": max_tokens,
@@ -229,18 +306,19 @@ def complete(
         "messages": [{"role": "user", "content": user}],
         "output_config": {"effort": effort},
     }
-    started = time.perf_counter()
-    if output is not None:
-        response = client().messages.parse(output_format=output, **kwargs)
-    else:
-        response = client().messages.create(**kwargs)
-    elapsed_ms = (time.perf_counter() - started) * 1000
+    with spend(worst_case(model, len(system) + len(user), max_tokens)) as pay:
+        started = time.perf_counter()
+        if output is not None:
+            response = client().messages.parse(output_format=output, **kwargs)
+        else:
+            response = client().messages.create(**kwargs)
+        elapsed_ms = (time.perf_counter() - started) * 1000
 
-    usage = response.usage
-    write = getattr(usage, "cache_creation_input_tokens", 0) or 0
-    read = getattr(usage, "cache_read_input_tokens", 0) or 0
-    cost = cost_usd(model, usage.input_tokens, usage.output_tokens, write, read)
-    record_spend(cost)  # billed even when the answer is unusable
+        usage = response.usage
+        write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+        read = getattr(usage, "cache_read_input_tokens", 0) or 0
+        cost = cost_usd(model, usage.input_tokens, usage.output_tokens, write, read)
+        pay(cost)  # billed even when the answer is unusable
 
     if response.stop_reason == "refusal":
         raise Refused(f"{model} declined the request ({purpose}): {response.stop_details}")
@@ -368,27 +446,27 @@ def converse(
 
     refuse_uncached()
     prompt_chars = len(system) + len(json.dumps(messages)) + len(json.dumps(tools))
-    check_budget(model, prompt_chars, max_tokens)
     output_config: dict[str, Any] = {"effort": effort}
     if output_schema is not None:
         output_config["format"] = {"type": "json_schema", "schema": output_schema}
-    started = time.perf_counter()
-    response = client().messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-        tools=tools,
-        messages=messages,
-        output_config=output_config,
-        cache_control={"type": "ephemeral"},
-    )
-    elapsed_ms = (time.perf_counter() - started) * 1000
+    with spend(worst_case(model, prompt_chars, max_tokens)) as pay:
+        started = time.perf_counter()
+        response = client().messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+            tools=tools,
+            messages=messages,
+            output_config=output_config,
+            cache_control={"type": "ephemeral"},
+        )
+        elapsed_ms = (time.perf_counter() - started) * 1000
 
-    usage = response.usage
-    write = getattr(usage, "cache_creation_input_tokens", 0) or 0
-    read = getattr(usage, "cache_read_input_tokens", 0) or 0
-    cost = cost_usd(model, usage.input_tokens, usage.output_tokens, write, read)
-    record_spend(cost)  # billed even when the turn is unusable
+        usage = response.usage
+        write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+        read = getattr(usage, "cache_read_input_tokens", 0) or 0
+        cost = cost_usd(model, usage.input_tokens, usage.output_tokens, write, read)
+        pay(cost)  # billed even when the turn is unusable
 
     if response.stop_reason == "refusal":
         raise Refused(f"{model} declined the request ({purpose}): {response.stop_details}")

@@ -1,6 +1,7 @@
-// list_alerts.cypher — the Inbox: alerts, newest change first, optionally by status and product, with who they notify
+// list_alerts.cypher — the Inbox: alerts, newest change first, optionally by status, product, alert id or triggering artifact, with who they notify
 MATCH (a:Alert)
 WHERE ($status IS NULL OR a.status = $status) AND ($product_id IS NULL OR a.product_id = $product_id)
+  AND ($alert_id IS NULL OR a.id = $alert_id) AND ($artifact_id IS NULL OR a.artifact_id = $artifact_id)
 OPTIONAL MATCH (a)-[n:NOTIFIES]->(p:Person)
 WITH a, collect({id: p.id, name: p.name, role: p.role, reasons: n.reasons}) AS notifies
 ORDER BY a.ts_ms DESC

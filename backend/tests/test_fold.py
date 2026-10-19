@@ -137,6 +137,30 @@ def test_a_reassignment_keeps_a_reopened_issue_reopened():
     assert spans == [("eid_b2", 10, 40), ("eid_c3", 40, None)]
 
 
+def test_a_fresh_report_of_a_settled_bug_reopens_it():
+    """A customer reporting a fixed bug again is a regression, not a restatement (D098)."""
+    again = ev(
+        "issue_reported",
+        40,
+        "eid_a1",
+        customer="CUST-0001",
+        quote="Lastly, there's a 'Slow Export' issue again: exports take minutes.",
+    )
+    rows, _ = fold.rebuild(res(REPORT, ev("issue_resolved", 20, "eid_b2"), again), ctx())
+    assert [c[0] for c in chain(rows)] == ["reported", "resolved", "reopened"]
+    [issue] = rows["upsert_issues"]
+    assert issue["current_status"] == "reopened" and issue["reopen_count"] == 1
+    [claim] = [c for c in rows["upsert_claims"] if c["ts_ms"] == 40]
+    assert claim["type"] == "issue_reported" and claim["value"] == "reopened"
+
+
+def test_a_reassignment_after_a_fix_names_no_issue_and_restates():
+    reassign = ev("issue_reported", 40, "eid_a1", quote="I'll reassign the bug to you.")
+    rows, _ = fold.rebuild(res(REPORT, ev("issue_resolved", 20, "eid_b2"), reassign), ctx())
+    assert [c[0] for c in chain(rows)] == ["reported", "resolved"]
+    assert rows["upsert_issues"][0]["reopen_count"] == 0
+
+
 def test_holding_off_after_a_decision_not_to_merge_supports_it():
     pr = {"pr_id": "pr:w1", "pr": "PR#1"}
     rows, _ = fold.rebuild(

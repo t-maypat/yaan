@@ -121,6 +121,19 @@ def test_one_account_can_belong_to_one_person(org_mode):
         org.accounts()
 
 
+def test_an_unlisted_account_never_inherits_a_listed_persons_id(org_mode):
+    """Ids are 32-bit hashes: a stranger whose account hashes to a listed person's id would
+    otherwise take over their name and role, and so their authority (D098)."""
+    taken = org.eid_for("slack:U99")
+    org.PEOPLE_FILE.write_text(
+        f"people: [{{name: Lead, id: {taken}, role: Engineering Lead}}]", encoding="utf-8"
+    )
+    org.roster.cache_clear()
+    org.accounts.cache_clear()
+    with pytest.raises(org.OrgError, match="hashes to .* which people.yaml gives to Lead"):
+        org.person_id("slack", "U99")
+
+
 def test_the_people_an_artifact_involves(org_mode):
     a = Artifact(
         id="pr:github-acme-1",

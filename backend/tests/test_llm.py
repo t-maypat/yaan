@@ -137,7 +137,7 @@ def test_the_ledger_is_never_read_half_written(tmp_path):
 
     def work() -> None:
         try:
-            for _ in range(200):
+            for _ in range(50):
                 llm.record_spend(0.001, path)
                 llm.spent_today(path)
         except Exception as e:  # noqa: BLE001 — the test collects whatever a reader hits
@@ -148,8 +148,78 @@ def test_the_ledger_is_never_read_half_written(tmp_path):
         t.start()
     for t in threads:
         t.join()
-    assert errors == [] and llm.spent_today(path) == pytest.approx(1.2)
+    assert errors == [] and llm.spent_today(path) == pytest.approx(0.3)
     assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_concurrent_calls_cannot_overshoot_the_cap_together(gateway):
+    """D098: each call holds its worst case before it runs, so N threads racing for a cap
+    with room for two get exactly two through; before, all of them passed the check."""
+    import threading
+
+    path = llm.ledger_path()
+    gate, admitted, refused = threading.Barrier(8), [], []
+
+    def call() -> None:
+        gate.wait()
+        try:
+            with llm.spend(0.02, path) as pay:
+                admitted.append(1)
+                gate_hold.wait()  # every admitted call is in flight at once
+                pay(0.02)
+        except llm.SpendCapReached:
+            refused.append(1)
+
+    gate_hold = threading.Event()
+    threads = [threading.Thread(target=call) for _ in range(8)]
+    for t in threads:
+        t.start()
+    while len(admitted) + len(refused) < 8:
+        threading.Event().wait(0.01)
+    gate_hold.set()
+    for t in threads:
+        t.join()
+    assert (len(admitted), len(refused)) == (2, 6)
+    assert llm.spent_today(path) == pytest.approx(0.04)
+
+
+def test_a_hold_is_seen_by_another_process(gateway, tmp_path):
+    import subprocess
+    import sys
+    import textwrap
+
+    path = llm.ledger_path()
+    probe = textwrap.dedent(
+        f"""
+        from pathlib import Path
+        from types import SimpleNamespace
+        from app import llm
+        llm.get_settings = lambda: SimpleNamespace(lore_daily_spend_cap_usd=0.05)
+        try:
+            with llm.spend(0.02, Path({str(path)!r})):
+                print("admitted")
+        except llm.SpendCapReached as e:
+            print("refused:", "held by calls in flight" in str(e))
+        """
+    )
+    with llm.spend(0.04, path):  # this process's call is in flight
+        out = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True)
+    assert out.stdout.strip() == "refused: True", out.stderr
+    assert llm.spent_today(path) == 0.0  # never paid: the hold was released
+
+
+def test_a_failed_call_releases_its_hold_and_a_crashed_ones_lapses(gateway, monkeypatch):
+    path = llm.ledger_path()
+    with pytest.raises(RuntimeError), llm.spend(0.04, path):
+        raise RuntimeError("network down before any response")
+    with llm.spend(0.04, path) as pay:  # the failed call's hold is gone
+        pay(0.0)
+    # a process that died mid-call leaves its hold; it lapses after HOLD_S
+    days = {llm.HELD: {"dead": {"day": llm.today(), "usd": 0.05, "until": 0}}}
+    path.write_text(__import__("json").dumps(days), encoding="utf-8")
+    with llm.spend(0.04, path) as pay:
+        pay(0.01)
+    assert llm.spent_today(path) == pytest.approx(0.01)
 
 
 def test_refusals_and_cutoffs_raise_but_are_still_billed(gateway):

@@ -13,6 +13,7 @@ cited artifacts). The answer itself is the same with or without a listener.
 
 import json
 import re
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -43,6 +44,10 @@ class ToolError(Exception):
     """A tool call that can't run as asked; the model gets the message and can retry."""
 
 
+class Cancelled(Exception):
+    """The caller stopped waiting (the browser closed the stream): no further model turns."""
+
+
 def call_tool(
     name: str, args: dict[str, Any], scope: tools.Scope, allowed: frozenset[str] | None = None
 ) -> dict:
@@ -53,6 +58,11 @@ def call_tool(
     tool = tools.REGISTRY.get(name)
     if tool is None or (allowed is not None and name not in allowed):
         raise ToolError(f"unknown tool {name!r}")
+    # The answer model's tools are strict, but an MCP client's calls aren't: check every
+    # call against the tool's own schema, so a missing or mistyped argument comes back as
+    # an error the caller can fix instead of a KeyError deep in a handler (D098).
+    if problem := tools.input_problem(tool.spec, args):
+        raise ToolError(f"{name}: {problem}")
     given = args.get("product_id")
     if given and given not in tools.product_ids(scope.graph):
         known = tools.product_ids(scope.graph, refresh=True)
@@ -66,7 +76,7 @@ def call_tool(
         raise ToolError(f"{name} needs a product: resolve the product's name first")
     try:
         return tool.run(args, tools.Scope(product, scope.as_of_ms, scope.graph))
-    except tools.ToolInputError as e:
+    except (tools.ToolInputError, ValueError) as e:  # e.g. rank's unknown metric
         raise ToolError(str(e)) from e
 
 
@@ -191,8 +201,12 @@ def answer(
     as_of_ms: int | None = None,
     toolset: tuple[str, ...] | None = None,
     viewer_id: str | None = None,
+    cancel: threading.Event | None = None,
 ) -> dict:
     """Answer one question with the tools, validated citations, or an abstention.
+
+    `cancel`, once set, stops the answer before its next model turn (raises Cancelled), so
+    a closed browser tab stops spending (D098).
 
     `viewer_id` (W7, D077) answers as that person: every tool result is redacted to what they
     may see, `graph_query` is left out (its free-form rows can't be redacted by id), and the
@@ -226,6 +240,8 @@ def answer(
     turns: list[llm.Turn] = []
 
     def ask() -> llm.Turn:
+        if cancel is not None and cancel.is_set():
+            raise Cancelled(f"stopped after {len(turns)} turns: the caller went away")
         turn = llm.converse(
             role="answer",
             system=system,

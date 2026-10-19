@@ -140,6 +140,32 @@ def run(
     )
 
 
+class TooManyRows(QueryError):
+    """A lookup the code needs complete has more rows than its cap: fail, never cut (D098)."""
+
+
+def run_all(
+    name: str, params: dict[str, Any], *, cap: int, graph: str | None = None, **kw
+) -> list[dict[str, Any]]:
+    """Every row of a read, or TooManyRows. Asks for cap + 1 rows (`$limit`), so a full
+    result is told apart from a cut one without a second query."""
+    rows = run(name, {**params, "limit": cap + 1}, graph=graph, **kw).rows
+    if len(rows) > cap:
+        raise TooManyRows(
+            name, graph or get_settings().lore_graph, f"more than {cap} rows: raise the cap"
+        )
+    return rows
+
+
+def run_capped(
+    name: str, params: dict[str, Any], *, cap: int, graph: str | None = None, **kw
+) -> tuple[list[dict[str, Any]], bool]:
+    """At most `cap` rows of a read and whether there were more (`truncated`), for lists the
+    model reads: it says "at least N" instead of taking a cut list for the whole (D098)."""
+    rows = run(name, {**params, "limit": cap + 1}, graph=graph, **kw).rows
+    return rows[:cap], len(rows) > cap
+
+
 def run_text(
     text: str,
     params: dict[str, Any] | None = None,

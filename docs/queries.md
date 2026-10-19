@@ -167,7 +167,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`key_people.cypher`](../backend/queries/key_people.cypher) | each product's first truck-factor person and the areas they are the only author of, in any product: the input for key_person alerts (11.5, D062) |
 | [`lineage_subjects.cypher`](../backend/queries/lineage_subjects.cypher) | the product's issues and own pull requests, the subjects a decision chain can be about: decision_lineage and impact_of match a name, title or PR number against them (R2) |
 | [`links_shared.cypher`](../backend/queries/links_shared.cypher) | links shared in the product's messages, with who shared them and where |
-| [`list_alerts.cypher`](../backend/queries/list_alerts.cypher) | the Inbox: alerts, newest change first, optionally by status and product, with who they notify |
+| [`list_alerts.cypher`](../backend/queries/list_alerts.cypher) | the Inbox: alerts, newest change first, optionally by status, product, alert id or triggering artifact, with who they notify |
 | [`list_indexes.cypher`](../backend/queries/list_indexes.cypher) | every index in the graph with its kind, options and build status (lore schema checks these against 00_schema.cypher) |
 | [`list_products.cypher`](../backend/queries/list_products.cypher) | every product with its codenames and how many artifacts it holds, for the UI's product picker |
 | [`outside_decisions.cypher`](../backend/queries/outside_decisions.cypher) | active dismissals decided by someone whose working group (CDLP community) is not among the groups of the people who did the work in the issue's area (11.5, D064); rows shaped like sentinel_changes |

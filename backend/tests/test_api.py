@@ -2,6 +2,7 @@
 endpoints (step 2, D058). No LLM, no DB: the Sentinel functions are faked."""
 
 import json
+import queue
 import threading
 
 import pytest
@@ -25,7 +26,13 @@ def events(text: str) -> list[tuple[str, dict]]:
 
 
 def fake_answer(
-    question, product_id=None, graph=None, on_event=loop._quiet, as_of_ms=None, viewer_id=None
+    question,
+    product_id=None,
+    graph=None,
+    on_event=loop._quiet,
+    as_of_ms=None,
+    viewer_id=None,
+    cancel=None,
 ):
     ASKED.append(as_of_ms)
     VIEWERS.append(viewer_id)
@@ -122,6 +129,80 @@ def test_ask_refuses_beyond_the_concurrency_slots(monkeypatch):
     assert slots.acquire(blocking=False)  # the finished answer gave its slot back
 
 
+def test_a_busy_refusal_does_not_use_up_the_askers_limits(monkeypatch):
+    monkeypatch.setattr(loop, "answer", fake_answer)
+    monkeypatch.setattr(main, "ask_limiter", main.RateLimiter(1))
+    slots = threading.BoundedSemaphore(1)
+    monkeypatch.setattr(main, "ask_slots", slots)
+    client = TestClient(main.app)
+    assert slots.acquire(blocking=False)
+    assert client.post("/ask", json={"question": "Which bugs?"}).status_code == 503
+    slots.release()
+    assert client.post("/ask", json={"question": "Which bugs?"}).status_code == 200  # D098
+    assert client.post("/ask", json={"question": "Which bugs?"}).status_code == 429
+    assert slots.acquire(blocking=False)  # a rate-limited request gave its slot back too
+
+
+class Listener:
+    def __init__(self, gone: bool):
+        self.gone = gone
+
+    async def is_disconnected(self) -> bool:
+        return self.gone
+
+
+def test_a_disconnect_seen_by_the_poll_cancels_the_answer(monkeypatch):
+    """The browser going away sets the agent's cancel flag, so no further turns are paid for."""
+    import anyio
+
+    monkeypatch.setattr(main, "STREAM_POLL_S", 0.01)
+    events, cancel = queue.Queue(), threading.Event()
+
+    async def go():
+        return [chunk async for chunk in main.relay(events, cancel, Listener(gone=True))]
+
+    assert anyio.run(go) == [] and cancel.is_set()
+
+
+def test_a_stream_closed_by_the_server_cancels_the_answer():
+    import anyio
+
+    events, cancel = queue.Queue(), threading.Event()
+    events.put(("tool_call", {"tool": "list_issues"}))
+
+    async def go():
+        stream = main.relay(events, cancel, Listener(gone=False))
+        first = await stream.__anext__()
+        assert not cancel.is_set()
+        await stream.aclose()  # what the server does when the client hangs up
+        return first
+
+    assert anyio.run(go).startswith("event: tool_call") and cancel.is_set()
+
+
+def test_a_finished_answer_streams_done():
+    import anyio
+
+    events, cancel = queue.Queue(), threading.Event()
+    events.put(("answer", {"abstain": False}))
+    events.put(None)
+
+    async def go():
+        return [chunk async for chunk in main.relay(events, cancel, Listener(gone=False))]
+
+    assert [c.split("\n")[0] for c in anyio.run(go)] == ["event: answer", "event: done"]
+
+
+def test_the_loop_stops_before_its_next_turn_once_cancelled(monkeypatch):
+    calls = []
+    monkeypatch.setattr(loop.llm, "converse", lambda **k: calls.append(k))
+    flag = threading.Event()
+    flag.set()
+    with pytest.raises(loop.Cancelled):
+        loop.answer("Which bugs?", "W", graph="g", cancel=flag)
+    assert calls == []
+
+
 def test_every_route_but_health_has_a_per_ip_budget(monkeypatch):
     monkeypatch.setattr(main, "request_limiter", main.RateLimiter(2))
     client = TestClient(main.app)
@@ -168,9 +249,9 @@ ALERT = {"id": "alert:dec:x", "decision_id": "dec:x", "kind": "regression", "sum
 def test_alerts_and_detail_read_the_api_graph(monkeypatch):
     seen = []
 
-    def fake_list(status=None, product_id=None, *, graph=None):
+    def fake_list(status=None, product_id=None, *, graph=None, alert_id=None, limit=200, **_):
         seen.append(graph)
-        return [ALERT]
+        return [a for a in [ALERT] if alert_id in (None, a["id"])][:limit]
 
     monkeypatch.setattr(engine, "list_alerts", fake_list)
     monkeypatch.setattr(engine, "alert_actions", lambda i, graph=None: [{"id": "a1"}])
@@ -202,6 +283,12 @@ def test_approve_and_dismiss_go_to_the_demo_graph_and_errors_are_409(monkeypatch
     r = client.post("/alerts/approve", json={**body, "alert_id": "closed"})
     assert r.status_code == 409 and "not open" in r.json()["detail"]
     assert {c[3] for c in calls} == {"lore_demo"}
+    # the edited text a connector would post is bounded (D098)
+    huge = {**body, "edits": {"act:1": "x" * 4001}}
+    assert client.post("/alerts/approve", json=huge).status_code == 422
+    many = {**body, "edits": {f"act:{i}": "ok" for i in range(51)}}
+    assert client.post("/alerts/approve", json=many).status_code == 422
+    assert len(calls) == 3  # neither reached the Sentinel
 
 
 def test_demo_writes_refuse_the_main_graph(monkeypatch):

@@ -189,3 +189,11 @@ INDEXED = {
 def test_tool_queries_start_from_an_index(empty_graph, name):
     plan = " / ".join(db.explain(name, INDEXED[name], graph=empty_graph))
     assert "Node By Index Scan" in plan and "Label Scan" not in plan, plan
+
+
+def test_a_cut_list_says_so_and_a_complete_one_adds_nothing():
+    from app.agent import tools as t
+
+    assert t.cut_note(False, 200) == {}  # complete results stay byte-identical (answer cache)
+    note = t.cut_note(True, 200)["truncated"]
+    assert "at least 200" in note and "never present" in note

@@ -50,6 +50,26 @@ def test_the_tools_are_the_agents_minus_raw_cypher_plus_ask(monkeypatch):
         mcp_server.run("ask", {"question": "Who?"}, "g")
 
 
+def test_a_call_that_breaks_its_schema_is_a_tool_error_not_a_crash():
+    # MCP clients aren't held to strict schemas: a missing or mistyped argument used to reach
+    # the handler as a KeyError or a ValueError (D098)
+    with pytest.raises(loop.ToolError, match="who_knows: 'topic' is a required property"):
+        mcp_server.run("who_knows", {"product_id": None}, "g")
+    with pytest.raises(loop.ToolError, match="metric: 'most_bugs' is not one of"):
+        mcp_server.run("rank", {"metric": "most_bugs"}, "g")
+    with pytest.raises(loop.ToolError, match="k: '5' is not of type 'integer'"):
+        mcp_server.run("search_artifacts", {"query": "x", "k": "5"}, "g")
+    with pytest.raises(loop.ToolError, match="Additional properties are not allowed"):
+        mcp_server.run("get_artifact", {"artifact_id": "msg:1", "graph": "lore_herb"}, "g")
+
+
+def test_null_values_and_a_left_out_product_pass_the_schema_check():
+    spec = tools.REGISTRY["list_issues"].spec
+    assert tools.input_problem(spec, {"status": None, "product_id": None}) is None
+    assert tools.input_problem(spec, {}) is None  # the question's product fills in
+    assert tools.input_problem(spec, []) == "arguments must be an object"
+
+
 def test_ask_returns_the_checked_answer_compact(monkeypatch):
     def answer(question, product_id=None, graph=None, as_of_ms=None, viewer_id=None):
         assert (question, product_id, graph, viewer_id) == ("Who fixed it?", None, "g", None)

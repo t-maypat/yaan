@@ -100,9 +100,9 @@ def run(graph: str | None = None, *, now_ms: int | None = None) -> dict[str, Any
     """Judge every decision change in `graph`, write the alerts, and report what changed."""
     now_ms = now_ms or int(time.time() * 1000)
     now_iso = datetime.fromtimestamp(now_ms / 1000, UTC).isoformat().replace("+00:00", "Z")
-    changes = db.run("sentinel_changes", {"limit": 10_000}, graph=graph).rows
+    changes = db.run_all("sentinel_changes", {}, cap=50_000, graph=graph)
     # dismissals by someone outside the area's working group (CDLP, D064); none before derive
-    changes += db.run("outside_decisions", {"limit": 1_000}, graph=graph, timeout_ms=30_000).rows
+    changes += db.run_all("outside_decisions", {}, cap=10_000, graph=graph, timeout_ms=30_000)
     rows: dict[str, list[dict[str, Any]]] = {name: [] for name in LOAD_ORDER}
     seen: set[str] = set()
     progress = 0
@@ -197,10 +197,10 @@ def key_person_alerts(graph: str | None, now_ms: int, now_iso: str) -> list[tupl
     """11.5 (D062): one `key_person` alert per person who is first in a product's truck-factor
     order and the only author of >= MIN_SOLE_AREAS areas; `bus_factor` (high) when that
     product's truck factor is 1. Dated on HERB's clock (the products' last artifact)."""
-    rows = db.run("key_people", {"limit": 5000}, graph=graph).rows
+    rows = db.run_all("key_people", {}, cap=50_000, graph=graph)
     clock = {
         r["product_id"]: r["last_ms"]
-        for r in db.run("product_clock", {"limit": 100}, graph=graph, timeout_ms=30_000).rows
+        for r in db.run_all("product_clock", {}, cap=1000, graph=graph, timeout_ms=30_000)
     }
     people: dict[str, dict[str, Any]] = {}
     for r in rows:
@@ -269,10 +269,23 @@ def key_person_alerts(graph: str | None, now_ms: int, now_iso: str) -> list[tupl
 
 
 def list_alerts(
-    status: str | None = None, product_id: str | None = None, *, graph: str | None = None
+    status: str | None = None,
+    product_id: str | None = None,
+    *,
+    graph: str | None = None,
+    alert_id: str | None = None,
+    artifact_id: str | None = None,
+    limit: int = 200,
 ) -> list[dict[str, Any]]:
-    """The Inbox's alerts, newest change first."""
-    params = {"status": status, "product_id": product_id, "limit": 200}
+    """The Inbox's alerts, newest change first (the newest `limit`). `alert_id` and
+    `artifact_id` find one alert, or an artifact's alerts, at any age (D098)."""
+    params = {
+        "status": status,
+        "product_id": product_id,
+        "alert_id": alert_id,
+        "artifact_id": artifact_id,
+        "limit": limit,
+    }
     out = []
     for r in db.run("list_alerts", params, graph=graph).rows:
         r["notifies"] = [p for p in r["notifies"] if p["id"]]
