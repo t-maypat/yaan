@@ -128,7 +128,7 @@ FalkorDB features Yaan depends on: Cypher over a property graph, a **full-text i
 | [`connection_path`](backend/queries/connection_path.cypher) | the shortest chain of collaborators between two people |
 | [`find_missing`](backend/queries/find_missing.cypher) | what isn't there: unfixed issues, unreviewed PRs, single-author areas |
 
-All 192 queries, one parameterized statement per file, each with a fixture test: **[docs/queries.md](docs/queries.md)**.
+All 193 queries, one parameterized statement per file, each with a fixture test: **[docs/queries.md](docs/queries.md)**.
 
 ## Results
 
@@ -141,7 +141,7 @@ On 7 [HERB](https://arxiv.org/abs/2506.23139) products never looked at while bui
 | **Yaan** | **63.6** | 76.7% | **100%** |
 | *HERB paper's best agent (GPT-4o), for context* | *43.4* | *29.3%* | |
 
-Removing the graph tools drops the same agent from 63.6 to 24.2. Graph lookups take 3–28 ms each; an answer costs about $0.003. Method, ablations, the stale-answer test and error analysis: [eval/report.md](eval/report.md).
+Removing the graph tools drops the same agent from 63.6 to 24.2: a paired difference of 39.4 points, 95% interval 32.6–46.2. Graph lookups take 3–28 ms each; an answer costs about $0.003. Method, ablations, the stale-answer test and error analysis: [eval/report.md](eval/report.md).
 
 ## Built on FalkorDB
 

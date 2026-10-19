@@ -1,0 +1,206 @@
+{
+ "what": "D103: every dev content answer of run 20261017T1729Z_lore_dev read against its ground truth by a second reader and scored 0-100 like the judge",
+ "reader": "Claude Opus 5.5 in the coding session (a model, not a human; a different, larger model than the Haiku 5.5 judge)",
+ "summary": {
+  "questions": 32,
+  "judge_mean": 73.9,
+  "second_reading_mean": 79.2,
+  "within_10": 27,
+  "judge_higher_by_more_than_10": 0,
+  "judge_lower_by_more_than_10": 5
+ },
+ "answers": [
+  {
+   "id": "CollaborateForce:ans:0",
+   "judge": 62,
+   "second_reading": 65,
+   "note": "2 of 3 expected changes; misses 'add data'"
+  },
+  {
+   "id": "CollaborateForce:ans:1",
+   "judge": 90,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "CollaborateForce:ans:2",
+   "judge": 90,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "CollaborateForce:ans:3",
+   "judge": 80,
+   "second_reading": 85,
+   "note": ""
+  },
+  {
+   "id": "CollaborateForce:ans:4",
+   "judge": 55,
+   "second_reading": 68,
+   "note": "3 of 5; misses 'broaden the target audience'"
+  },
+  {
+   "id": "CollaborateForce:ans:5",
+   "judge": 45,
+   "second_reading": 50,
+   "note": "2 of 4"
+  },
+  {
+   "id": "CollaborateForce:ans:6",
+   "judge": 90,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "CollaborateForce:ans:7",
+   "judge": 85,
+   "second_reading": 85,
+   "note": ""
+  },
+  {
+   "id": "CollaborateForce:ans:8",
+   "judge": 92,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "CollaborateForce:ans:9",
+   "judge": 92,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "CollaborateForce:ans:10",
+   "judge": 90,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "CollaborateForce:ans:11",
+   "judge": 92,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "CollaborateForce:ans:12",
+   "judge": 35,
+   "second_reading": 50,
+   "note": "partly about the product itself; competitors partly covered"
+  },
+  {
+   "id": "CollaborateForce:ans:13",
+   "judge": 0,
+   "second_reading": 0,
+   "note": "abstained; the answer exists"
+  },
+  {
+   "id": "CollaborateForce:ans:30",
+   "judge": 35,
+   "second_reading": 50,
+   "note": "the right issue plus one that isn't in the ground truth"
+  },
+  {
+   "id": "CollaborateForce:ans:31",
+   "judge": 95,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "CollaborateForce:ans:32",
+   "judge": 95,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "CollaborateForce:ans:33",
+   "judge": 85,
+   "second_reading": 95,
+   "note": "correct; the judge took 10 off"
+  },
+  {
+   "id": "VizForce:ans:0",
+   "judge": 92,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "VizForce:ans:1",
+   "judge": 92,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "VizForce:ans:2",
+   "judge": 72,
+   "second_reading": 70,
+   "note": "2 of 3; misses 'add a comparison chart'"
+  },
+  {
+   "id": "VizForce:ans:3",
+   "judge": 72,
+   "second_reading": 90,
+   "note": "both expected changes; the judge gave 72"
+  },
+  {
+   "id": "VizForce:ans:4",
+   "judge": 90,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "VizForce:ans:5",
+   "judge": 85,
+   "second_reading": 90,
+   "note": ""
+  },
+  {
+   "id": "VizForce:ans:6",
+   "judge": 62,
+   "second_reading": 90,
+   "note": "all three expected changes; the judge gave 62"
+  },
+  {
+   "id": "VizForce:ans:7",
+   "judge": 95,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "VizForce:ans:8",
+   "judge": 92,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "VizForce:ans:9",
+   "judge": 85,
+   "second_reading": 90,
+   "note": ""
+  },
+  {
+   "id": "VizForce:ans:10",
+   "judge": 92,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "VizForce:ans:11",
+   "judge": 92,
+   "second_reading": 95,
+   "note": ""
+  },
+  {
+   "id": "VizForce:ans:12",
+   "judge": 0,
+   "second_reading": 0,
+   "note": "abstained; the answer exists"
+  },
+  {
+   "id": "VizForce:ans:13",
+   "judge": 35,
+   "second_reading": 35,
+   "note": "one competitor's weaknesses, the ground truth names another"
+  }
+ ]
+}

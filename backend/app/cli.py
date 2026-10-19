@@ -734,7 +734,13 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--every", {"type": float, "default": 30, "help": "run: seconds between polls"}),
     ],
     "eval": [
-        ("--system", {"choices": ("baseline", "lore", "lore-search"), "default": "baseline"}),
+        (
+            "--system",
+            {
+                "choices": ("baseline", "baseline-meta", "lore", "lore-search"),
+                "default": "baseline",
+            },
+        ),
         ("--split", {"choices": ("dev", "drift", "test"), "default": "dev"}),
         (
             "--heldout",

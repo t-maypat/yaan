@@ -2,7 +2,7 @@
 
 What we measured, how, and what the numbers do and don't show. Every figure here comes from a results file in [`eval/results/`](results/) (the table: [`results/table.md`](results/table.md), rebuilt by `lore eval-report`).
 
-> **Status (18 Oct, final):** the held-out run is done, once, for all three systems (§3a; `eval/heldout_runs.log` has one opening per system). §3 keeps the dev results the system was built against.
+> **Status (18 Oct, final; intervals added 19 Oct):** the held-out run is done, once, for all three systems (§3a; `eval/heldout_runs.log` has one opening per system); **held-out is the headline**, with 95% intervals in §3b. §3 keeps the dev results the system was built against.
 
 ## 1. The benchmark
 [HERB](https://huggingface.co/datasets/Salesforce/HERB) (Salesforce AI Research, CC BY-NC 4.0) is a synthetic company: 30 products, each with Slack channels, meeting transcripts, documents, pull requests and shared links, plus questions with ground truth.
@@ -65,6 +65,32 @@ The 7 test products (189 answerable + 210 unanswerable questions), never read wh
 - **Latency:** FalkorDB p50 per tool 3–28 ms (`search_artifacts` 27 ms, `list_issues` 14 ms, `rank` 5 ms); the answer's seconds are the model's turns.
 - **A fault on the way, no effect on scores:** the baseline's judging crashed when one thread read the spend ledger while another rewrote it. Its 399 saved answers were judged again with `--score-only` (no new held-out opening); the ledger now reads under the lock and writes atomically (D079).
 
+## 3b. How sure: 95% intervals (19 Oct, D103)
+Bootstrap over questions (10,000 resamples within each category, so every resample keeps the run's mix), recomputing Avg and the declined share exactly as the tables do; the point estimates below match them. Two systems answered the same questions, so their difference is resampled *paired*. From the judged runs, no new answers or judging ($0): `python -m app.eval.bootstrap`, results in [`results/bootstrap.json`](results/bootstrap.json). Only scores are read, never question text.
+
+| Held-out (399 q) | Avg | 95% interval | Unanswerable declined | 95% interval |
+|---|---|---|---|---|
+| **lore** | **63.6** | 57.8–69.4 | 76.7% | 71.0–82.4 |
+| lore-search | 24.2 | 19.6–28.8 | 81.9% | 76.7–86.7 |
+| baseline | 9.6 | 6.7–12.9 | 80.0% | 74.3–85.2 |
+
+| Paired difference (Avg) | Dev (200 q) | Held-out (399 q) |
+|---|---|---|
+| lore − lore-search: the graph tools | +58.2 (51.0–65.4) | **+39.4 (32.6–46.2)** |
+| lore − baseline | +68.5 (62.0–74.9) | +54.0 (48.0–59.9) |
+
+**What it says:**
+- **The graph tools are worth about 40 points on unseen products, and the interval is far from zero.** The dev gap (+58) overstates it: lore-search barely moves between splits, Lore loses 20 (§3a).
+- **Declining unanswerables does not separate the systems on held-out:** the three intervals overlap. Lore's dev lead there (87.5% vs 81.7%) didn't carry over; it isn't claimed.
+- **What the intervals don't cover:** they resample questions, not the model. One run per system (§7): run-to-run spread from sampling (no temperature on Haiku 5.5) comes on top.
+
+## 3c. Is the judge fair? (19 Oct, D103)
+The judge is Haiku 5.5, the same model family as the answers, so it was checked two ways on the dev run ($0, no new judging):
+- **ID and link questions, every one (53):** the judge only extracts the ids or links an answer gives; F1 is computed from those. Against a regex over the same answers, the judge **never extracted an id or link that wasn't in the answer**. In 19 answers it left some out, as HERB's prompt asks (links named in reasoning, a person the answer itself says isn't a reviewer). One clear miss: an answer giving both expected PR links plus one more scored 0 instead of 0.8. Counting every link instead would lower the url score (82.2 → 73.5): the leftovers are extra links that cost precision.
+- **Content questions, every one (32):** read against the ground truth by a second reader, Claude Opus 5.5 in the coding session (a larger model, not a human), and scored 0–100 the same way. Mean: judge 73.9, second reading 79.2; within 10 points on 27; the judge was **lower** by more than 10 on 5 (for example 62 for an answer with all three expected changes) and never higher. Per answer: [`results/spotcheck_dev.json`](results/spotcheck_dev.json).
+
+So the shared model family doesn't show up as leniency: the judge, if anything, under-scores. A human pass on a sample would still be the stronger check.
+
 ## 4. HERB-Drift: right about now, and about then (13.1)
 24 hand-labeled dev questions (`eval/drift_set.json`): 11 about the current status of an issue or PR, 10 "as of <date>", 3 "why". Ground truth was read from the raw messages by hand, never from Lore's graph, and every item lists its message ids. A Haiku judge classifies each answer as correct, stale (a state that held at another time), abstained or wrong.
 
@@ -116,7 +142,7 @@ In the check, the wrongly answered unanswerables went from 4 to 0.
 |---|---|---|
 | Judge: Claude Haiku 5.5, not GPT-4o (D035) | Cost and access | Absolute scores aren't comparable to the paper's; system-vs-system comparisons are, since every system has the same judge |
 | Dev split of 3 products, product-scoped retrieval | HERB's product-specific setting | Each question searches its own product's data, as in the paper's product-specific setup |
-| One run per system (D043, D069) | Budget | ±a few Avg points of sampling spread |
+| One run per system (D043, D069) | Budget | ±a few Avg points of sampling spread, on top of the question-sampling intervals of §3b |
 | Errors counted as answered | HERB's script counts a failed answer as "unanswered" | Stricter than HERB's own script (0 errors occurred) |
 | The validator ablation reuses the Lore run | No sampling noise between the two, judge cost only | It removes the validator and the fixed abstention line together (D076) |
 
@@ -126,7 +152,9 @@ In the check, the wrongly answered unanswerables went from 4 to 0.
 - **Synthetic data.** HERB is generated and tidy: every resolved bug has a fixing PR, every issue an assignee. Several of Lore's checks (resolved without a fix, unreviewed PRs) find nothing here.
 - **The content judge is noisy** (same answer: 90, then 40).
 - **The drift set is small (24) and ours.** Its ground truth is public with message ids, so it can be checked.
-- **Permissions (W7) are synthetic** and don't reach graph-computed counts.
+- **Permissions (W7) are synthetic.** Since D100 counts computed over hidden sources are left out for that viewer, not recomputed.
+- **The judge is the answerer's model family** (Haiku 5.5 judges Haiku 5.5). Every system shares it, so comparisons are fair to each other; the checks of §3c found it conservative, not lenient, but they are a model's reading, not a human's.
+- **Part of the graph's lead is data the graph joins, not structure alone.** Search-only systems score 0 on Customer questions because a report names `CUST-0026` and only HERB's metadata, which only the graph links, says which company that customer works at. A baseline that indexes that metadata as documents would separate the two (planned, 18.5b).
 
 ## 9. Reproduce
 ```powershell

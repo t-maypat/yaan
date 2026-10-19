@@ -42,6 +42,15 @@ def get_system(name: str) -> System:
             prepare=lambda q, product: baseline_rag.retrieve(q, product_id=product),
             respond=baseline_rag.answer_from,
         )
+    if name == "baseline-meta":  # the baseline plus a directory of who and where (D103)
+        from app.eval import baseline_rag
+
+        return System(
+            prepare=lambda q, product: baseline_rag.with_directory(
+                baseline_rag.retrieve(q, product_id=product)
+            ),
+            respond=baseline_rag.answer_from,
+        )
     if name == "lore":
         from app.agent import loop
 
@@ -60,7 +69,9 @@ def get_system(name: str) -> System:
                 q, product_id=product, toolset=tools.SEARCH_ONLY
             ),
         )
-    raise ValueError(f"unknown system {name!r}: 'baseline', 'lore' or 'lore-search'")
+    raise ValueError(
+        f"unknown system {name!r}: 'baseline', 'baseline-meta', 'lore' or 'lore-search'"
+    )
 
 
 def questions(split: str = "dev", products: list[str] | None = None) -> list[dict[str, Any]]:

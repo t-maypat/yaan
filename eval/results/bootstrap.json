@@ -1,0 +1,118 @@
+{
+ "dev": {
+  "questions": 200,
+  "resamples": 10000,
+  "systems": {
+   "lore": {
+    "avg": 83.2,
+    "avg_95": [
+     78.3,
+     87.8
+    ],
+    "unanswerable": 87.5,
+    "unanswerable_95": [
+     80.8,
+     93.3
+    ]
+   },
+   "lore-search": {
+    "avg": 25.0,
+    "avg_95": [
+     19.7,
+     30.2
+    ],
+    "unanswerable": 81.7,
+    "unanswerable_95": [
+     74.0,
+     88.5
+    ]
+   },
+   "baseline": {
+    "avg": 14.7,
+    "avg_95": [
+     10.4,
+     19.2
+    ],
+    "unanswerable": 73.1,
+    "unanswerable_95": [
+     64.4,
+     81.7
+    ]
+   }
+  },
+  "paired_vs_lore": {
+   "lore-search": {
+    "avg_diff": 58.2,
+    "avg_diff_95": [
+     51.0,
+     65.4
+    ]
+   },
+   "baseline": {
+    "avg_diff": 68.5,
+    "avg_diff_95": [
+     62.0,
+     74.9
+    ]
+   }
+  }
+ },
+ "held-out": {
+  "questions": 399,
+  "resamples": 10000,
+  "systems": {
+   "lore": {
+    "avg": 63.6,
+    "avg_95": [
+     57.8,
+     69.4
+    ],
+    "unanswerable": 76.7,
+    "unanswerable_95": [
+     71.0,
+     82.4
+    ]
+   },
+   "lore-search": {
+    "avg": 24.2,
+    "avg_95": [
+     19.6,
+     28.8
+    ],
+    "unanswerable": 81.9,
+    "unanswerable_95": [
+     76.7,
+     86.7
+    ]
+   },
+   "baseline": {
+    "avg": 9.6,
+    "avg_95": [
+     6.7,
+     12.9
+    ],
+    "unanswerable": 80.0,
+    "unanswerable_95": [
+     74.3,
+     85.2
+    ]
+   }
+  },
+  "paired_vs_lore": {
+   "lore-search": {
+    "avg_diff": 39.4,
+    "avg_diff_95": [
+     32.6,
+     46.2
+    ]
+   },
+   "baseline": {
+    "avg_diff": 54.0,
+    "avg_diff_95": [
+     48.0,
+     59.9
+    ]
+   }
+  }
+ }
+}

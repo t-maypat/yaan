@@ -10,6 +10,7 @@ citations are reported, never silently kept. Artifact text is fenced as data (§
 prompt-injection hygiene).
 """
 
+import re
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -65,6 +66,43 @@ def people_attrs(r: dict[str, Any]) -> str:
     return "".join(
         f' {key}="{" ".join(r[key])}"' for key in ("authors", "participants") if r.get(key)
     )
+
+
+IDS = re.compile(r"\bCUST-\d{3,}\b|\beid_[0-9a-f]{8}\b")
+
+
+def with_directory(results: list[dict[str, Any]], graph: str | None = None) -> list[dict[str, Any]]:
+    """The "metadata as documents" baseline (D103): the retrieved chunks plus one directory
+    document naming every customer and person they mention, with each customer's company and
+    each person's role. Search-only systems scored 0 on Customer questions because a report
+    names CUST-0026 and only HERB's metadata, which only the graph joined, says where that
+    customer works; this hands plain RAG the same joins as text, so a gap left between it and
+    Lore is structure, not data access."""
+    from app import db
+
+    ids = sorted(
+        {i for r in results for t in (r["text"], r["title"] or "") for i in IDS.findall(t)}
+    )
+    ids += sorted({e for r in results for k in ("authors", "participants") for e in r.get(k) or []})
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return results
+    rows = db.run("directory_entries", {"ids": ids, "limit": len(ids)}, graph=graph).rows
+    lines = [
+        f"{r['id']}: {r['name']}"
+        + (f", customer at {r['company']}" if r["company"] else "")
+        + (f", {r['role']}" if r["role"] else "")
+        for r in rows
+    ]
+    directory = {
+        "artifact_id": "meta:directory",
+        "kind": "directory",
+        "ts_iso": "",
+        "title": "Directory: the customers and people the artifacts above mention",
+        "url": None,
+        "text": "\n".join(lines),
+    }
+    return [*results, directory] if lines else results
 
 
 def quote_found(quote: str, source: dict[str, Any]) -> bool:

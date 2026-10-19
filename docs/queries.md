@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-192 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+193 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -136,7 +136,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_prs.cypher`](../backend/queries/upsert_prs.cypher) | pull request artifacts, with current_status from their decision chain |
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (83)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (84)
 
 | Query | Purpose |
 |---|---|
@@ -168,6 +168,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`decision_precedents.cypher`](../backend/queries/decision_precedents.cypher) | the earlier decisions that are precedents for the given one (similar subject, same kind of decision), most similar first, with who decided and the evidence quote (10.6, D066) |
 | [`derived_sources.cypher`](../backend/queries/derived_sources.cypher) | the source artifacts of derived nodes (issues, claims, decisions, alerts): a viewer may see a derived node only if they may see one of its sources (D100). A decision's source is its evidence; what it AFFECTS is its subject, and counts only for a structural decision read from that record. Each branch binds its node by id, then WITH, then traverses: without the WITH the planner folds the MATCHes into an edge scan per id (60x slower) |
 | [`derived_state.cypher`](../backend/queries/derived_state.cypher) | a product's derived nodes now in the graph with the hash of the rows that wrote them: the fold writes only what changed and removes only what went stale (D101) |
+| [`directory_entries.cypher`](../backend/queries/directory_entries.cypher) | customers and people by id, with a customer's company and a person's role: the "metadata as documents" baseline's directory (D103), the joins the graph makes, handed to plain RAG as text |
 | [`doc_discussion.cypher`](../backend/queries/doc_discussion.cypher) | the Slack discussion of a document: messages in the channel where it was first shared, until a newer version is shared there (or $window_ms) |
 | [`doc_meetings.cypher`](../backend/queries/doc_meetings.cypher) | the product's meetings whose transcript names the document's type, with who spoke in each |
 | [`entity_card.cypher`](../backend/queries/entity_card.cypher) | one person, customer, company, product, issue or area by id: its labels, properties and relationship types (counted in the API), for the UI's entity panel |
