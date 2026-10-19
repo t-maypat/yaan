@@ -87,11 +87,13 @@ def collect(
     urls: dict[str, str] | None = None,
     related: dict[str, set[str]] | None = None,
     parent: str | None = None,
+    facts: dict[str, set[str]] | None = None,
 ) -> None:
     """Record every artifact a tool returned, with its texts (what citations may quote), in
-    `urls` each artifact's own url (for validator.autocite), and in `related` the artifacts
+    `urls` each artifact's own url (for validator.autocite), in `related` the artifacts
     nested in one another's rows, both ways: a PR and the PR that reverted it (for
-    validator.reattribute, D070)."""
+    validator.reattribute, D070), and in `facts` the other values of its row, such as its
+    author's id or its PR number: the record an answer's ids must come from (D099)."""
 
     def link(aid: str) -> None:
         if related is not None and parent and parent != aid:
@@ -112,13 +114,58 @@ def collect(
             for f in value.get("fields") or []:
                 texts[aid].append(f.get("text") or "")
         for v in value.values():
-            collect(v, seen, texts, urls, related, parent)
+            collect(v, seen, texts, urls, related, parent, facts)
     elif isinstance(value, list):
         for v in value:
-            collect(v, seen, texts, urls, related, parent)
+            collect(v, seen, texts, urls, related, parent, facts)
     elif isinstance(value, str) and ARTIFACT_ID.match(value):
         seen.add(value)  # e.g. ids of the messages a link was shared in
         link(value)
+    elif facts is not None and parent and isinstance(value, str | int):
+        if not isinstance(value, bool):
+            facts.setdefault(parent, set()).add(str(value))
+
+
+def row_facts(value: Any, facts: dict[str, set[str]]) -> None:
+    """Artifacts listed in one row that is not itself an artifact (an issue with its report
+    messages, a ranked person with the PRs counted) share that row's values: the issue's
+    companies, the person's id. A sentence citing the report may name them (D099)."""
+
+    def is_artifact(v: Any) -> bool:
+        aid = v.get("artifact_id") or v.get("id")
+        return isinstance(aid, str) and bool(ARTIFACT_ID.match(aid))
+
+    def gather(v: Any, arts: set[str], leaves: set[str]) -> None:
+        if isinstance(v, dict):
+            if is_artifact(v):
+                arts.add(v.get("artifact_id") or v["id"])
+                leaves_inside: set[str] = set()  # an artifact's own values stay its own
+                for x in v.values():
+                    gather(x, arts, leaves_inside)
+                return
+            for x in v.values():
+                gather(x, arts, leaves)
+        elif isinstance(v, list):
+            for x in v:
+                gather(x, arts, leaves)
+        elif isinstance(v, str | int) and not isinstance(v, bool):
+            leaves.add(str(v))
+
+    def walk(v: Any, in_list: bool) -> None:
+        if isinstance(v, dict):
+            if in_list and not is_artifact(v):
+                arts: set[str] = set()
+                leaves: set[str] = set()
+                gather(v, arts, leaves)
+                for a in arts:
+                    facts.setdefault(a, set()).update(leaves)
+            for x in v.values():
+                walk(x, False)
+        elif isinstance(v, list):
+            for x in v:
+                walk(x, True)
+
+    walk(value, False)
 
 
 def fence(value: Any) -> Any:
@@ -155,7 +202,15 @@ def run_tools(
                 if state.get("access"):  # W7: what the viewer can't see never reaches the model
                     out, hidden = state["access"].redact(out)
                     state["hidden"] |= hidden
-                collect(out, state["seen"], state["texts"], state["urls"], state["related"])
+                collect(
+                    out,
+                    state["seen"],
+                    state["texts"],
+                    state["urls"],
+                    state["related"],
+                    facts=state["facts"],
+                )
+                row_facts(out, state["facts"])
                 entry["cypher"] = out.get("cypher", [])
                 if "cypher_run" in out:  # graph_query: the generated statement, as run
                     entry["cypher_text"] = out["cypher_run"]
@@ -229,6 +284,7 @@ def answer(
         "texts": {},
         "urls": {},
         "related": {},
+        "facts": {},
         "access": access.Access(viewer_id, graph) if viewer_id else None,
         "hidden": set(),
         "trace": [],
@@ -285,18 +341,25 @@ def answer(
         near = set().union(*(state["related"].get(a, set()) for a in stray)) & state["seen"]
         load(near - cited)
         candidate, moved = validator.reattribute(candidate, state["related"], texts)
-        return candidate, validator.check(candidate, state["seen"], texts), moved
+        report = validator.check(candidate, state["seen"], texts, state["facts"], state["related"])
+        return candidate, report, moved
 
     unvalidated = {"answer_markdown": final["answer_markdown"], "abstain": final["abstain"]}
-    final, autocited = validator.autocite(final, state["urls"])
+    final, autocited = validator.autocite(final, state["urls"], state["texts"])
     final, report, reattributed = check(final)
     first_problems = list(report.problems)
     repaired = False
+    repair_skipped = None
     if not report.ok:
         messages.append({"role": "user", "content": repair_message(report.problems)})
-        turn = ask()
-        if not turn.tool_uses:  # a repair that calls tools is ignored; the first answer stands
-            final, autocited = validator.autocite(parse(turn), state["urls"])
+        try:
+            turn = ask()
+        except llm.CacheOnly:
+            # A public demo replays cached turns only. A repair it never saw (the validator
+            # found a new problem) can't run there: what fails is dropped below (D099).
+            turn, repair_skipped = None, "cache-only"
+        if turn is not None and not turn.tool_uses:  # a repair calling tools is ignored
+            final, autocited = validator.autocite(parse(turn), state["urls"], state["texts"])
             repaired = True
             final, report, reattributed = check(final)
     cleaned, dropped = validator.clean(final, report)
@@ -329,6 +392,7 @@ def answer(
         "validator": {
             "first_problems": first_problems,
             "repaired": repaired,
+            "repair_skipped": repair_skipped,
             "autocited": autocited,
             "reattributed": reattributed,
             "final_problems": report.problems,

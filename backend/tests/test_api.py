@@ -397,3 +397,41 @@ def test_graph_health_and_eval_latest(monkeypatch):
     systems = {r["system"] for r in out["systems"]}
     assert {"baseline", "lore", "lore-search"} <= systems
     assert out["drift"]["lore"]["split"] == "drift" and out["reference"]["avg"] == 43.41
+
+
+def test_a_public_demo_drops_what_fails_when_the_repair_isnt_cached(monkeypatch):
+    """Cache-only mode can't run a repair turn it never saw: the answer still comes back,
+    with the failing sentence dropped, instead of an error (D099)."""
+    from app import llm
+
+    first = json.dumps(
+        {
+            "answer_markdown": "Nothing here is backed [1].",
+            "citations": [{"n": 1, "artifact_id": "msg:never", "quote": "never returned"}],
+            "abstain": False,
+        }
+    )
+    turn = llm.Turn(
+        content=[{"type": "text", "text": first}],
+        stop_reason="end_turn",
+        model="m",
+        input_tokens=0,
+        output_tokens=0,
+        cache_read_tokens=0,
+        cache_write_tokens=0,
+        cost_usd=0.0,
+        cached=True,
+        request_id=None,
+    )
+    replies = iter([turn])
+
+    def converse(**_):
+        try:
+            return next(replies)
+        except StopIteration:
+            raise llm.CacheOnly("not cached") from None
+
+    monkeypatch.setattr(loop.llm, "converse", converse)
+    out = loop.answer("Which bugs?", "W", graph="g")
+    assert out["abstain"] and out["validator"]["repair_skipped"] == "cache-only"
+    assert out["validator"]["dropped"] == ["Nothing here is backed [1]."]

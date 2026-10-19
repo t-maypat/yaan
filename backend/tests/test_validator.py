@@ -157,3 +157,104 @@ def test_reattribute_moves_a_quote_to_the_one_related_artifact_that_holds_it():
     assert validator.reattribute(ok, related, texts) == (ok, [])
     assert validator.reattribute(a, {}, texts) == (a, [])
     assert validator.reattribute({**a, "abstain": True}, related, texts)[1] == []
+
+
+# --- grounding, not just provenance (D099) ---------------------------------------------------
+BOB = "eid_e0273792"
+GTEXTS = {
+    "msg:1": ["The deploy to staging went fine on Tuesday."],
+    "msg:2": ["I've determined that this behavior is expected and does not require a fix."],
+    "mtg:p1": ["ainAIX_planning_1", "Bob: we should add metrics."],
+    "pr:7": ["Add GraphQL schema", "https://github.com/x/y/pull/7"],
+    "pr:8": ["Revert PR# 7", "https://github.com/x/y/pull/8"],
+}
+GSEEN = set(GTEXTS)
+GFACTS = {
+    "msg:2": {"eid_83b716d4", "Hannah Johnson"},
+    "mtg:p1": {BOB, "Bob Davis"},
+    "pr:7": {"7", "eid_aaaaaaaa"},
+    "pr:8": {"8"},
+}
+GRELATED = {"pr:7": {"pr:8"}, "pr:8": {"pr:7"}}
+
+
+def gcheck(markdown, citations):
+    return validator.check(answer(markdown, citations), GSEEN, GTEXTS, GFACTS, GRELATED)
+
+
+def test_a_verbatim_but_empty_quote_is_too_short():
+    report = gcheck("Alice approved firing Bob [1].", [(1, "msg:1", "a")])
+    assert report.bad == {1} and "too short" in report.problems[0]
+
+
+def test_a_quote_about_something_else_does_not_back_the_sentence():
+    report = gcheck(
+        "Alice approved firing Bob [1].", [(1, "msg:1", "The deploy to staging went fine")]
+    )
+    assert report.unsupported == {"Alice approved firing Bob [1]."}
+    cleaned, dropped = validator.clean(
+        answer("Alice approved firing Bob [1].", [(1, "msg:1", "The deploy to staging went fine")]),
+        report,
+    )
+    assert cleaned["abstain"] and dropped == ["Alice approved firing Bob [1]."]
+
+
+def test_a_paraphrase_said_by_the_cited_author_passes():
+    # "dismissed" shares no word with the quote, but the sentence names the message's author
+    report = gcheck(
+        "eid_83b716d4 (Hannah Johnson) dismissed the LIME bug [1].",
+        [(1, "msg:2", "does not require a fix")],
+    )
+    assert report.ok, report.problems
+
+
+def test_an_id_held_by_the_cited_record_may_stand_with_a_short_quote():
+    ok = gcheck(
+        f"Bob Davis ({BOB}) spoke in the planning meeting [1].",
+        [(1, "mtg:p1", "ainAIX_planning_1")],
+    )
+    assert ok.ok, ok.problems
+    bare = gcheck(
+        "Bob Davis spoke in the planning meeting [1].", [(1, "mtg:p1", "ainAIX_planning_1")]
+    )
+    assert bare.bad == {1}  # a name isn't an identifier: quote what he said
+
+
+def test_every_identifier_must_be_in_a_cited_or_related_record():
+    related = gcheck("PR #7 was reverted by PR #8 [1].", [(1, "pr:7", "Add GraphQL schema")])
+    assert related.ok, related.problems  # #8 reverted #7: one tool row
+    stray = gcheck("PR #7 was written by eid_bbbbbbbb [1].", [(1, "pr:7", "Add GraphQL schema")])
+    assert any("eid_bbbbbbbb is in none of" in p for p in stray.problems)
+
+
+def test_autocite_only_cites_a_line_that_says_no_more_than_the_link():
+    urls = {"https://github.com/x/y/pull/7": "pr:7"}
+    plain = answer("- PR #7, Add GraphQL schema: https://github.com/x/y/pull/7", [])
+    _, added = validator.autocite(plain, urls, GTEXTS)
+    assert added == [1]
+    claim = answer("Revenue fell 40% after https://github.com/x/y/pull/7 shipped.", [])
+    _, added = validator.autocite(claim, urls, GTEXTS)
+    assert added == []
+
+
+def test_a_bare_list_number_states_nothing():
+    assert not validator.needs_citation("1.")
+
+
+def test_reports_listed_in_an_issue_row_share_its_companies():
+    from app.agent import loop
+
+    out = {
+        "issues": [
+            {
+                "id": "iss:W:1",
+                "customers": [{"id": "CUST-0067", "company": "NextGenTech"}],
+                "history": [{"artifact_id": "msg:5", "quote": "fixed", "by": "eid_cccccccc"}],
+            }
+        ]
+    }
+    facts: dict = {}
+    loop.collect(out, set(), {}, facts=facts)
+    loop.row_facts(out, facts)
+    assert {"CUST-0067", "NextGenTech", "iss:W:1"} <= facts["msg:5"]
+    assert "eid_cccccccc" in facts["msg:5"]  # its own record, from collect
