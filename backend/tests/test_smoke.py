@@ -20,14 +20,26 @@ class FakeClient:
         return True
 
 
-def test_health_is_ok_when_falkordb_answers(monkeypatch):
+@pytest.fixture
+def no_worker(monkeypatch):
+    from app.connectors import runner
+
+    monkeypatch.setattr(runner, "worker_health", lambda graph: {"status": "absent"})
+
+
+def test_health_is_ok_when_falkordb_answers(monkeypatch, no_worker):
     monkeypatch.setattr(db, "client", lambda readonly: FakeClient())
     response = TestClient(app).get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": __version__, "falkordb": "ok"}
+    assert response.json() == {
+        "status": "ok",
+        "version": __version__,
+        "falkordb": "ok",
+        "worker": "absent",
+    }
 
 
-def test_health_is_503_when_falkordb_is_down(monkeypatch):
+def test_health_is_503_when_falkordb_is_down(monkeypatch, no_worker):
     error = ConnectionError("Error 10061 connecting to localhost:6379")
     monkeypatch.setattr(db, "client", lambda readonly: FakeClient(error))
     response = TestClient(app).get("/health")
@@ -36,7 +48,17 @@ def test_health_is_503_when_falkordb_is_down(monkeypatch):
         "status": "unavailable",
         "version": __version__,
         "falkordb": "ConnectionError",  # the type only: no host or port details leak
+        "worker": "absent",
     }
+
+
+def test_health_reports_a_stalled_worker_but_keeps_serving(monkeypatch):
+    from app.connectors import runner
+
+    monkeypatch.setattr(db, "client", lambda readonly: FakeClient())
+    monkeypatch.setattr(runner, "worker_health", lambda graph: {"status": "stale"})
+    response = TestClient(app).get("/health")
+    assert response.status_code == 200 and response.json()["worker"] == "stale"
 
 
 @pytest.mark.db

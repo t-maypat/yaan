@@ -10,7 +10,13 @@ Hardening after the post-event review (docs/hardening-plan.md).
 - The site and README state counts that a test now checks against the code (queries, agent tools, MCP tools), mark the eight connectors not yet run against the live tools as experimental, and say what the citation check does and doesn't prove. The HERB paper's agent is shown as context, not as a head-to-head.
 - The README says which decisions Yaan tracks today: issue status and pull-request intent.
 
+### Upgrading
+- Connectors now run in their own container: `docker compose --profile app --profile connectors up -d` replaces `docker compose exec -d api yaan connectors run`.
+- The containers no longer run as root. On Linux, `./data` must be writable by uid 10001 (`sudo chown -R 10001:10001 data`), or set `LORE_UID` and `LORE_GID` in `.env` to its owner. The container says so at start if it isn't. Docker Desktop needs nothing.
+
 ### Added
+- A `worker` service for the connector loop, restarted by Docker and healthchecked; `/health` reports whether it is running.
+- The containers run unprivileged, on a read-only filesystem apart from `./data` and `/tmp`, with no Linux capabilities.
 - CI: lint, tests without a database, the full suite on FalkorDB, and the web build.
 - SECURITY.md: how to report a vulnerability privately.
 

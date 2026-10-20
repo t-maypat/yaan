@@ -65,7 +65,7 @@ Org mode points Yaan at your team's tools instead of the demo. Your data goes in
 ```sh
 docker compose --profile app up -d --force-recreate api
 docker compose --profile app exec api yaan init                 # your graph, product, channels and people
-docker compose --profile app exec -d api yaan connectors run    # Slack over Socket Mode; the rest polled every 30 s
+docker compose --profile app --profile connectors up -d          # the connector worker: Slack over Socket Mode, the rest polled every 30 s
 ```
 
 5. Sign people in. In org mode every API, web UI and `/mcp` request answers as a signed-in person, who sees only the sources they may see, and approvals are recorded as theirs:

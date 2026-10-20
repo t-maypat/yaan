@@ -580,12 +580,21 @@ def health(response: Response) -> dict[str, str]:
 
     Uptime checks (Phase 15) watch this. The error names only its type, not connection details.
     """
+    from app.connectors import runner
+
+    # the connector worker's heartbeat (D108): reported, not a reason to stop serving answers
+    worker = runner.worker_health(graph())["status"]
     try:
         db.client(readonly=True).connection.ping()
     except Exception as e:  # down, wrong password, users missing: all mean "not serving"
         response.status_code = 503
-        return {"status": "unavailable", "version": __version__, "falkordb": type(e).__name__}
-    return {"status": "ok", "version": __version__, "falkordb": "ok"}
+        return {
+            "status": "unavailable",
+            "version": __version__,
+            "falkordb": type(e).__name__,
+            "worker": worker,
+        }
+    return {"status": "ok", "version": __version__, "falkordb": "ok", "worker": worker}
 
 
 # The built web UI (the Docker image, R2 W6). Mounted last, so every API route above wins; in

@@ -3,6 +3,33 @@
 # Profile `app` adds the API serving the built UI (R2 W6); a TLS proxy is the deployment's.
 name: lore
 
+# Settings the API and the connector worker share (one image, two commands).
+x-yaan: &yaan
+  build: .
+  image: lore-api
+  env_file: .env
+  environment:
+    FALKORDB_HOST: falkordb # the service name, inside the compose network
+    FALKORDB_PORT: "6379" # the container's port; .env's FALKORDB_PORT is the host's
+  depends_on:
+    falkordb:
+      condition: service_healthy
+  volumes:
+    - ./data:/app/data # embedding model, caches, tokens, the live path's data (seeded)
+    - ./snapshots:/app/snapshots
+    # connector maps and the people directory (org mode): an edit applies on restart
+    - ./connectors.yaml:/app/connectors.yaml:ro
+    - ./people.yaml:/app/people.yaml:ro
+  # Least privilege (H1, D108): an unprivileged user (on Linux, LORE_UID / LORE_GID = the owner
+  # of ./data), a read-only filesystem apart from ./data and /tmp, no Linux capabilities, and
+  # no way to gain privileges.
+  user: "${LORE_UID:-10001}:${LORE_GID:-10001}"
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+
 services:
   falkordb:
     image: "falkordb/falkordb:${FALKORDB_TAG:?set FALKORDB_TAG in .env to a pinned release}"
@@ -53,25 +80,25 @@ services:
   # The API with the built web UI (R2 W6): docker compose --profile app up -d --build
   # Seed it once, no API key needed: docker compose --profile app run --rm api lore seed --from <path or URL>
   api:
+    <<: *yaan
     profiles: ["app"]
-    build: .
-    image: lore-api
-    env_file: .env
-    environment:
-      FALKORDB_HOST: falkordb # the service name, inside the compose network
-      FALKORDB_PORT: "6379" # the container's port; .env's FALKORDB_PORT is the host's
-    depends_on:
-      falkordb:
-        condition: service_healthy
     ports:
       - "127.0.0.1:${LORE_API_PORT:-8000}:8000" # put a TLS proxy in front for a public deployment
-    volumes:
-      - ./data:/app/data # embedding model, caches, the live path's data (seeded)
-      - ./snapshots:/app/snapshots
-      # connector maps and the people directory (org mode): an edit applies on restart
-      - ./connectors.yaml:/app/connectors.yaml:ro
-      - ./people.yaml:/app/people.yaml:ro
-    restart: unless-stopped
+
+  # The connector loop (H1, D108): its own container, so Docker restarts it after a crash or a
+  # reboot, and its healthcheck notices a loop that stopped making rounds.
+  #   docker compose --profile app --profile connectors up -d
+  worker:
+    <<: *yaan
+    profiles: ["connectors"]
+    command: ["yaan", "connectors", "run"]
+    healthcheck:
+      # unhealthy when the next round is overdue (runner.worker_health reads its heartbeat)
+      test: ["CMD", "yaan", "connectors", "health"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 180s
 
 volumes:
   falkordb-data:

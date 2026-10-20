@@ -194,8 +194,10 @@ cd yaan</code></pre>
       <pre class="code"><code>docker compose --profile app up -d --force-recreate api
 docker compose --profile app exec api yaan init
 docker compose --profile app exec api yaan connectors status</code></pre>
-      <p>Start the connectors. They keep running in the background:</p>
-      <pre class="code"><code>docker compose --profile app exec -d api yaan connectors run</code></pre>
+      <p>Start the connectors. They run in their own container, which Docker restarts after a crash or a reboot:</p>
+      <pre class="code"><code>docker compose --profile app --profile connectors up -d
+docker compose --profile connectors exec worker yaan connectors health</code></pre>
+      <p>An item a connector can&rsquo;t ingest is kept, not dropped: <code>yaan connectors dead</code> lists them and <code>yaan connectors retry</code> replays them once you have fixed the cause.</p>
       <p class="tip"><b>Tip:</b> Slack uses Socket Mode. You do not need a public URL. GitHub, Jira and Notion are checked every 30 seconds.</p>
     </section>
 
