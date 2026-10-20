@@ -11,6 +11,11 @@ over the whole extracted layer, so one code path serves both:
    recreates decisions and claims with the same ids, so the FLAGS, EVIDENCED_BY and NOTIFIES
    edges are re-linked on every run;
 5. an open alert whose change is gone after a rebuild becomes `withdrawn`. Nothing is deleted.
+
+The live path judges only the decision chains its fold changed (`topics`, D112): the same
+rules, found from the topic index, and only those topics' alerts can be withdrawn. Key-person
+and bus-factor alerts read the derived layer, so they come with the full run, which the
+periodic job (`live.derive_if_due`) and the batch make.
 """
 
 import time
@@ -96,13 +101,23 @@ def summary(kind: str, c: dict[str, Any]) -> str:
     )
 
 
-def run(graph: str | None = None, *, now_ms: int | None = None) -> dict[str, Any]:
-    """Judge every decision change in `graph`, write the alerts, and report what changed."""
+def run(
+    graph: str | None = None, *, now_ms: int | None = None, topics: list[str] | None = None
+) -> dict[str, Any]:
+    """Judge every decision change in `graph` (or only `topics`' chains), write the alerts,
+    and report what changed."""
     now_ms = now_ms or int(time.time() * 1000)
     now_iso = datetime.fromtimestamp(now_ms / 1000, UTC).isoformat().replace("+00:00", "Z")
-    changes = db.run_all("sentinel_changes", {}, cap=50_000, graph=graph)
-    # dismissals by someone outside the area's working group (CDLP, D064); none before derive
-    changes += db.run_all("outside_decisions", {}, cap=10_000, graph=graph, timeout_ms=30_000)
+    if topics is not None:
+        changes = []
+        if topics:
+            given = {"topics": topics}
+            changes = db.run_all("sentinel_changes_for", given, cap=50_000, graph=graph)
+            changes += db.run_all("outside_decisions_for", given, cap=10_000, graph=graph)
+    else:
+        changes = db.run_all("sentinel_changes", {}, cap=50_000, graph=graph)
+        # dismissals by someone outside the area's working group (CDLP, D064); none before derive
+        changes += db.run_all("outside_decisions", {}, cap=10_000, graph=graph, timeout_ms=30_000)
     rows: dict[str, list[dict[str, Any]]] = {name: [] for name in LOAD_ORDER}
     seen: set[str] = set()
     progress = 0
@@ -152,7 +167,7 @@ def run(graph: str | None = None, *, now_ms: int | None = None) -> dict[str, Any
             {"alert_id": alert_id, "person_id": p["id"], "reasons": p["reasons"]}
             for p in radius["people"]
         ]
-    for alert, radius in key_person_alerts(graph, now_ms, now_iso):
+    for alert, radius in key_person_alerts(graph, now_ms, now_iso) if topics is None else []:
         seen.add(alert["id"])
         rows["upsert_alerts"].append(alert)
         for action in drafts.key_person_drafts(alert, radius):
@@ -176,7 +191,15 @@ def run(graph: str | None = None, *, now_ms: int | None = None) -> dict[str, Any
         "rows": 0,
         **db.run("link_alert_caused", {}, graph=graph, readonly=False).stats,
     }
-    withdrawn = db.run("withdraw_alerts", {"ids": sorted(seen)}, graph=graph, readonly=False)
+    if topics is None:
+        withdrawn = db.run("withdraw_alerts", {"ids": sorted(seen)}, graph=graph, readonly=False)
+    else:
+        withdrawn = db.run(
+            "withdraw_alerts_for",
+            {"ids": sorted(seen), "topics": topics},
+            graph=graph,
+            readonly=False,
+        )
     report["withdraw_alerts"] = {"rows": withdrawn.rows[0]["withdrawn"], **withdrawn.stats}
     return {
         "changes": len(changes),

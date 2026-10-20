@@ -204,6 +204,10 @@ def test_an_org_sync_prepares_the_graph_and_takes_unlabeled_items(org_mode, monk
     monkeypatch.setattr(runner, "prepare", lambda graph, connectors=None: prepared.append(graph))
     monkeypatch.setattr(runner, "deliver", lambda connectors, graph: ([], []))
     monkeypatch.setattr(live, "present_ids", lambda graph, ids: set())
+    monkeypatch.setattr(live, "derive_if_due", lambda graph: None)
+    monkeypatch.setattr(
+        live, "ingest_batch", lambda items, graph: [ingest(a, graph, e, r) for a, e, r in items]
+    )
 
     def ingest(a, graph, events=None, replace=False):
         ingested.append((a.id, graph))
@@ -497,3 +501,78 @@ def test_a_live_message_is_read_with_its_conversation(org_mode, empty_graph, mon
     assert seen == [[first.id, reply.id]]  # the earlier message first, then the new one
     assert [e["type"] for e in out["events"]] == ["issue_resolved"]  # its own claim only
     assert out["events"][0]["artifact_id"] == reply.id
+
+
+@pytest.mark.db
+@pytest.mark.model
+def test_a_batch_ends_where_one_message_at_a_time_does(org_mode, empty_graph):
+    """D112: a connector round goes in as one batch (one fold, one Sentinel pass). A report, a
+    fix and a reopening of one bug, batched on one graph and one by one on another, end in
+    the same derived layer and the same regression alert."""
+    import uuid
+
+    from app import schema
+
+    other = f"lore_test_{uuid.uuid4().hex[:12]}"
+    schema.apply(other)
+    try:
+        for g in (empty_graph, other):
+            org.prepare(g, MAPS.product, MAPS.sources)
+        priya, ken = org.eid_for("priya@acme.example"), "eid_0000beef"
+        steps = [
+            (priya, "issue_reported", "The CSV export times out on big dashboards"),
+            (priya, "issue_resolved", "The CSV export times out bug is fixed"),
+            (ken, "issue_reopened", "The CSV export times out again"),
+        ]
+
+        def item(n, who, kind, text):
+            a = Artifact(
+                id=base.synthetic_id("msg", "slack", f"C1-18045864{n:02d}.0001"),
+                kind="message",
+                product_hint="Acme",
+                channel_id="bug-support",
+                ts_ms=1804586400000 + n * 60_000,
+                ts_iso=f"2027-03-09T10:{n:02d}:00Z",
+                author_eid=who,
+                text=text,
+                raw_ref=f"slack:C1:{n}",
+                meta={"channel_name": "bug-support", "sender": who, "source": "slack"},
+            )
+            ev = base.structured_event(kind, a, text, who, issue="CSV export times out")
+            return a, [ev], False
+
+        batch = [item(n, *s) for n, s in enumerate(steps)]
+        outs = live.ingest_batch(batch, empty_graph)
+        assert [o["batch"] for o in outs] == [3, 3, 3]
+        for a, events, replace in batch:
+            live.ingest_artifact(a, other, events=events, replace=replace)
+
+        def state(g):
+            """Every derived node's labels and properties, apart from when each of its events
+            reached Yaan (observed_ms, and the row hash that covers it): the two graphs
+            received the same messages at different moments."""
+            nodes = db.run_text(
+                "MATCH (n) WHERE n:Claim OR n:Decision OR n:Issue "
+                "RETURN labels(n) AS labels, properties(n) AS props LIMIT 100",
+                label="derived",
+                graph=g,
+            ).rows
+            alerts = db.run_text(
+                "MATCH (a:Alert) RETURN a.id AS id, a.kind AS kind, a.status AS status LIMIT 20",
+                label="alerts",
+                graph=g,
+            ).rows
+            plain = [
+                (r["labels"], sorted((k, str(v)) for k, v in r["props"].items()
+                                     if k not in ("observed_ms", "row_hash")))
+                for r in nodes
+            ]
+            return sorted(plain), sorted((r["id"], r["kind"], r["status"]) for r in alerts)
+
+        derived, alerts = state(empty_graph)
+        assert len(derived) == 7  # 3 claims, 3 decisions, the issue
+        assert (derived, alerts) == state(other)
+        assert [k for _, k, _ in alerts] == ["regression"]
+        assert outs[2]["alerts"] and outs[2]["alerts"][0]["kind"] == "regression"
+    finally:
+        db.client(readonly=False).select_graph(other).delete()

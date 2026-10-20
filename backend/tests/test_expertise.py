@@ -119,8 +119,45 @@ def test_derive_writes_areas_knows_and_the_truck_factor(empty_graph):
         graph=empty_graph,
     ).rows
     assert issues == [{"n": 3}]
-    again = derive.expertise(empty_graph)  # idempotent: cleared and rewritten
+    again = derive.expertise(empty_graph)  # idempotent: rewritten in place
     assert again["report"]["upsert_areas"]["rows"] == out["report"]["upsert_areas"]["rows"]
+
+
+@pytest.mark.db
+def test_a_rebuild_never_empties_the_layers_and_drops_what_went_stale(empty_graph, monkeypatch):
+    """D112: expertise, USES and precedents are rewritten in place, then what the rebuild
+    didn't write goes. Before every write statement of a second rebuild, a reader still finds
+    Areas, KNOWS and USES; an Area that no longer has work goes once the rebuild is done."""
+    db.run_text(FIXTURE.read_text(encoding="utf-8"), label="f", graph=empty_graph, readonly=False)
+    derive.expertise(empty_graph)
+    derive.uses(empty_graph)
+    db.run_text(
+        "MATCH (w:Product {id: 'Widget'}) CREATE (:Area:Entity {id: 'area:Widget:ghost', "
+        "name: 'Ghost', product_id: 'Widget'})-[:IN_PRODUCT]->(w)",
+        label="stale area",
+        graph=empty_graph,
+        readonly=False,
+    )
+    count = (
+        "MATCH (a:Area) WITH count(a) AS areas "
+        "OPTIONAL MATCH (:Person)-[k:KNOWS]->(:Area) WITH areas, count(k) AS knows "
+        "OPTIONAL MATCH (:Company)-[u:USES]->(:Product) RETURN areas, knows, count(u) AS uses "
+        "LIMIT 1"
+    )
+    real, seen = db.run, []
+
+    def run(name, params=None, **kw):
+        if not kw.get("readonly", True):
+            seen.append((name, db.run_text(count, label="reader", graph=empty_graph).rows[0]))
+        return real(name, params, **kw)
+
+    monkeypatch.setattr(db, "run", run)
+    derive.expertise(empty_graph)
+    derive.uses(empty_graph)
+    monkeypatch.setattr(db, "run", real)
+    assert seen and all(r["areas"] and r["knows"] and r["uses"] for _, r in seen), seen
+    names = db.run_text("MATCH (a:Area) RETURN a.name AS n LIMIT 10", label="a", graph=empty_graph)
+    assert "Ghost" not in [r["n"] for r in names.rows] and names.rows
 
 
 def test_collab_weights_split_a_meeting_and_count_each_review():

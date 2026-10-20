@@ -7,6 +7,7 @@ What changed between versions, newest first. Yaan is 0.x: settings and the graph
 Hardening after the post-event review (docs/hardening-plan.md).
 
 ### Changed
+- Expertise, precedents, company-use and key-person alerts are rebuilt at most every five minutes after new data, instead of on every message; regressions, reversals and conflicts are still flagged on the message itself.
 - The site and README state counts that a test now checks against the code (queries, agent tools, MCP tools), mark the eight connectors not yet run against the live tools as experimental, and say what the citation check does and doesn't prove. The HERB paper's agent is shown as context, not as a head-to-head.
 - The README says which decisions Yaan tracks today: issue status and pull-request intent.
 
@@ -19,6 +20,7 @@ Hardening after the post-event review (docs/hardening-plan.md).
 - The containers no longer run as root. On Linux, `./data` must be writable by uid 10001 (`sudo chown -R 10001:10001 data`), or set `LORE_UID` and `LORE_GID` in `.env` to its owner. The container says so at start if it isn't. Docker Desktop needs nothing.
 
 ### Added
+- Live ingestion in batches: a connector round's items go through one fold and one Sentinel pass. On a copy of the demo graph with twice its events, a message costs about 80 ms in a batch of ten, down from 7 s (`scripts/bench_live.py` measures it).
 - `yaan token list` and `yaan token revoke <person> --id <id>` (one token, not all of a person's); tokens record when they were last used.
 - A Content-Security-Policy and other security headers on every response.
 - A release workflow: a version tag publishes the image to GitHub's registry and opens the release.
@@ -28,6 +30,7 @@ Hardening after the post-event review (docs/hardening-plan.md).
 - SECURITY.md: how to report a vulnerability privately.
 
 ### Fixed
+- Rebuilding expertise, precedents and company-use emptied them first, so an answer during a rebuild could find none. They are now replaced in place.
 - An approval interrupted midway left an approved alert with a half-written decision. Responses are now claimed with all their writes and finished on restart; drafts are sent only once their response is complete.
 - An approved follow-up could be posted twice after a timeout or a crash, or marked sent when it reached one tool but not another. Every post now carries a marker and is looked for before posting again.
 - A long write could outlive the writer lock's lease; the lease is now renewed, and a writer that loses it stops.

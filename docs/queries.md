@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-205 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+211 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -35,11 +35,11 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`health_pr_chains.cypher`](../backend/queries/health_pr_chains.cypher) | PRs with and without a status decision chain, internal vs external |
 | [`health_spoke_in.cypher`](../backend/queries/health_spoke_in.cypher) | resolved meeting speakers per resolution method (S10) |
 
-**Writes: ingestion, linking, the fold, derived layers, the Sentinel** (101)
+**Writes: ingestion, linking, the fold, derived layers, the Sentinel** (103)
 
 | Query | Purpose |
 |---|---|
-| [`clear_areas.cypher`](../backend/queries/clear_areas.cypher) | remove the derived expertise layer (Area nodes with their IN_AREA and KNOWS edges) before it is rebuilt; nothing else is touched |
+| [`clear_areas.cypher`](../backend/queries/clear_areas.cypher) | remove the Areas this expertise rebuild (run $run) didn't write, with their edges, after it wrote its own: readers never see the layer empty (10.0, D112) |
 | [`clear_claim_edges.cypher`](../backend/queries/clear_claim_edges.cypher) | the edges a changed claim owns, removed before the fold links them again (D101) |
 | [`clear_collab.cypher`](../backend/queries/clear_collab.cypher) | remove the COLLAB projection before it is rebuilt (10.1) |
 | [`clear_communities.cypher`](../backend/queries/clear_communities.cypher) | remove the Community nodes and their IN_COMMUNITY edges before they are rebuilt (10.4) |
@@ -47,8 +47,9 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`clear_issue_edges.cypher`](../backend/queries/clear_issue_edges.cypher) | the edges a changed issue owns (not IN_AREA, which derive owns), removed before the fold links them again (D101) |
 | [`clear_issue_fixes.cypher`](../backend/queries/clear_issue_fixes.cypher) | the FIXES edges into a changed issue (the fold owns them, though they start at the PR), removed before the fold links them again (D101) |
 | [`clear_pr_actions.cypher`](../backend/queries/clear_pr_actions.cypher) | a product's PRs whose stated action the fold no longer derives lose it (D101) |
-| [`clear_similar_precedents.cypher`](../backend/queries/clear_similar_precedents.cypher) | remove the similarity PRECEDENT_FOR edges before they are rebuilt; precedents written by approvals (11.4) carry no basis and stay |
-| [`clear_uses.cypher`](../backend/queries/clear_uses.cypher) | remove the derived Company-USES-Product edges before they are rebuilt (10.6) |
+| [`clear_similar_precedents.cypher`](../backend/queries/clear_similar_precedents.cypher) | remove the similarity PRECEDENT_FOR edges an earlier rebuild left (written before run $run), after this one wrote its own: readers never see none (D112); precedents written by approvals (11.4) carry no basis and stay |
+| [`clear_stale_expertise_edges.cypher`](../backend/queries/clear_stale_expertise_edges.cypher) | the IN_AREA and KNOWS edges into a kept Area that this rebuild (run $run) didn't write: a person who no longer knows it, an issue moved to another area (D112) |
+| [`clear_uses.cypher`](../backend/queries/clear_uses.cypher) | remove the derived Company-USES-Product edges this rebuild (run $run) didn't write, after it wrote its own: readers never see none (10.6, D112) |
 | [`delete_claims.cypher`](../backend/queries/delete_claims.cypher) | claims the fold no longer derives (their events were retracted or re-resolved), removed with their edges (D101) |
 | [`delete_dead_letters.cypher`](../backend/queries/delete_dead_letters.cypher) | drop dead letters whose item has now been ingested (H1, D107) |
 | [`delete_decisions.cypher`](../backend/queries/delete_decisions.cypher) | decisions the fold no longer derives (their events were retracted or re-resolved), removed with their edges (D101) |
@@ -104,6 +105,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`link_supports.cypher`](../backend/queries/link_supports.cypher) | (Claim)-[:SUPPORTS]->(Decision): a claim that created or repeated the decision's value (§9.4) |
 | [`link_works_at.cypher`](../backend/queries/link_works_at.cypher) | (Customer)-[:WORKS_AT]->(Company) |
 | [`mark_action_sent.cypher`](../backend/queries/mark_action_sent.cypher) | record where an approved action was delivered (a URL in the connected tool) and when, so it is sent once |
+| [`mark_job.cypher`](../backend/queries/mark_job.cypher) | a live write made a periodic job due (dirty_ms), or the job ran (done_ms) (D112) |
 | [`set_action_status.cypher`](../backend/queries/set_action_status.cypher) | record what happened to each drafted action (approved, skipped, dismissed), with the edited text when the approver changed it |
 | [`set_alert_response.cypher`](../backend/queries/set_alert_response.cypher) | the last step of a response: a 'responding' alert closes as approved or dismissed, with who and when (11.4, D110); matches nothing unless the response was claimed, so a second response is refused |
 | [`set_channel_visibility.cypher`](../backend/queries/set_channel_visibility.cypher) | who may read a channel in org mode: 'public' (everyone signed in) or 'private' (its MEMBER_OF people); from Slack, or declared in connectors.yaml (H1, D109) |
@@ -141,7 +143,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_prs.cypher`](../backend/queries/upsert_prs.cypher) | pull request artifacts, with current_status from their decision chain |
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (91)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (95)
 
 | Query | Purpose |
 |---|---|
@@ -174,7 +176,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`decision_chain.cypher`](../backend/queries/decision_chain.cypher) | every state in the given decision topics: value, validity window, origin, who decided it, the evidence quotes, the claims behind it with the policy's verdict, refused claims, alerts that flagged it, the responses it caused and similar earlier cases; oldest first (tool 6 decision_lineage, R2) |
 | [`decision_precedents.cypher`](../backend/queries/decision_precedents.cypher) | the earlier decisions that are precedents for the given one (similar subject, same kind of decision), most similar first, with who decided and the evidence quote (10.6, D066) |
 | [`derived_sources.cypher`](../backend/queries/derived_sources.cypher) | the source artifacts of derived nodes (issues, claims, decisions, alerts): a viewer may see a derived node only if they may see one of its sources (D100). A decision's source is its evidence; what it AFFECTS is its subject, and counts only for a structural decision read from that record. Each branch binds its node by id, then WITH, then traverses: without the WITH the planner folds the MATCHes into an edge scan per id (60x slower) |
-| [`derived_state.cypher`](../backend/queries/derived_state.cypher) | a product's derived nodes now in the graph with the hash of the rows that wrote them: the fold writes only what changed and removes only what went stale (D101) |
+| [`derived_state.cypher`](../backend/queries/derived_state.cypher) | a product's derived nodes now in the graph with the hash of the rows that wrote them and the topic they belong to: the fold writes only what changed, removes only what went stale, and tells the Sentinel which topics moved (D101, D112) |
 | [`directory_entries.cypher`](../backend/queries/directory_entries.cypher) | customers and people by id, with a customer's company and a person's role: the "metadata as documents" baseline's directory (D103), the joins the graph makes, handed to plain RAG as text |
 | [`doc_discussion.cypher`](../backend/queries/doc_discussion.cypher) | the Slack discussion of a document: messages in the channel where it was first shared, until a newer version is shared there (or $window_ms) |
 | [`doc_meetings.cypher`](../backend/queries/doc_meetings.cypher) | the product's meetings whose transcript names the document's type, with who spoke in each |
@@ -194,6 +196,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`issue_fix_prs.cypher`](../backend/queries/issue_fix_prs.cypher) | the pull requests that fix one issue, for a connector that comments on them (17.4 write-back) |
 | [`issue_report_ids.cypher`](../backend/queries/issue_report_ids.cypher) | the messages that reported one issue, oldest first, so a connector can find the ticket it came from (17.5 write-back) |
 | [`issue_reports.cypher`](../backend/queries/issue_reports.cypher) | customer issue reports: support-channel messages in the product that mention a customer, with each customer's company and the people mentioned |
+| [`job_state.cypher`](../backend/queries/job_state.cypher) | when a periodic job last ran and when a live write last made it due (D112) |
 | [`key_people.cypher`](../backend/queries/key_people.cypher) | each product's first truck-factor person and the areas they are the only author of, in any product: the input for key_person alerts (11.5, D062) |
 | [`legacy_derived.cypher`](../backend/queries/legacy_derived.cypher) | extracted decisions written before D101 carry no product_id: a graph holding them gets its derived layer cleared once and rewritten |
 | [`lineage_subjects.cypher`](../backend/queries/lineage_subjects.cypher) | the product's issues and own pull requests, the subjects a decision chain can be about: decision_lineage and impact_of match a name, title or PR number against them (R2) |
@@ -203,6 +206,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`list_indexes.cypher`](../backend/queries/list_indexes.cypher) | every index in the graph with its kind, options and build status (lore schema checks these against 00_schema.cypher) |
 | [`list_products.cypher`](../backend/queries/list_products.cypher) | every product with its codenames and how many artifacts it holds, for the UI's product picker |
 | [`outside_decisions.cypher`](../backend/queries/outside_decisions.cypher) | active dismissals decided by someone whose working group (CDLP community) is not among the groups of the people who did the work in the issue's area (11.5, D064); rows shaped like sentinel_changes |
+| [`outside_decisions_for.cypher`](../backend/queries/outside_decisions_for.cypher) | outside_decisions for the decision chains a fold just changed (the live path, D112): a dismissal decided outside the area's working group, found from the topic index |
 | [`people_by_role.cypher`](../backend/queries/people_by_role.cypher) | people with a role (from the org chart) who authored, spoke in or attended the product's artifacts, most active first |
 | [`person_activity.cypher`](../backend/queries/person_activity.cypher) | what one person did per product: artifacts authored, reviewed, attended or spoken in, by kind (tool 4 person_profile, R2) |
 | [`person_betweenness.cypher`](../backend/queries/person_betweenness.cypher) | FalkorDB's native betweenness centrality over COLLAB: the people who bridge otherwise separate groups (10.4, D064) |
@@ -228,6 +232,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`resolve_product.cypher`](../backend/queries/resolve_product.cypher) | products whose id, name or codename equals the text (codenames come from renamed channels, D029) |
 | [`retract_events.cypher`](../backend/queries/retract_events.cypher) | a newer version of an artifact no longer states these events: close them (retracted_ms), never delete them, so the belief at an earlier moment can be replayed (D101) |
 | [`sentinel_changes.cypher`](../backend/queries/sentinel_changes.cypher) | the decision changes the Sentinel judges (11.1): every extracted supersession (old and new value, subject, evidence quote, decider) and every claim that CONFLICTS_WITH an active decision (§9.4 rule 5) |
+| [`sentinel_changes_for.cypher`](../backend/queries/sentinel_changes_for.cypher) | sentinel_changes for the decision chains a fold just changed (the live path, D112): the same rows, found from the topic index instead of every decision |
 | [`states_at.cypher`](../backend/queries/states_at.cypher) | the decisions in force at one moment for a product's issues and own PRs (valid_from_ms <= t < valid_to_ms, or still open): the as-of view of list_issues, list_prs and decision_lineage (R2) |
 | [`stuck_responses.cypher`](../backend/queries/stuck_responses.cypher) | responses claimed but never closed (the process stopped midway), with the writes they still owe (H2, D110) |
 | [`subject_product.cypher`](../backend/queries/subject_product.cypher) | the product an issue or pull request belongs to, for the API's lineage endpoint |
@@ -236,4 +241,5 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`viewer_meetings.cypher`](../backend/queries/viewer_meetings.cypher) | the meetings a person attended or spoke in, for viewer-scoped answers (W7) |
 | [`viewer_member_channels.cypher`](../backend/queries/viewer_member_channels.cypher) | the channels a person is a member of (org mode: from Slack or connectors.yaml), for viewer-scoped answers (H1, D109) |
 | [`withdraw_alerts.cypher`](../backend/queries/withdraw_alerts.cypher) | open alerts whose change is gone after a rebuild (e.g. a corrected extraction) become 'withdrawn'; never deleted, and approved or dismissed ones keep their status |
+| [`withdraw_alerts_for.cypher`](../backend/queries/withdraw_alerts_for.cypher) | withdraw_alerts for the topics a fold just changed (D112): an open alert on one of them whose change is gone becomes 'withdrawn' |
 <!-- /queries -->

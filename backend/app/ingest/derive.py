@@ -9,6 +9,9 @@ Company-USES-Product, PRECEDENT_FOR, truck factor.
 Spec: docs/CONTEXT.md §9.3 (S9), §9.7.
 """
 
+import time
+from typing import Any
+
 from app import db
 
 MIN_ARTIFACTS = 3  # a team with one stray message isn't working on the product
@@ -25,10 +28,19 @@ EXPERTISE_ORDER = ("upsert_areas", "link_in_area_issue", "link_in_area_pr", "ups
 READ_LIMIT = 50_000
 
 
+def run_stamp() -> int:
+    """A rebuild's mark on what it writes, so it can then remove only what an earlier rebuild
+    left: the layer is replaced in place, never emptied first (D112)."""
+    return time.time_ns() // 1000
+
+
 def expertise(graph: str | None = None) -> dict:
     """Phase 10.0-10.3 (D059): rebuild Areas, IN_AREA and KNOWS, and set each product's truck
-    factor. Idempotent: the expertise layer is cleared and rewritten from the graph."""
+    factor. Idempotent: the expertise layer is rewritten from the graph, then whatever the
+    rebuild didn't write is removed (D112: readers never see it empty)."""
     from app.ingest import expertise as ex
+
+    run = run_stamp()
 
     def read(name: str) -> list[dict]:
         return db.run_all(name, {}, cap=READ_LIMIT, graph=graph, timeout_ms=60_000)
@@ -73,13 +85,14 @@ def expertise(graph: str | None = None) -> dict:
                 "areas_orphaned": sum(1 for ps in left.values() if not ps),
             }
         )
-    report = {
-        "clear_areas": {"rows": 0, **db.run("clear_areas", {}, graph=graph, readonly=False).stats}
-    }
+    report = {}
     for name in EXPERTISE_ORDER:
         if rows[name]:
-            result = db.run(name, {"rows": rows[name]}, graph=graph, readonly=False)
+            stamped = [r | {"run": run} for r in rows[name]]
+            result = db.run(name, {"rows": stamped}, graph=graph, readonly=False)
             report[name] = {"rows": len(rows[name]), **result.stats}
+    for name in ("clear_areas", "clear_stale_expertise_edges"):  # what the rebuild didn't write
+        report[name] = {"rows": 0, **db.run(name, {"run": run}, graph=graph, readonly=False).stats}
     result = db.run("set_product_truck", {"rows": truck}, graph=graph, readonly=False)
     report["set_product_truck"] = {"rows": len(truck), **result.stats}
     return {"report": report, "truck": truck, "areas": len(areas)}
@@ -228,46 +241,80 @@ def precedents(graph: str | None = None, min_sim: float = PRECEDENT_MIN_SIM) -> 
     """10.6 (D066): for each extracted decision (reports excluded), up to 3 earlier decisions of
     the same kind and value in the same product, about a different issue or PR whose title and
     description are similar (local embeddings, cosine >= min_sim), become
-    (earlier)-[:PRECEDENT_FOR {basis: 'similar_subject', similarity}]->(later)."""
+    (earlier)-[:PRECEDENT_FOR {basis: 'similar_subject', similarity}]->(later).
+
+    Compared within each (kind, value, product) group as matrix products, in blocks (D112):
+    the pairwise loop it replaces grew with the square of all decisions, in Python."""
     from app.ingest import chunk_embed
 
+    run = run_stamp()
     rows = db.run_all(
         "precedent_candidates", {}, cap=READ_LIMIT, graph=graph, timeout_ms=60_000
     )
     vecs = chunk_embed.embed_passages([r["text"][:800] for r in rows]) if rows else []
-    links = []
-    for i, d in enumerate(rows):
-        scored = []
-        for j, p in enumerate(rows):
-            if (
-                (p["kind"], p["value"], p["product_id"]) == (d["kind"], d["value"], d["product_id"])
-                and p["subject_id"] != d["subject_id"]
-                and (p["ts_ms"] or 0) < (d["ts_ms"] or 0)
-            ):
-                sim = sum(a * b for a, b in zip(vecs[i], vecs[j], strict=True))
-                if sim >= min_sim:
-                    scored.append((sim, p["id"]))
-        for sim, pid in sorted(scored, reverse=True)[:PRECEDENTS_PER_DECISION]:
-            links.append({"precedent_id": pid, "decision_id": d["id"], "similarity": round(sim, 4)})
-    report = {
-        "clear_similar_precedents": {
-            "rows": 0,
-            **db.run("clear_similar_precedents", {}, graph=graph, readonly=False).stats,
-        }
-    }
+    links = similar_earlier(rows, vecs, min_sim)
+    report = {}
     if links:
-        result = db.run("link_similar_precedent", {"rows": links}, graph=graph, readonly=False)
+        stamped = [x | {"run": run} for x in links]
+        result = db.run("link_similar_precedent", {"rows": stamped}, graph=graph, readonly=False)
         report["link_similar_precedent"] = {"rows": len(links), **result.stats}
+    cleared = db.run("clear_similar_precedents", {"run": run}, graph=graph, readonly=False)
+    report["clear_similar_precedents"] = {"rows": 0, **cleared.stats}
     return {"report": report, "decisions": len(rows), "links": len(links)}
 
 
+PRECEDENT_BLOCK = 512  # decisions compared at once: a block x group similarity matrix
+
+
+def similar_earlier(
+    rows: list[dict], vecs: list[list[float]], min_sim: float
+) -> list[dict[str, Any]]:
+    """For each decision, its PRECEDENTS_PER_DECISION most similar earlier decisions of the same
+    kind, value and product about another subject, at cosine >= min_sim. Ties go to the larger
+    id, as the pairwise loop's `sorted(..., reverse=True)` did."""
+    import numpy as np
+
+    groups: dict[tuple, list[int]] = {}
+    for i, r in enumerate(rows):
+        groups.setdefault((r["kind"], r["value"], r["product_id"]), []).append(i)
+    links = []
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        v = np.asarray([vecs[i] for i in members], dtype=np.float64)
+        ts = np.asarray([rows[i]["ts_ms"] or 0 for i in members])
+        code: dict[str, int] = {}  # exact subject ids as integers, for an elementwise compare
+        subj = np.asarray([code.setdefault(rows[i]["subject_id"], len(code)) for i in members])
+        for lo in range(0, len(members), PRECEDENT_BLOCK):
+            block = slice(lo, lo + PRECEDENT_BLOCK)
+            sims = v[block] @ v.T
+            ok = (ts[None, :] < ts[block, None]) & (subj[None, :] != subj[block, None])
+            ok &= sims >= min_sim
+            for bi, row_ok in enumerate(ok):
+                hits = np.flatnonzero(row_ok)
+                if not hits.size:
+                    continue
+                d = rows[members[lo + bi]]
+                scored = sorted(
+                    ((float(sims[bi, j]), rows[members[j]]["id"]) for j in hits), reverse=True
+                )
+                for sim, pid in scored[:PRECEDENTS_PER_DECISION]:
+                    links.append(
+                        {"precedent_id": pid, "decision_id": d["id"], "similarity": round(sim, 4)}
+                    )
+    return links
+
+
 def uses(graph: str | None = None) -> dict:
-    """10.6 (D066): Company-USES-Product from the issues their customers reported, rebuilt."""
+    """10.6 (D066): Company-USES-Product from the issues their customers reported, rebuilt in
+    place: written first, then the edges this run didn't write go (D112)."""
+    run = run_stamp()
     report = {
-        "clear_uses": {"rows": 0, **db.run("clear_uses", {}, graph=graph, readonly=False).stats}
+        "derive_uses": {
+            "rows": 0,
+            **db.run("derive_uses", {"run": run}, graph=graph, readonly=False).stats,
+        }
     }
-    report["derive_uses"] = {
-        "rows": 0,
-        **db.run("derive_uses", {}, graph=graph, readonly=False).stats,
-    }
+    cleared = db.run("clear_uses", {"run": run}, graph=graph, readonly=False)
+    report["clear_uses"] = {"rows": 0, **cleared.stats}
     return report

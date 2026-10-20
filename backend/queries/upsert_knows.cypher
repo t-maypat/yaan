@@ -5,4 +5,5 @@ MATCH (a:Area {id: r.area_id})
 MERGE (p)-[k:KNOWS]->(a)
 SET k.doa_abs = r.doa_abs, k.doa_norm = r.doa_norm, k.author = r.author,
     k.deliveries = r.deliveries, k.first = r.first, k.discussion = r.discussion,
-    k.score = r.score, k.first_ms = r.first_ms, k.last_ms = r.last_ms, k.refs = r.refs
+    k.score = r.score, k.first_ms = r.first_ms, k.last_ms = r.last_ms, k.refs = r.refs,
+    k.run = r.run

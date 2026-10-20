@@ -109,6 +109,7 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
         items.sort(key=lambda i: (i.artifact.ts_ms or 0, i.artifact.id))
         present = live.present_ids(graph, [i.artifact.id for i in items])
         hold: int | None = None  # the cursor may not pass a version that will be retried
+        latest: dict[str, Item] = {}  # the newest version of each item: one batch (D112)
         for item in items:
             a = item.artifact
             if mine["seen"].get(a.id, -1) >= item.updated_ms:  # done in an earlier round
@@ -119,11 +120,22 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
                 mine["seen"][a.id] = item.updated_ms
                 mine["since_ms"] = max(mine["since_ms"], item.updated_ms)
                 continue
+            if a.id not in latest or item.updated_ms > latest[a.id].updated_ms:
+                latest[a.id] = item
+        todo = sorted(latest.values(), key=lambda i: (i.artifact.ts_ms or 0, i.artifact.id))
+        batch = [
+            (i.artifact, i.events, i.artifact.id in mine["seen"] or i.artifact.id in present)
+            for i in todo
+        ]
+        try:
+            outcomes = live.ingest_batch(batch, graph) if batch else []
+        except Exception as e:  # the batch as a whole: the lock stayed busy, FalkorDB went away
+            outcomes = [e] * len(batch)
+        for item, out in zip(todo, outcomes, strict=True):
+            a = item.artifact
             key = f"{a.id}@{item.updated_ms}"
-            try:
-                again = a.id in mine["seen"] or a.id in present
-                out = live.ingest_artifact(a, graph, events=item.events, replace=again)
-            except Exception as e:
+            if isinstance(out, Exception):
+                e = out
                 tries = failures.get(key, 0) + (0 if isinstance(e, WAITING) else 1)
                 if isinstance(e, PERMANENT) or tries >= POISON_AFTER:
                     record_dead(graph, c.name, item, e, tries)
@@ -155,6 +167,7 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
         mine["seen"] = {i: v for i, v in mine["seen"].items() if v >= keep}
         save_state(graph, state)
     report["sent"], report["unsent"] = deliver(connectors, graph)
+    report["derived"] = live.derive_if_due(graph)  # the derived layer, if a write made it due
     return report
 
 

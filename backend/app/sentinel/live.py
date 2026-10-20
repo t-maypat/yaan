@@ -131,12 +131,65 @@ def ingest_artifact(
 ) -> dict[str, Any]:
     """Run one artifact (message, PR or doc) through S1-S8 and the Sentinel; return the new
     alerts and the lag. `events` skips the LLM; `replace` swaps in a newer version."""
+    (out,) = ingest_batch([(a, events, replace)], graph)
+    if isinstance(out, Exception):
+        raise out
+    return out
+
+
+Batch = list[tuple[Artifact, list[dict[str, Any]] | None, bool]]
+
+
+def ingest_batch(items: Batch, graph: str | None = None) -> list[dict[str, Any] | Exception]:
+    """Many artifacts, one graph pass (D112): each is checked and extracted on its own (S1,
+    S5-S6, outside the writer lock), then, under one lock, each one's S2-S4 and events, ONE
+    fold per product they touch and ONE Sentinel pass over every chain those folds changed.
+    A connector round's cost no longer grows with the number of items in it. Returns, in
+    order, each item's result or the exception that stopped it; an exception in the shared
+    fold or Sentinel is every written item's (the runner retries them)."""
     graph = demo_graph(graph)
+    prepared: list[dict[str, Any] | Exception] = []
+    for a, events, replace in items:
+        earlier = [p["a"] for p in prepared if not isinstance(p, Exception)]
+        try:
+            prepared.append(_prepare(a, graph, events, replace, earlier))
+        except Exception as e:  # this item only
+            prepared.append(e)
+    ready = [p for p in prepared if not isinstance(p, Exception)]
+    if ready:
+        with db.writer_lock(graph):
+            upgrade(graph)
+            _write_batch(ready, graph)
+    out: list[dict[str, Any] | Exception] = []
+    for p in prepared:
+        if isinstance(p, Exception) or isinstance(p.get("error"), Exception):
+            out.append(p if isinstance(p, Exception) else p["error"])
+            continue
+        result = p["result"] | {
+            "events": p["kept"],
+            "dropped": p["dropped"],
+            "llm_cost_usd": p["xstats"].get("cost_usd", 0),
+            "freshness_lag_ms": _ms(p["t0"]),
+        }
+        keys = ("artifact_id", "freshness_lag_ms", "stages_ms", "llm_cost_usd")
+        log = {k: result[k] for k in keys} | {"alerts": [x["id"] for x in result["alerts"]]}
+        _append(graph, "log.jsonl", [log])
+        out.append(result)
+    return out
+
+
+def _prepare(
+    a: Artifact,
+    graph: str,
+    events: list[dict[str, Any]] | None,
+    replace: bool,
+    earlier: list[Artifact],
+) -> dict[str, Any]:
+    """S1 and S5-S6 for one artifact, before any graph write. `earlier`: the batch's items
+    before it, read as conversation context like messages already in the graph."""
     received_ms = int(time.time() * 1000)
     t0 = time.perf_counter()
     stages: dict[str, float] = {}
-
-    product = a.product_hint
     if org.active():  # a team's own item: register the people it involves, then read the org
         org.ensure_people(graph, org.people_in(a))
         meta = org.metadata(graph)
@@ -157,7 +210,7 @@ def ingest_artifact(
 
     t = time.perf_counter()
     if events is None:
-        units = live_units(a, graph)
+        units = live_units(a, graph, earlier)
         kept, dropped, xstats = (
             extract.run(units, workers=1) if units else ([], [], {"cost_usd": 0})
         )
@@ -168,26 +221,77 @@ def ingest_artifact(
         dropped = [e for e in events if not llm.quote_in(e["quote"], a.text)]
         xstats = {"cost_usd": 0}
     stages["s5_s6_extract_verify"] = _ms(t)
-
-    with db.writer_lock(graph):
-        upgrade(graph)
-        out = _write(a, graph, product, meta, kept, replace, received_ms, stages)
-    out |= {
-        "events": kept,
+    return {
+        "a": a,
+        "meta": meta,
+        "kept": kept,
         "dropped": dropped,
-        "llm_cost_usd": xstats.get("cost_usd", 0),
-        "freshness_lag_ms": _ms(t0),
+        "xstats": xstats,
+        "replace": replace,
+        "received_ms": received_ms,
+        "t0": t0,
+        "stages": stages,
     }
-    log = {k: out[k] for k in ("artifact_id", "freshness_lag_ms", "stages_ms", "llm_cost_usd")}
-    _append(graph, "log.jsonl", [log | {"alerts": [x["id"] for x in out["alerts"]]}])
-    return out
 
 
-def _write(a, graph, product, meta, kept, replace, received_ms, stages) -> dict[str, Any]:
-    """The graph writes of one live artifact (under the writer lock): S2-S4, its events,
-    the fold of its product, S9 and the Sentinel."""
+def _write_batch(ready: list[dict[str, Any]], graph: str) -> None:
+    """The graph writes of a batch (under the writer lock): each item's S2-S4 and events,
+    then one fold per product and one Sentinel pass. Sets each item's `result` or `error`."""
+    log = _read(graph, "artifacts.jsonl")  # the linker's context: read once per batch
+    written = []
+    for p in ready:
+        try:
+            _write_one(p, graph, log)
+            written.append(p)
+        except Exception as e:  # this item only: the others still go in
+            p["error"] = e
+    if not written:
+        return
+    t = time.perf_counter()
+    folds = {}
+    try:
+        for product in sorted({p["a"].product_hint for p in written}):
+            folds[product] = fold.fold_product(product, graph)
+        fold_ms = _ms(t)
+        # S9 (areas, KNOWS, truck factor, precedents, USES) reads the whole graph, and
+        # minutes-old expertise is fine: marked due here, rebuilt by derive_if_due at most
+        # every DERIVE_EVERY_S, not on every message (D112). The Sentinel judges the chains
+        # these folds changed.
+        due = {"id": "derive", "dirty_ms": int(time.time() * 1000), "done_ms": None}
+        db.run("mark_job", due, graph=graph, readonly=False)  # now, under the lock
+        t = time.perf_counter()
+        topics = sorted({x for f in folds.values() for x in f["write"]["topics"]})
+        sentinel = engine.run(graph, topics=topics)
+        sentinel.pop("report")
+        sentinel_ms = _ms(t)
+    except Exception as e:  # the shared part failed: every written item retries
+        for p in written:
+            p["error"] = e
+        return
+    for p in written:
+        a, folded = p["a"], folds[p["a"].product_hint]
+        p["stages"] |= {"s7_s8_resolve_fold": fold_ms, "sentinel": sentinel_ms}
+        p["result"] = {
+            "graph": graph,
+            "artifact_id": a.id,
+            "received_ms": p["received_ms"],
+            "fold": {
+                k: v for k, v in folded["stats"].items() if k.startswith(("claims_", "authority_"))
+            },
+            "fold_write": folded["write"],
+            "sentinel": sentinel,
+            "alerts": engine.list_alerts(graph=graph, artifact_id=a.id),
+            "stages_ms": p["stages"],
+            "batch": len(ready),
+        }
+
+
+def _write_one(p: dict[str, Any], graph: str, log: list[dict[str, Any]]) -> None:
+    """One artifact's S2-S4 and events. `log`: the live artifacts so far (kept in step)."""
+    a, meta, stages, received_ms = p["a"], p["meta"], p["stages"], p["received_ms"]
+    product = a.product_hint
     again = bool(present_ids(graph, [a.id]))
-    if again and not replace:  # another writer took it while the model read it
+    if again and not p["replace"]:  # another writer took it while the model read it
         raise LiveError(f"{a.id!r} is already in {graph!r}: run `lore demo reset` to replay it")
     t = time.perf_counter()
     rows = structural.product_rows(product, [a], set(meta.employees), received_ms)
@@ -204,63 +308,61 @@ def _write(a, graph, product, meta, kept, replace, received_ms, stages) -> dict[
     t = time.perf_counter()
     # linked against everything already loaded (HERB's and earlier live artifacts): a url in
     # the text finds its PR, doc or link, and "Revert PR# N" finds N, whichever came first
-    known = [
-        *_base(graph)[1].get(product, []),
-        *(Artifact(**r) for r in _read(graph, "artifacts.jsonl") if r["id"] != a.id),
-    ]
+    known = [*_base(graph)[1].get(product, []), *(Artifact(**r) for r in log if r["id"] != a.id)]
     link_rows, _ = linker.build_rows(meta, {product: [a]}, context={product: known})
     linker.load(link_rows, graph)
     stages["s4_link"] = _ms(t)
 
-    t = time.perf_counter()
     # the events become graph facts; a newer version of the artifact closes the ones it no
     # longer states (never deletes them). The artifact log is only the linker's context now.
-    event_store.load(kept, graph, observed_ms=received_ms)
+    event_store.load(p["kept"], graph, observed_ms=received_ms)
     if again:
-        event_store.retract(a.id, [event_store.event_id(e) for e in kept], graph, received_ms)
+        event_store.retract(a.id, [event_store.event_id(e) for e in p["kept"]], graph, received_ms)
         _rewrite(graph, "artifacts.jsonl", lambda r: r["id"] != a.id)
+        log[:] = [r for r in log if r["id"] != a.id]
     _append(graph, "artifacts.jsonl", [a.model_dump()])
-    folded = fold.fold_product(product, graph)
-    fstats = folded["stats"]
-    stages["s7_s8_resolve_fold"] = _ms(t)
+    log.append(a.model_dump())
 
-    # S9: re-derive what hangs off the issues and decisions (areas, KNOWS, truck factor,
-    # similarity precedents); COLLAB and communities are unchanged. Still whole-graph: the
-    # next step for scale (D101).
+
+DERIVE_EVERY_S = 300  # the derived layer is at most this stale after a live write (D112)
+
+
+def derive_if_due(graph: str | None = None, every_s: float = DERIVE_EVERY_S, force: bool = False):
+    """Rebuild the derived layer (S9) and run the full Sentinel (key-person and bus-factor
+    alerts, withdrawals) when a live write made it due and the last run is `every_s` old.
+    Called after every connector round and after the API's live writes, so per-message cost
+    no longer grows with the whole graph (D112). Returns what ran, or None."""
     from app.ingest import derive
 
-    t = time.perf_counter()
-    derive.expertise(graph)
-    derive.precedents(graph)
-    derive.uses(graph)
-    stages["s9_derive"] = _ms(t)
-
-    t = time.perf_counter()
-    sentinel = engine.run(graph)
+    graph = demo_graph(graph)
+    rows = db.run("job_state", {"id": "derive"}, graph=graph).rows
+    dirty = rows[0]["dirty_ms"] if rows else None
+    done = (rows[0]["done_ms"] if rows else None) or 0
+    now = int(time.time() * 1000)
+    if not force and (dirty is None or dirty <= done or now - done < every_s * 1000):
+        return None
+    t0 = time.perf_counter()
+    with db.writer_lock(graph):
+        derive.expertise(graph)
+        derive.precedents(graph)
+        derive.uses(graph)
+        sentinel = engine.run(graph)
+        done_row = {"id": "derive", "dirty_ms": None, "done_ms": now}
+        db.run("mark_job", done_row, graph=graph, readonly=False)
     sentinel.pop("report")
-    stages["sentinel"] = _ms(t)
-
-    return {
-        "graph": graph,
-        "artifact_id": a.id,
-        "received_ms": received_ms,
-        "fold": {k: v for k, v in fstats.items() if k.startswith(("claims_", "authority_"))},
-        "fold_write": folded["write"],
-        "sentinel": sentinel,
-        "alerts": engine.list_alerts(graph=graph, artifact_id=a.id),
-        "stages_ms": stages,
-    }
+    return {"graph": graph, "ms": _ms(t0), "sentinel": sentinel}
 
 
 CONTEXT_MESSAGES = 8  # earlier messages a live message is read with
 CONTEXT_WINDOW_MS = 7 * 86_400_000  # within the week before it
 
 
-def conversation(a: Artifact, graph: str) -> list[Artifact]:
+def conversation(a: Artifact, graph: str, earlier: list[Artifact] | None = None) -> list[Artifact]:
     """The messages before `a` in its channel, oldest first (D102). The batch extraction reads
     whole conversations, so "the PR" and "that bug" resolve to what was said earlier; a live
     message read alone could not, and org mode, which runs only the live path, extracted less
-    than the evaluated batch did."""
+    than the evaluated batch did. `earlier`: a live batch's items before `a`, not yet in the
+    graph (D112)."""
     if a.kind != "message" or not a.channel_id or a.ts_ms is None:
         return []
     params = {
@@ -270,7 +372,7 @@ def conversation(a: Artifact, graph: str) -> list[Artifact]:
         "limit": CONTEXT_MESSAGES,
     }
     rows = db.run("channel_context", params, graph=graph).rows
-    return [
+    found = [
         Artifact(
             id=r["id"],
             kind="message",
@@ -287,15 +389,29 @@ def conversation(a: Artifact, graph: str) -> list[Artifact]:
         for r in reversed(rows)
         if r["id"] != a.id
     ]
+    pending = [
+        m
+        for m in earlier or []
+        if m.kind == "message"
+        and m.channel_id == a.channel_id
+        and m.ts_ms is not None
+        and params["since_ms"] <= m.ts_ms < a.ts_ms
+    ]
+    if not pending:
+        return found
+    merged = {m.id: m for m in [*found, *pending] if m.id != a.id}
+    return sorted(merged.values(), key=lambda m: (m.ts_ms or 0, m.id))[-CONTEXT_MESSAGES:]
 
 
-def live_units(a: Artifact, graph: str) -> list[extract.Unit]:
+def live_units(
+    a: Artifact, graph: str, earlier: list[Artifact] | None = None
+) -> list[extract.Unit]:
     """One extraction unit: the new message after its conversation, oldest messages dropped
     first to stay within extract.UNIT_CHARS. None for what extraction doesn't read (PRs,
     docs, system messages, planning channels)."""
     if a.kind != "message" or a.system or extract.channel_kind(a) not in extract.CHANNEL_KINDS:
         return []
-    context = [m for m in conversation(a, graph) if not m.system]
+    context = [m for m in conversation(a, graph, earlier) if not m.system]
     budget = extract.UNIT_CHARS - len(a.text)
     while context and sum(len(m.text) + 20 for m in context) > budget:
         context.pop(0)

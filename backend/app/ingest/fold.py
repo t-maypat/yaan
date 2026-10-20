@@ -437,14 +437,17 @@ def write(rows: dict[str, list[dict[str, Any]]], product: str, graph: str | None
     """Bring one product's derived layer to `rows`: rewrite the nodes whose rows or owned edges
     changed, delete the ones no longer derived, leave the rest alone."""
     want = desired(rows)
-    have = {
-        (r["label"], r["id"]): r["hash"]
-        for r in db.run_all(
-            "derived_state", {"product_id": product}, cap=STATE_CAP, graph=graph, timeout_ms=30_000
-        )
-    }
+    state = db.run_all(
+        "derived_state", {"product_id": product}, cap=STATE_CAP, graph=graph, timeout_ms=30_000
+    )
+    have = {(r["label"], r["id"]): r["hash"] for r in state}
+    topic_was = {(r["label"], r["id"]): r["topic"] for r in state}
     changed = {k for k, v in want.items() if have.get(k) != v["hash"]}
     stale = sorted(k for k in have if k not in want)
+    # the decision chains this write moved: the live Sentinel judges only these (D112)
+    topics = {topic_was.get(k) for k in stale} | {
+        want[k]["row"].get("topic") or f"{k[1]}/status" for k in changed
+    }
 
     def ids(keys, label: str) -> list[dict[str, str]]:
         return [{"id": i} for lab, i in sorted(keys) if lab == label]
@@ -485,6 +488,7 @@ def write(rows: dict[str, list[dict[str, Any]]], product: str, graph: str | None
         "stale": len(stale),
         "unchanged": len(want) - len(changed),
         "pr_actions_cleared": cleared,
+        "topics": sorted(t for t in topics if t),
     }
 
 

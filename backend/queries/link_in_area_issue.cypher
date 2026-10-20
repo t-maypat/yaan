@@ -2,4 +2,5 @@
 UNWIND $rows AS r
 MATCH (i:Issue {id: r.issue_id})
 MATCH (a:Area {id: r.area_id})
-MERGE (i)-[:IN_AREA]->(a)
+MERGE (i)-[e:IN_AREA]->(a)
+SET e.run = r.run

@@ -3,4 +3,5 @@ MATCH (p:Product)<-[:IN_PRODUCT]-(i:Issue)-[:REPORTED_BY]->(c:Customer)-[:WORKS_
 WITH co, p, count(DISTINCT i) AS issues, count(DISTINCT c) AS customers, min(i.reported_ms) AS first_ms,
      max(i.reported_ms) AS last_ms
 MERGE (co)-[u:USES]->(p)
-SET u.issues = issues, u.customers = customers, u.first_ms = first_ms, u.last_ms = last_ms
+SET u.issues = issues, u.customers = customers, u.first_ms = first_ms, u.last_ms = last_ms,
+    u.run = $run

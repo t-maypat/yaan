@@ -3,4 +3,4 @@ UNWIND $rows AS r
 MATCH (a:Decision {id: r.precedent_id})
 MATCH (b:Decision {id: r.decision_id})
 MERGE (a)-[e:PRECEDENT_FOR {basis: 'similar_subject'}]->(b)
-SET e.similarity = r.similarity
+SET e.similarity = r.similarity, e.run = r.run

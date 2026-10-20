@@ -21,6 +21,7 @@ import hashlib
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
 from rapidfuzz import fuzz
@@ -35,6 +36,9 @@ _PR_NUM = re.compile(r"(?:PR|pull request)\s*#?\s*(\d+)", re.IGNORECASE)
 _FILLER = re.compile(r"^(the|a|an)\s+|\s+(bug|issue|problem)$")
 
 
+# Both are pure, and the fold compares every event's title with every known issue's: cached,
+# each distinct title is normalized once per process instead of once per comparison (D112).
+@lru_cache(maxsize=1 << 16)
 def norm_title(title: str) -> str:
     t = re.sub(r"[\"'‘’“”`]", "", title).casefold()
     t = re.sub(r"[^\w&/ -]+", " ", t)
@@ -50,6 +54,7 @@ GENERIC = frozenset(
 )
 
 
+@lru_cache(maxsize=1 << 16)
 def core(title: str) -> str:
     """The identity-bearing words of a title, singular, for fuzzy comparison only."""
     words = [w for w in norm_title(title).split() if w not in GENERIC]

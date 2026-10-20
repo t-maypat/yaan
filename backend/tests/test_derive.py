@@ -44,3 +44,54 @@ def test_works_on_spans_each_teams_activity_per_stage(empty_graph):
         {"team": "team:a", "stage": "planning", "f": 1, "l": 9, "n": 3},
         {"team": "team:b", "stage": "dev", "f": 30, "l": 40, "n": 3},
     ]
+
+
+def pairwise_precedents(rows, vecs, min_sim):
+    """The loop derive.precedents ran before D112, kept as the reference: every pair."""
+    links = []
+    for i, d in enumerate(rows):
+        scored = []
+        for j, p in enumerate(rows):
+            if (
+                (p["kind"], p["value"], p["product_id"]) == (d["kind"], d["value"], d["product_id"])
+                and p["subject_id"] != d["subject_id"]
+                and (p["ts_ms"] or 0) < (d["ts_ms"] or 0)
+            ):
+                sim = sum(a * b for a, b in zip(vecs[i], vecs[j], strict=True))
+                if sim >= min_sim:
+                    scored.append((sim, p["id"]))
+        for sim, pid in sorted(scored, reverse=True)[: derive.PRECEDENTS_PER_DECISION]:
+            links.append({"precedent_id": pid, "decision_id": d["id"], "similarity": round(sim, 4)})
+    return links
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_precedents_by_matrix_find_exactly_what_every_pair_did(seed, monkeypatch):
+    """D112: grouped, blocked matrix products in place of the all-pairs loop, same links. Small
+    blocks so a group spans several; near-duplicate subjects so some pairs pass min_sim."""
+    import random
+
+    monkeypatch.setattr(derive, "PRECEDENT_BLOCK", 7)
+    rng = random.Random(seed)
+    bases = [[rng.gauss(0, 1) for _ in range(16)] for _ in range(6)]
+    rows, vecs = [], []
+    for n in range(60):
+        base = bases[rng.randrange(len(bases))]
+        v = [x + rng.gauss(0, 0.35) for x in base]
+        norm = sum(x * x for x in v) ** 0.5
+        vecs.append([x / norm for x in v])
+        rows.append(
+            {
+                "id": f"dec:{n:03d}",
+                "kind": rng.choice(["issue_status", "pr_action"]),
+                "value": rng.choice(["resolved", "dismissed"]),
+                "product_id": rng.choice(["A", "B"]),
+                "subject_id": f"iss:{rng.randrange(25)}",
+                "ts_ms": rng.choice([None, *range(1000, 1040)]),
+            }
+        )
+    want = pairwise_precedents(rows, vecs, 0.8)
+    got = derive.similar_earlier(rows, vecs, 0.8)
+    assert len(want) > 20  # the case has real precedents to find
+    key = lambda x: (x["decision_id"], x["precedent_id"])  # noqa: E731
+    assert sorted(got, key=key) == sorted(want, key=key)

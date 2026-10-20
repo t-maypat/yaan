@@ -65,6 +65,18 @@ def test_synthetic_ids_have_the_live_paths_rule5_shape():
         live.check_synthetic("msg:20270309-0-abc")
 
 
+def one_by_one(items, graph):
+    """live.ingest_batch as the tests fake it: each item through live.ingest_artifact (the
+    test's fake), its exception kept in its place."""
+    out = []
+    for a, events, replace in items:
+        try:
+            out.append(live.ingest_artifact(a, graph, events=events, replace=replace))
+        except Exception as e:
+            out.append(e)
+    return out
+
+
 @pytest.fixture
 def offline(tmp_path, monkeypatch):
     """A sync round with no database: state in tmp_path, nothing present in the graph,
@@ -72,6 +84,8 @@ def offline(tmp_path, monkeypatch):
     monkeypatch.setattr(live, "live_dir", lambda graph: tmp_path / graph)
     monkeypatch.setattr(live, "present_ids", lambda graph, ids: set())
     monkeypatch.setattr(runner, "deliver", lambda connectors, graph: ([], []))
+    monkeypatch.setattr(live, "derive_if_due", lambda graph: None)
+    monkeypatch.setattr(live, "ingest_batch", one_by_one)
     dead = []
 
     def record_dead(graph, source, item, error, attempts):

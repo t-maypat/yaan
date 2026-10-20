@@ -253,6 +253,18 @@ def for_viewer(request: Request, value: dict) -> dict:
     return access.Access(who, graph()).redact(value)[0]
 
 
+def refresh_derived(target: str) -> None:
+    """The derived layer, at most every few minutes after a live write (D112). The write the
+    request made has already happened, so a failure here is logged, never turned into an
+    error for it: the next write or the worker's next round tries again."""
+    from app.sentinel import live
+
+    try:
+        live.derive_if_due(target)
+    except Exception as e:
+        print(f"yaan: the derived layer wasn't refreshed: {type(e).__name__}: {e}", flush=True)
+
+
 def demo_write(request: Request, work):
     """Run one demo write: rate-limited, serialized, and refused on the main graph."""
     from app.sentinel import approve, live
@@ -263,7 +275,9 @@ def demo_write(request: Request, work):
     try:
         target = live.demo_graph(graph())
         with demo_lock:
-            return work(target)
+            out = work(target)
+            refresh_derived(target)
+            return out
     except (live.LiveError, approve.AlertError) as e:
         raise HTTPException(409, str(e)) from e
 
