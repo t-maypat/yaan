@@ -1,0 +1,22 @@
+# Yaan
+
+> Yaan is an open-source, self-hosted company brain. It turns a team's Slack, meetings, pull requests, tickets and docs into a time-aware FalkorDB graph of people, work and decisions, and answers what is true now, what was true then, why, and who knows, quoting a verbatim source for every sentence. Apache-2.0, runs with Docker Compose, and works as an MCP server for Claude Code, Codex and Cursor.
+
+Key facts:
+
+- Time-aware: every status is a decision with a start and an end, so "is it fixed?" and "was it fixed on 7 January?" are one lookup. Nothing is deleted; a new fact closes the old one's window.
+- Grounded: every answer sentence quotes its source word for word, checked in code. With no quote, Yaan says "not found".
+- Graph-native: answers come from Cypher queries and graph algorithms (PageRank, betweenness, label propagation, shortest paths) on FalkorDB, plus full-text and vector search.
+- Change Sentinel: flags regressions, reversals, unauthorized changes and key-person risks, and drafts follow-ups for a human to approve.
+- Connectors: Slack, GitHub, Jira and Notion; experimental Linear, GitLab, Confluence, Google Drive, Gmail, Google Meet, Zoom and Discord.
+- Results: on 7 held-out products of Salesforce AI Research's HERB benchmark (399 questions), Yaan scores 63.6 vs 9.6 for a plain RAG baseline and 24.2 for the same agent without graph tools, with 100% of quotes verified.
+
+## Docs
+
+- [Self-hosting guide](https://yaan-brain.vercel.app/docs): install with Docker, load the demo graph, connect your tools and AI client, secure a deployment, architecture
+- [README](https://github.com/t-maypat/yaan/blob/main/README.md): overview, quickstart, graph data model, Cypher queries, results
+- [Evaluation report](https://github.com/t-maypat/yaan/blob/main/eval/report.md): method, ablations, stale-answer test, error analysis
+
+## Source
+
+- [GitHub repository](https://github.com/t-maypat/yaan)

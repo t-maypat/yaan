@@ -16,7 +16,7 @@ Ask what's true now, what was true then, why, and who knows, with a word-for-wor
 [![MCP server](https://img.shields.io/badge/MCP-server-111111)](#use-it-from-your-ai-client)
 [![GitHub stars](https://img.shields.io/github/stars/t-maypat/yaan?style=flat&logo=github)](https://github.com/t-maypat/yaan/stargazers)
 
-[Website](https://yaan-brain.vercel.app) · [Self-hosting guide](https://yaan-brain.vercel.app/docs.html) · [Demo video](DEMO_VIDEO.md) · [Evaluation report](eval/report.md) · [Contributing](CONTRIBUTING.md)
+[Website](https://yaan-brain.vercel.app) · [Self-hosting guide](https://yaan-brain.vercel.app/docs) · [Demo video](DEMO_VIDEO.md) · [Evaluation report](eval/report.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -48,7 +48,7 @@ docker compose --profile app up -d --build
 docker compose --profile app run --rm api yaan seed --from https://github.com/t-maypat/yaan/releases/latest/download/lore-snapshot.tar.gz
 ```
 
-Open **http://127.0.0.1:8000**: Ask, Inbox, Timeline, Graph health. Yaan and FalkorDB listen on 127.0.0.1 only; put an HTTPS proxy in front to share it with your team ([guide](https://yaan-brain.vercel.app/docs.html#secure)).
+Open **http://127.0.0.1:8000**: Ask, Inbox, Timeline, Graph health. Yaan and FalkorDB listen on 127.0.0.1 only; put an HTTPS proxy in front to share it with your team ([guide](https://yaan-brain.vercel.app/docs#secure)).
 
 > Yaan was called Lore while it was built: settings (`LORE_…`), container names and some files still use that name, and `lore` works as the command too.
 
