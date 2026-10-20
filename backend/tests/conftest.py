@@ -1,6 +1,7 @@
 """Shared test fixtures (Phase 1.6).
 
-Database tests are marked `db` and get their own throwaway graph, `lore_test_<random>`, with the
+Database tests are marked `db` (by hand, or by the hook below for any test using a database
+fixture) and get their own throwaway graph, `lore_test_<random>`, with the
 full schema applied and checked. They ERROR, never skip, when FalkorDB is down: a skipped test
 reads as "fine" in a summary, and a database that silently isn't there is exactly what we must
 notice. Without Docker, run `pytest -m "not db"` on purpose.
@@ -30,6 +31,15 @@ def require_falkordb() -> None:
             '`-m "not db"`.',
             pytrace=False,
         )
+
+
+@pytest.hookimpl(tryfirst=True)  # before `-m` deselects, so the marker it adds counts
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Every test that reaches FalkorDB through a fixture is a `db` test, marked or not: a
+    forgotten marker made `pytest -m "not db"` error on a machine without Docker."""
+    for item in items:
+        if "falkordb" in getattr(item, "fixturenames", ()):
+            item.add_marker(pytest.mark.db)
 
 
 @pytest.fixture(scope="session")

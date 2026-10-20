@@ -1,0 +1,69 @@
+# CI: lint, the tests without a database (as on a laptop without Docker), the full suite
+# against FalkorDB started from the repo's own docker-compose.yml (same ACL users as a
+# self-host), and the web UI's type check and build. No job calls an LLM: tests use cached
+# or deterministic events, and ANTHROPIC_API_KEY is never set here.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: lint + tests without a database
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.16"
+      - run: uv sync --project backend --frozen
+      - run: uv run --project backend ruff check backend
+      # Nothing listens on 6379 here: a test that reaches FalkorDB without being marked `db`
+      # errors instead of passing (the conftest hook marks every test using a db fixture).
+      - run: uv run --project backend pytest backend -m "not db and not model"
+
+  db:
+    name: full suite on FalkorDB
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.16"
+      - run: uv sync --project backend --frozen
+      - name: Settings from the example, with throwaway passwords
+        run: |
+          cp .env.example .env
+          for user in ADMIN WRITER READER; do
+            sed -i "s/^FALKORDB_${user}_PASSWORD=.*/FALKORDB_${user}_PASSWORD=ci-$(openssl rand -hex 12)/" .env
+          done
+      - run: docker compose up -d --wait falkordb
+      - name: Embedding model cache (the `model` tests download it once)
+        uses: actions/cache@v4
+        with:
+          path: data/models
+          key: embed-${{ hashFiles('backend/app/config.py') }}
+      - run: uv run --project backend pytest backend
+      - if: failure()
+        run: docker compose logs falkordb
+
+  web:
+    name: web UI type check and build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm --prefix frontend ci
+      - run: npm --prefix frontend run build

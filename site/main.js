@@ -770,11 +770,6 @@
     };
     const TABS = [
       {
-        ylab: 'Score / share (0–100)', max: 100, ticks: [0, 25, 50, 75, 100], series: ['lore', 'paper'],
-        groups: [['Average score', [63.6, 43.4], ''], ['Unanswerable questions declined', [76.7, 29.3], '%']],
-        cap: 'Salesforce AI Research’s best product-specific agent is GPT-4o with ReAct, as published in their HERB paper (EMNLP 2025). Yaan runs Claude Haiku 5.5, scored with the paper’s own judge prompts. Different model and setup: shown for context.',
-      },
-      {
         ylab: 'Judged score (0–100)', max: 80, ticks: [0, 20, 40, 60, 80], unit: '', series: ['lore', 'search', 'rag'],
         groups: [['Content', [64.0, 17.7, 12.6]], ['People', [65.2, 37.6, 13.3]], ['Customer', [54.2, 0.0, 0.0]], ['Artifact', [71.3, 41.5, 12.6]]],
         cap: 'Held-out products, one run per system, all on Claude Haiku 5.5 with the same judge prompts and search. “Without the FalkorDB graph” keeps vector and full-text search and loses every graph query.',
@@ -783,6 +778,11 @@
         ylab: 'Answers right (%)', max: 100, ticks: [0, 25, 50, 75, 100], unit: '%', series: ['lore', 'search', 'rag'],
         groups: [['All drift questions', [95.8, 70.8, 54.2]], ['Current status', [100, 54.5, 54.5]], ['As of a date', [100, 80, 60]]],
         cap: 'Our drift test: 24 hand-labeled questions on Salesforce AI Research’s enterprise data about status now and on a past date, ground truth read from the raw messages, all systems on Claude Haiku 5.5. Stale answers: Yaan 0%, search only 8.7%, plain RAG 6.7%.',
+      },
+      {
+        ylab: 'Score / share (0–100)', max: 100, ticks: [0, 25, 50, 75, 100], series: ['lore', 'paper'],
+        groups: [['Average score', [63.6, 43.4], '']],
+        cap: 'Salesforce AI Research’s best product-specific agent is GPT-4o with ReAct, as published in their HERB paper (EMNLP 2025). Yaan runs Claude Haiku 5.5, scored with the paper’s own judge prompts. Different model, judge and setup: shown for context, not as a head-to-head.',
       },
     ];
     const fmt = (v, unit) => (Number.isInteger(v) && unit === '%' ? v : v.toFixed(1)) + unit;

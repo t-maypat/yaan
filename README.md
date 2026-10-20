@@ -29,7 +29,8 @@ Search finds the message that said "fixed". It doesn't know the bug came back. Y
 - **True now, and true then.** Each status is a decision with a start and an end. "Is it fixed?" and "was it fixed on 7 January?" are one lookup. Nothing is deleted: a new fact closes the old one's window.
 - **Answers that live in the links.** "Which company has the most unresolved bugs?" is a count over customers, companies and issues, not a guess from ten text chunks.
 - **Who really knows.** Authorship, PageRank, betweenness and communities, computed natively in FalkorDB, find the real expert behind the listed owner.
-- **Proof or nothing.** Every sentence quotes its source word for word, checked in code before you see it. With no quote, Yaan says "not found".
+- **A quote or nothing.** Every sentence cites a word-for-word quote from its source, checked in code before you see it. With no quote, Yaan says "not found". The check proves the words are in the source and on topic; it does not prove the sentence follows from them.
+- **What it tracks today.** The decisions Yaan folds are engineering ones: the status of each issue (reported, resolved, dismissed, reopened) and what the team said to do with each pull request (merge, close, hold, revert), plus who knows what. Other kinds of decisions are on the roadmap.
 - **Runs on your servers.** Your data stays in your network; the only outside call is to the AI model you choose, with your own key and a hard daily spend cap.
 
 ## Quickstart
