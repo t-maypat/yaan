@@ -305,6 +305,8 @@ export type GraphHealth = {
   duplicate_ids: { id: string; n: number }[];
   linking: { mentions: number; unresolved: number; unresolved_pct: number };
   pr_chains: Record<string, unknown>[];
+  // items connectors couldn't ingest, per source and reason (D107)
+  dead_letters?: { source: string; reason: string; n: number; last_ms: number }[];
 };
 export const getGraphHealth = () => send<GraphHealth>("GET", "/graph/health");
 

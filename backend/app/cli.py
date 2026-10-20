@@ -623,6 +623,17 @@ def cmd_connectors(args: argparse.Namespace) -> int:
         if args.action == "seed":
             print(json.dumps(seed_sandboxes(args.act, connectors), indent=1))
             return 0
+        if args.action == "health":  # the worker container's healthcheck (H1, D107)
+            health = runner.worker_health(graph)
+            print(json.dumps(health))
+            return 0 if health["status"] in ("ok", "waiting") else 1
+        if args.action == "dead":
+            rows = runner.dead_letters(graph, args.id)
+            print(json.dumps(rows, indent=1) if rows else "no dead letters")
+            return 0
+        if args.action == "retry":
+            print(json.dumps(runner.retry(graph, args.id), indent=1))
+            return 0
         if args.action == "status":
             mode = "demo" if base.is_demo() else "org"
             print(f"mode: {mode}, graph {graph!r}")
@@ -728,7 +739,15 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--force", {"action": "store_true", "help": "replace existing graphs and files"}),
     ],
     "connectors": [
-        ("action", {"choices": ("sync", "run", "status", "seed"), "help": "what to do"}),
+        (
+            "action",
+            {
+                "choices": ("sync", "run", "status", "seed", "dead", "retry", "health"),
+                "help": "what to do (dead: items that couldn't go in; retry: replay them; "
+                "health: is the connector loop running)",
+            },
+        ),
+        ("--id", {"help": "dead / retry: one dead letter's id (default: all)"}),
         ("--act", {"choices": ("setup", "regression"), "default": "setup", "help": "seed act"}),
         ("--graph", {"help": "default: LORE_DEMO_GRAPH, or LORE_ORG_GRAPH in org mode"}),
         ("--every", {"type": float, "default": 30, "help": "run: seconds between polls"}),

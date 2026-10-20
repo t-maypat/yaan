@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-193 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+197 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -21,10 +21,11 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`search_vector.cypher`](../backend/queries/search_vector.cypher) | nearest chunks by embedding (score = cosine distance, lower = closer, A3), with filters |
 | [`search_vector_scoped.cypher`](../backend/queries/search_vector_scoped.cypher) | exact nearest chunks within one product (cosine distance, lower = closer, A3), with filters (D042) |
 
-**Graph health** (8)
+**Graph health** (9)
 
 | Query | Purpose |
 |---|---|
+| [`health_dead_letters.cypher`](../backend/queries/health_dead_letters.cypher) | items connectors couldn't ingest, per source and reason: each waits in `yaan connectors dead` (H1, D107) |
 | [`health_duplicate_ids.cypher`](../backend/queries/health_duplicate_ids.cypher) | ids held by more than one node (a label-set mistake, A16) |
 | [`health_edges.cypher`](../backend/queries/health_edges.cypher) | edge count per relationship type |
 | [`health_isolated.cypher`](../backend/queries/health_isolated.cypher) | nodes with no edge at all, per label set |
@@ -34,7 +35,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`health_pr_chains.cypher`](../backend/queries/health_pr_chains.cypher) | PRs with and without a status decision chain, internal vs external |
 | [`health_spoke_in.cypher`](../backend/queries/health_spoke_in.cypher) | resolved meeting speakers per resolution method (S10) |
 
-**Writes: ingestion, linking, the fold, derived layers, the Sentinel** (97)
+**Writes: ingestion, linking, the fold, derived layers, the Sentinel** (99)
 
 | Query | Purpose |
 |---|---|
@@ -49,6 +50,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`clear_similar_precedents.cypher`](../backend/queries/clear_similar_precedents.cypher) | remove the similarity PRECEDENT_FOR edges before they are rebuilt; precedents written by approvals (11.4) carry no basis and stay |
 | [`clear_uses.cypher`](../backend/queries/clear_uses.cypher) | remove the derived Company-USES-Product edges before they are rebuilt (10.6) |
 | [`delete_claims.cypher`](../backend/queries/delete_claims.cypher) | claims the fold no longer derives (their events were retracted or re-resolved), removed with their edges (D101) |
+| [`delete_dead_letters.cypher`](../backend/queries/delete_dead_letters.cypher) | drop dead letters whose item has now been ingested (H1, D107) |
 | [`delete_decisions.cypher`](../backend/queries/delete_decisions.cypher) | decisions the fold no longer derives (their events were retracted or re-resolved), removed with their edges (D101) |
 | [`delete_issues.cypher`](../backend/queries/delete_issues.cypher) | issues the fold no longer derives (their events were retracted or re-resolved), removed with their edges (D101) |
 | [`derive_uses.cypher`](../backend/queries/derive_uses.cypher) | (Company)-[:USES {issues, customers, first_ms, last_ms}]->(Product): a company uses a product when its customers report issues in it (S9, 10.6, D066) |
@@ -121,6 +123,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_communities.cypher`](../backend/queries/upsert_communities.cypher) | Community nodes (working groups found by CDLP over COLLAB) with their size and how they map onto org-chart teams (10.4, D064) |
 | [`upsert_companies.cypher`](../backend/queries/upsert_companies.cypher) | company nodes from the customers' `company` field |
 | [`upsert_customers.cypher`](../backend/queries/upsert_customers.cypher) | customer nodes from metadata/customers_data.json |
+| [`upsert_dead_letters.cypher`](../backend/queries/upsert_dead_letters.cypher) | items a connector couldn't ingest, with the reason and the item itself so `yaan connectors retry` can replay them (H1, D107) |
 | [`upsert_decisions.cypher`](../backend/queries/upsert_decisions.cypher) | decision nodes (one per state in a topic's chain); an extracted one carries its product and its creating event's observed_ms, a structural one keeps when it was first seen (D101) |
 | [`upsert_docs.cypher`](../backend/queries/upsert_docs.cypher) | document artifacts, with type and version |
 | [`upsert_events.cypher`](../backend/queries/upsert_events.cypher) | verified events, the derived layer's system of record (D101): immutable; observed_ms is when Lore first learned one, and an event asserted again after a retraction is live again |
@@ -136,7 +139,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_prs.cypher`](../backend/queries/upsert_prs.cypher) | pull request artifacts, with current_status from their decision chain |
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (84)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (85)
 
 | Query | Purpose |
 |---|---|
@@ -192,6 +195,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`lineage_subjects.cypher`](../backend/queries/lineage_subjects.cypher) | the product's issues and own pull requests, the subjects a decision chain can be about: decision_lineage and impact_of match a name, title or PR number against them (R2) |
 | [`links_shared.cypher`](../backend/queries/links_shared.cypher) | links shared in the product's messages, with who shared them and where |
 | [`list_alerts.cypher`](../backend/queries/list_alerts.cypher) | the Inbox: alerts, newest change first, optionally by status, product, alert id or triggering artifact, with who they notify |
+| [`list_dead_letters.cypher`](../backend/queries/list_dead_letters.cypher) | the items connectors couldn't ingest, newest failure first, for status, retry and Graph health (H1, D107) |
 | [`list_indexes.cypher`](../backend/queries/list_indexes.cypher) | every index in the graph with its kind, options and build status (lore schema checks these against 00_schema.cypher) |
 | [`list_products.cypher`](../backend/queries/list_products.cypher) | every product with its codenames and how many artifacts it holds, for the UI's product picker |
 | [`outside_decisions.cypher`](../backend/queries/outside_decisions.cypher) | active dismissals decided by someone whose working group (CDLP community) is not among the groups of the people who did the work in the issue's area (11.5, D064); rows shaped like sentinel_changes |

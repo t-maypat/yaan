@@ -203,6 +203,7 @@ def test_an_org_sync_prepares_the_graph_and_takes_unlabeled_items(org_mode, monk
     prepared, ingested = [], []
     monkeypatch.setattr(runner, "prepare", lambda graph, connectors=None: prepared.append(graph))
     monkeypatch.setattr(runner, "deliver", lambda connectors, graph: ([], []))
+    monkeypatch.setattr(live, "present_ids", lambda graph, ids: set())
 
     def ingest(a, graph, events=None, replace=False):
         ingested.append((a.id, graph))

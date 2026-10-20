@@ -25,6 +25,7 @@ CREATE INDEX FOR (e:Event) ON (e.product_id)
 CREATE INDEX FOR (e:Event) ON (e.artifact_id)
 CREATE INDEX FOR (a:Alert) ON (a.id)
 CREATE INDEX FOR (a:Action) ON (a.id)
+CREATE INDEX FOR (d:DeadLetter) ON (d.id)
 CREATE FULLTEXT INDEX FOR (c:Chunk) ON (c.text)
 CREATE FULLTEXT INDEX FOR (e:Entity) ON (e.name)
 CREATE VECTOR INDEX FOR (c:Chunk) ON (c.embedding) OPTIONS {dimension: 384, similarityFunction: 'cosine'}

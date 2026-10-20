@@ -35,6 +35,9 @@ export function GraphHealthPage() {
     ["Duplicate ids", fmt(health.duplicate_ids.length), "the same id on two nodes"],
     ["PRs with a status chain", own ? `${fmt(own.with_chain)} / ${fmt(own.prs)}` : "n/a", "the product's own pull requests"],
   ];
+  // shown only when there are some: each one is an item a connector brought that isn't in the graph
+  const dead = (health.dead_letters ?? []).reduce((n, d) => n + d.n, 0);
+  if (dead) tiles.push(["Dead letters", fmt(dead), "items connectors couldn't ingest: yaan connectors dead"]);
   return (
     <section className="pt-10 max-w-[64rem]" aria-labelledby="h-health">
       <h1 id="h-health" className="font-serif text-[2rem] leading-tight">

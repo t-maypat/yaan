@@ -5,7 +5,8 @@ docs/queries.md; the README links to it and lists the key queries.
     uv run --project backend python scripts/query_table.py           # rewrite the table in docs/queries.md
     uv run --project backend python scripts/query_table.py --check   # exit 1 if it is stale
 
-The table sits between `<!-- queries -->` and `<!-- /queries -->` in docs/queries.md.
+The table sits between `<!-- queries -->` and `<!-- /queries -->` in docs/queries.md. The
+query count the README and the site state ("193 Cypher queries") is rewritten too (D106).
 """
 
 import re
@@ -16,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 QUERIES = ROOT / "backend" / "queries"
 LIST = ROOT / "docs" / "queries.md"
 START, END = "<!-- queries -->", "<!-- /queries -->"
+PUBLIC = [ROOT / "README.md", ROOT / "site" / "index.html", ROOT / "site" / "docs.html"]
+COUNT = re.compile(r"\b\d+(?= (?:graph |Cypher )?queries)")  # = test_docs.QUERY_COUNT
 HEADER = re.compile(r"^//\s*(?P<name>[\w.]+\.cypher)\s*[—-]+\s*(?P<purpose>.+)$")
 
 # (group title, test on the query name), first match wins
@@ -65,13 +68,19 @@ def main() -> int:
     head, rest = text.split(START, 1)
     _, tail = rest.split(END, 1)
     new = f"{head}{START}\n{table()}{END}{tail}"
+    n = str(len(rows()))
+    pages = {page: COUNT.sub(n, page.read_text(encoding="utf-8")) for page in PUBLIC}
+    stale = [page for page, body in pages.items() if body != page.read_text(encoding="utf-8")]
     if "--check" in sys.argv:
-        if new != text:
-            print("docs/queries.md is stale: run scripts/query_table.py", file=sys.stderr)
+        if new != text or stale:
+            names = ", ".join(p.relative_to(ROOT).as_posix() for p in [LIST] * (new != text) + stale)
+            print(f"stale query count or table in {names}: run scripts/query_table.py", file=sys.stderr)
             return 1
         return 0
     LIST.open("w", encoding="utf-8", newline="\n").write(new)
-    print(f"docs/queries.md: {len(rows())} queries")
+    for page in stale:
+        page.open("w", encoding="utf-8", newline="\n").write(pages[page])
+    print(f"docs/queries.md and {len(stale)} public pages: {n} queries")
     return 0
 
 

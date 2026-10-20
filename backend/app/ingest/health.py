@@ -36,6 +36,7 @@ def report(graph: str | None = None) -> dict[str, Any]:
             {"labels": ":".join(r["labels"]), "n": r["n"]} for r in rows("health_mentions")
         ],
         "speakers": rows("health_spoke_in"),
+        "dead_letters": rows("health_dead_letters"),
     }
 
 
@@ -67,4 +68,7 @@ def render(r: dict[str, Any]) -> str:
     )
     lines += [f"  MENTIONS {row['labels']:<21}{row['n']:>6,}" for row in r["mentions"]]
     lines += [f"  SPOKE_IN {row['method']:<21}{row['n']:>6,}" for row in r["speakers"]]
+    dead = r.get("dead_letters") or []
+    lines.append(f"dead letters: {sum(row['n'] for row in dead):,} (yaan connectors dead)")
+    lines += [f"  {row['source']:<12}{row['reason']:<16}{row['n']:>6,}" for row in dead]
     return "\n".join(lines)

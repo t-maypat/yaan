@@ -65,9 +65,27 @@ def test_synthetic_ids_have_the_live_paths_rule5_shape():
         live.check_synthetic("msg:20270309-0-abc")
 
 
-def test_a_sync_round_ingests_new_and_newer_items_once(tmp_path, monkeypatch):
+@pytest.fixture
+def offline(tmp_path, monkeypatch):
+    """A sync round with no database: state in tmp_path, nothing present in the graph,
+    nothing to deliver, dead letters collected in a list."""
     monkeypatch.setattr(live, "live_dir", lambda graph: tmp_path / graph)
+    monkeypatch.setattr(live, "present_ids", lambda graph, ids: set())
     monkeypatch.setattr(runner, "deliver", lambda connectors, graph: ([], []))
+    dead = []
+
+    def record_dead(graph, source, item, error, attempts):
+        dead.append((item.artifact.id, type(error).__name__, attempts))
+
+    monkeypatch.setattr(runner, "record_dead", record_dead)
+    return dead
+
+
+def answers(a, graph, events=None, replace=False):
+    return {"alerts": [], "freshness_lag_ms": 1}
+
+
+def test_a_sync_round_ingests_new_and_newer_items_once(offline, monkeypatch):
     calls = []
 
     def ingest(a, graph, events=None, replace=False):
@@ -91,8 +109,10 @@ def test_a_sync_round_ingests_new_and_newer_items_once(tmp_path, monkeypatch):
     assert first["ingested"][0]["alerts"] == ["alert:1"]
     assert {r["id"]: r["why"] for r in first["refused"]} == {
         msg(2).id: "not labeled [synthetic demo]",
-        msg(3).id: "unknown author",
     }
+    # refused by the live path: kept as a dead letter, with the item, not dropped (D107)
+    assert [r["why"] for r in first["dead"]] == ["LiveError: unknown author"]
+    assert offline == [(msg(3).id, "LiveError", 1)]
     assert calls == [(msg(1).id, False, events), (msg(3).id, False, None)]
     # the same versions again: nothing; a newer version of item 1: re-ingested as a replacement
     assert runner.sync([fake], "lore_demo")["ingested"] == []
@@ -100,6 +120,86 @@ def test_a_sync_round_ingests_new_and_newer_items_once(tmp_path, monkeypatch):
     assert [r["id"] for r in runner.sync([fake], "lore_demo")["ingested"]] == [msg(1).id]
     assert calls[-1] == (msg(1).id, True, None)
     assert runner.load_state("lore_demo")["slack"]["since_ms"] == 20
+
+
+def test_an_item_that_may_still_go_in_waits_and_holds_the_cursor(offline, monkeypatch):
+    """The spend cap, FalkorDB down, the lock busy: not the item's fault. It isn't counted,
+    isn't marked seen, and the cursor stays below it, so the next round fetches it again."""
+    from app import llm
+
+    outcome = {msg(2).id: llm.SpendCapReached("cap")}
+
+    def ingest(a, graph, events=None, replace=False):
+        if a.id in outcome:
+            raise outcome[a.id]
+        return answers(a, graph)
+
+    monkeypatch.setattr(live, "ingest_artifact", ingest)
+    # item 3 went in at version 20, after item 2 (version 15) had to wait
+    fake = Fake("slack", [Item(msg(1), updated_ms=10), Item(msg(2), 15), Item(msg(3), 20)])
+    report = runner.sync([fake], "lore_demo")
+    assert [r["id"] for r in report["ingested"]] == [msg(1).id, msg(3).id]
+    assert [(r["id"], r["failures"]) for r in report["waiting"]] == [(msg(2).id, 0)]
+    state = runner.load_state("lore_demo")["slack"]
+    assert state["since_ms"] == 14  # below the waiting version, though item 3 (20) went in
+    assert msg(2).id not in state["seen"]
+    outcome.clear()  # the cap resets: the item goes in, the done ones aren't redone
+    again = runner.sync([fake], "lore_demo")
+    assert [r["id"] for r in again["ingested"]] == [msg(2).id]
+    assert runner.load_state("lore_demo")["slack"]["since_ms"] == 20
+    assert offline == []
+
+
+def test_an_item_that_keeps_failing_becomes_a_dead_letter(offline, monkeypatch):
+    def ingest(a, graph, events=None, replace=False):
+        raise KeyError("a bug in a stage")
+
+    monkeypatch.setattr(live, "ingest_artifact", ingest)
+    fake = Fake("slack", [Item(msg(1), updated_ms=10)])
+    for n in range(1, runner.POISON_AFTER):
+        report = runner.sync([fake], "lore_demo")
+        assert [r["failures"] for r in report["waiting"]] == [n]
+    report = runner.sync([fake], "lore_demo")
+    assert report["waiting"] == [] and [r["id"] for r in report["dead"]] == [msg(1).id]
+    assert offline == [(msg(1).id, "KeyError", runner.POISON_AFTER)]
+    state = runner.load_state("lore_demo")["slack"]
+    assert state["since_ms"] == 10 and state["failures"] == {}  # the connector moves on
+
+
+def test_a_tool_that_fails_to_answer_waits_and_the_others_go_on(offline, monkeypatch):
+    monkeypatch.setattr(live, "ingest_artifact", answers)
+
+    class Down(Fake):
+        def fetch(self, since_ms):
+            raise base.ConnectorError("Jira GET /search: 503")
+
+    report = runner.sync([Down("jira"), Fake("slack", [Item(msg(1), 10)])], "lore_demo")
+    assert report["waiting"] == [
+        {"id": None, "source": "jira", "why": "ConnectorError: Jira GET /search: 503"}
+    ]
+    assert [r["id"] for r in report["ingested"]] == [msg(1).id]
+
+
+def test_seen_versions_are_kept_a_day_behind_the_cursor_and_state_writes_are_atomic(
+    offline, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(live, "ingest_artifact", answers)
+    day = runner.KEEP_SEEN_MS
+    fake = Fake("slack", [Item(msg(1), updated_ms=10), Item(msg(2), updated_ms=10 + 2 * day)])
+    runner.sync([fake], "lore_demo")
+    assert set(runner.load_state("lore_demo")["slack"]["seen"]) == {msg(2).id}
+    assert [p.name for p in (tmp_path / "lore_demo").iterdir()] == [runner.STATE]
+
+
+def test_the_heartbeat_says_whether_the_loop_is_alive(offline):
+    assert runner.worker_health("lore_demo") == {"status": "absent"}
+    runner.beat("lore_demo", healthy=True, pause_s=30)
+    assert runner.worker_health("lore_demo")["status"] == "ok"
+    runner.beat("lore_demo", healthy=False, pause_s=60)
+    beat = runner.worker_health("lore_demo")
+    assert beat["status"] == "waiting"
+    late = beat["next_by_ms"] + runner.HEARTBEAT_GRACE_MS + 1
+    assert runner.worker_health("lore_demo", now_ms=late)["status"] == "stale"
 
 
 def test_deliver_hands_each_action_to_the_tool_that_holds_its_target(monkeypatch):
@@ -155,4 +255,44 @@ def test_actions_to_send_lists_approved_unsent_and_marking_removes_them(empty_gr
     )
     assert [r["id"] for r in db.run("actions_to_send", {"limit": 10}, graph=empty_graph).rows] == [
         "act:1"
+    ]
+
+
+def test_a_dead_letter_keeps_its_item_and_retry_replays_it(empty_graph, monkeypatch):
+    """The DeadLetter round trip on the real server: stored with the item and the reason,
+    listed (without the item), counted in Graph health, replayed by retry and then gone."""
+    from app.ingest import health
+
+    events = [{"type": "issue_resolved", "quote": "Export is slow"}]
+    item = Item(msg(1), updated_ms=10, events=events)
+    runner.record_dead(empty_graph, "slack", item, live.LiveError("unknown author"), 1)
+    runner.record_dead(empty_graph, "jira", Item(msg(2), 11), KeyError("bug"), 5)
+    rows = runner.dead_letters(empty_graph)
+    assert sorted((r["source"], r["reason"], r["attempts"]) for r in rows) == [
+        ("jira", "kept failing", 5),
+        ("slack", "refused", 1),
+    ]
+    assert "payload" not in rows[0]
+    found = health.report(empty_graph)["dead_letters"]
+    assert {(r["source"], r["reason"]): r["n"] for r in found} == {
+        ("jira", "kept failing"): 1,
+        ("slack", "refused"): 1,
+    }
+
+    replayed = []
+
+    def ingest(a, graph, events=None, replace=False):
+        if a.id == msg(2).id:
+            raise live.LiveError("still unknown")
+        replayed.append((a, events, replace))
+        return answers(a, graph)
+
+    monkeypatch.setattr(live, "ingest_artifact", ingest)
+    out = runner.retry(empty_graph)
+    assert [r["artifact_id"] for r in out["ingested"]] == [msg(1).id]
+    assert out["failed"] == [{"id": f"dead:jira:{msg(2).id}", "why": "LiveError: still unknown"}]
+    assert replayed == [(msg(1), events, False)]
+    left = runner.dead_letters(empty_graph)
+    assert [(r["source"], r["attempts"], r["error"]) for r in left] == [
+        ("jira", 6, "LiveError: still unknown")
     ]
