@@ -13,11 +13,11 @@ from app.config import Settings, get_settings
 def test_the_schema_file_declares_the_expected_indexes():
     specs = schema.declared()
     kinds = [s.kind for s in specs]
-    # 27 range indexes: 20, plus Event id / product_id / artifact_id and the product_id of
-    # claims, issues and decisions, which the per-product fold reads (D101), and DeadLetter id
-    # (D107)
+    # 28 range indexes: 20, plus Event id / product_id / artifact_id and the product_id of
+    # claims, issues and decisions, which the per-product fold reads (D101), DeadLetter id
+    # (D107) and Artifact url, the live linker's lookup (D113)
     assert (
-        kinds.count("RANGE") == 27 and kinds.count("FULLTEXT") == 2 and kinds.count("VECTOR") == 1
+        kinds.count("RANGE") == 28 and kinds.count("FULLTEXT") == 2 and kinds.count("VECTOR") == 1
     )
     assert len({(s.label, s.prop, s.kind) for s in specs}) == len(specs), "duplicate index lines"
 

@@ -13,6 +13,7 @@ Hardening after the post-event review (docs/hardening-plan.md).
 
 ### Upgrading
 - Connectors now run in their own container: `docker compose --profile app --profile connectors up -d` replaces `docker compose exec -d api yaan connectors run`.
+- Run `yaan schema` once on an existing graph: it adds the index the live linker now uses to find already-loaded pull requests and documents by url.
 - Org mode: every source other than Slack needs `visibility: everyone` or `visibility: members` (with `members:`) in `connectors.yaml`; `yaan init` says which is missing. Slack's private channels and members are now read from Slack, so a private Slack channel needs a Yaan channel of its own.
 - The web UI keeps no token: signing in trades it for an HttpOnly session cookie, so a token saved by an earlier version is exchanged once and deleted. Sign in again if asked.
 - Tokens now expire (90 days unless `yaan token issue --days` says otherwise). Tokens issued before this version stay valid until revoked.
@@ -20,6 +21,7 @@ Hardening after the post-event review (docs/hardening-plan.md).
 - The containers no longer run as root. On Linux, `./data` must be writable by uid 10001 (`sudo chown -R 10001:10001 data`), or set `LORE_UID` and `LORE_GID` in `.env` to its owner. The container says so at start if it isn't. Docker Desktop needs nothing.
 
 ### Added
+- The live path no longer keeps a log of every live artifact (`data/live/<graph>/artifacts.jsonl`, which only grew): what a new item links to is looked up in the graph.
 - Live ingestion in batches: a connector round's items go through one fold and one Sentinel pass. On a copy of the demo graph with twice its events, a message costs about 80 ms in a batch of ten, down from 7 s (`scripts/bench_live.py` measures it).
 - `yaan token list` and `yaan token revoke <person> --id <id>` (one token, not all of a person's); tokens record when they were last used.
 - A Content-Security-Policy and other security headers on every response.

@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-211 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+214 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -35,7 +35,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`health_pr_chains.cypher`](../backend/queries/health_pr_chains.cypher) | PRs with and without a status decision chain, internal vs external |
 | [`health_spoke_in.cypher`](../backend/queries/health_spoke_in.cypher) | resolved meeting speakers per resolution method (S10) |
 
-**Writes: ingestion, linking, the fold, derived layers, the Sentinel** (103)
+**Writes: ingestion, linking, the fold, derived layers, the Sentinel** (105)
 
 | Query | Purpose |
 |---|---|
@@ -76,6 +76,8 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`link_claim_about_pr.cypher`](../backend/queries/link_claim_about_pr.cypher) | (Claim)-[:ABOUT]->(PR): the pull request a PR-intent claim is about |
 | [`link_claim_from.cypher`](../backend/queries/link_claim_from.cypher) | (Claim)-[:FROM {quote, start, end}]->(Artifact): the message a claim's verbatim quote comes from (S6) |
 | [`link_conflicts_with.cypher`](../backend/queries/link_conflicts_with.cypher) | (Claim)-[:CONFLICTS_WITH {reason}]->(Decision): an unauthorized claim that did not change state (§9.4, R1-3) |
+| [`link_context_prs.cypher`](../backend/queries/link_context_prs.cypher) | the loaded PRs that new "Revert PR# N" pull requests name, by repository and number: the live linker's revert targets (D113) |
+| [`link_context_urls.cypher`](../backend/queries/link_context_urls.cypher) | the loaded PRs, docs and links a new artifact's urls name: the live linker's context, looked up per artifact instead of read from a growing log (D113) |
 | [`link_decided_by.cypher`](../backend/queries/link_decided_by.cypher) | (Decision)-[:DECIDED_BY]->(Person) |
 | [`link_evidenced_by.cypher`](../backend/queries/link_evidenced_by.cypher) | (Decision)-[:EVIDENCED_BY {quote, field, start, end}]->(Artifact), the source of a decision |
 | [`link_fixes.cypher`](../backend/queries/link_fixes.cypher) | (PR)-[:FIXES]->(Issue): the pull request a resolution message points to |
@@ -143,7 +145,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_prs.cypher`](../backend/queries/upsert_prs.cypher) | pull request artifacts, with current_status from their decision chain |
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (95)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (96)
 
 | Query | Purpose |
 |---|---|
@@ -218,6 +220,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`person_teams.cypher`](../backend/queries/person_teams.cypher) | each person's team from the org chart (MEMBER_OF), to compare with the working groups (10.4, D064) |
 | [`person_truck.cypher`](../backend/queries/person_truck.cypher) | the products whose truck factor removes this person: losing them leaves most of that product's areas with no author (tool 4 person_profile, 10.3) |
 | [`precedent_candidates.cypher`](../backend/queries/precedent_candidates.cypher) | every extracted decision that isn't a plain report, with what it is about (issue title + description, or PR title): the input for PRECEDENT_FOR by similarity (10.6, D066) |
+| [`product_aliases.cypher`](../backend/queries/product_aliases.cypher) | a product's codenames (from renamed channels), so the live linker finds "abAIX" as CollaborateForce (D113) |
 | [`product_areas.cypher`](../backend/queries/product_areas.cypher) | a product's areas (components and work items) with their names, aliases and authors: who_knows matches a topic against them (10.7) |
 | [`product_clock.cypher`](../backend/queries/product_clock.cypher) | each product's last artifact time: "now" on HERB's clock, for recency (10.2, D057) |
 | [`product_events.cypher`](../backend/queries/product_events.cypher) | one product's events as Lore knows them now (not retracted), or as it knew them at $known_at_ms (observed by then, not yet retracted): the fold's input (D101) |

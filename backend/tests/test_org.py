@@ -576,3 +576,56 @@ def test_a_batch_ends_where_one_message_at_a_time_does(org_mode, empty_graph):
         assert outs[2]["alerts"] and outs[2]["alerts"][0]["kind"] == "regression"
     finally:
         db.client(readonly=False).select_graph(other).delete()
+
+
+@pytest.mark.db
+@pytest.mark.model
+def test_the_live_linker_finds_what_is_loaded_in_the_graph(org_mode, empty_graph):
+    """D113: no log of every live artifact so far. A message's url finds the PR already in the
+    graph and "Revert PR# 1" finds PR 1 of its repository, each by an indexed lookup for that
+    artifact. (Codenames: test_linker, an org's products have none.)"""
+    org.prepare(empty_graph, MAPS.product, MAPS.sources)
+    priya = org.eid_for("priya@acme.example")
+    repo, url = "acme/app", "https://github.com/acme/app/pull/1"
+
+    def pr(n, title):
+        return Artifact(
+            id=base.synthetic_id("pr", "github", f"{repo}#{n}"),
+            kind="pr",
+            product_hint="Acme",
+            ts_ms=1804586400000 + n,
+            ts_iso="2027-03-09T10:00:00Z",
+            author_eid=priya,
+            title=title,
+            text="",
+            url=f"https://github.com/{repo}/pull/{n}",
+            raw_ref=f"github:{repo}#{n}",
+            meta={"repo": repo, "number": n, "state": "open", "merged": False, "reviews": []},
+        )
+
+    first, revert = pr(1, "Stream the CSV export"), pr(2, "Revert PR# 1: Stream the CSV export")
+    live.ingest_artifact(first, empty_graph)
+    note = Artifact(
+        id=base.synthetic_id("msg", "slack", "C1-1804586500.0001"),
+        kind="message",
+        product_hint="Acme",
+        channel_id="bug-support",
+        ts_ms=1804586500000,
+        ts_iso="2027-03-09T10:01:40Z",
+        author_eid=priya,
+        text=f"The export fix is in {url}/ now.",
+        raw_ref="slack:C1:1",
+        meta={"channel_name": "bug-support", "sender": priya, "source": "slack"},
+    )
+    live.ingest_batch([(note, [], False), (revert, None, False)], empty_graph)
+    edges = db.run_text(
+        "MATCH (m:Message {id: $m}) "
+        "OPTIONAL MATCH (m)-[:SHARES]->(shared:Artifact) "
+        "OPTIONAL MATCH (r:Artifact {id: $r})-[:REVERTS]->(o:Artifact) "
+        "RETURN shared.id AS shared, o.id AS reverted LIMIT 1",
+        {"m": note.id, "r": revert.id},
+        label="links",
+        graph=empty_graph,
+    ).rows[0]
+    assert edges == {"shared": first.id, "reverted": first.id}
+    assert not (live.live_dir(empty_graph) / "artifacts.jsonl").exists()  # no log any more

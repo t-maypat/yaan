@@ -237,11 +237,10 @@ def _prepare(
 def _write_batch(ready: list[dict[str, Any]], graph: str) -> None:
     """The graph writes of a batch (under the writer lock): each item's S2-S4 and events,
     then one fold per product and one Sentinel pass. Sets each item's `result` or `error`."""
-    log = _read(graph, "artifacts.jsonl")  # the linker's context: read once per batch
     written = []
     for p in ready:
         try:
-            _write_one(p, graph, log)
+            _write_one(p, graph)
             written.append(p)
         except Exception as e:  # this item only: the others still go in
             p["error"] = e
@@ -286,8 +285,8 @@ def _write_batch(ready: list[dict[str, Any]], graph: str) -> None:
         }
 
 
-def _write_one(p: dict[str, Any], graph: str, log: list[dict[str, Any]]) -> None:
-    """One artifact's S2-S4 and events. `log`: the live artifacts so far (kept in step)."""
+def _write_one(p: dict[str, Any], graph: str) -> None:
+    """One artifact's S2-S4 and events."""
     a, meta, stages, received_ms = p["a"], p["meta"], p["stages"], p["received_ms"]
     product = a.product_hint
     again = bool(present_ids(graph, [a.id]))
@@ -306,22 +305,55 @@ def _write_one(p: dict[str, Any], graph: str, log: list[dict[str, Any]]) -> None
     stages["s3_chunk_embed"] = _ms(t)
 
     t = time.perf_counter()
-    # linked against everything already loaded (HERB's and earlier live artifacts): a url in
-    # the text finds its PR, doc or link, and "Revert PR# N" finds N, whichever came first
-    known = [*_base(graph)[1].get(product, []), *(Artifact(**r) for r in log if r["id"] != a.id)]
-    link_rows, _ = linker.build_rows(meta, {product: [a]}, context={product: known})
+    # linked against what is already loaded, looked up in the graph for this artifact (D113):
+    # a url in the text finds its PR, doc or link, "Revert PR# N" finds N, a codename its
+    # product, whichever came first
+    known, aliases = link_context(a, graph)
+    link_rows, _ = linker.build_rows(meta, {product: [a]}, {product: known}, aliases)
     linker.load(link_rows, graph)
     stages["s4_link"] = _ms(t)
 
     # the events become graph facts; a newer version of the artifact closes the ones it no
-    # longer states (never deletes them). The artifact log is only the linker's context now.
+    # longer states (never deletes them)
     event_store.load(p["kept"], graph, observed_ms=received_ms)
     if again:
         event_store.retract(a.id, [event_store.event_id(e) for e in p["kept"]], graph, received_ms)
-        _rewrite(graph, "artifacts.jsonl", lambda r: r["id"] != a.id)
-        log[:] = [r for r in log if r["id"] != a.id]
-    _append(graph, "artifacts.jsonl", [a.model_dump()])
-    log.append(a.model_dump())
+
+
+def link_context(a: Artifact, graph: str) -> tuple[list[Artifact], dict[str, list[str]]]:
+    """What the linker needs to know about what is already loaded, for one new artifact
+    (D113): the PRs, docs and links its urls name, the PR a "Revert PR# N" title undoes, and
+    the product's codenames. Indexed lookups for this artifact only, where the live path used
+    to read every live artifact so far from a log that only grew."""
+    product = a.product_hint
+    text = "\n".join(t for t in (a.title, a.text) if t)
+    found = linker.urls(text)
+    variants = sorted({v for u in found for v in (u, u + "/")})
+    rows = []
+    if variants:
+        rows += db.run("link_context_urls", {"urls": variants, "limit": 200}, graph=graph).rows
+    if a.kind == "pr" and (m := linker.REVERT.match(a.title or "")) and a.meta.get("repo"):
+        refs = [{"repo": a.meta["repo"], "number": int(m.group(1))}]
+        prs = db.run("link_context_prs", {"refs": refs, "limit": 5}, graph=graph).rows
+        rows += [r | {"kind": "pr"} for r in prs]
+    known = [
+        Artifact(
+            id=r["id"],
+            kind=r["kind"],
+            product_hint=product,
+            ts_ms=None,
+            ts_iso=None,
+            text="",
+            url=r["url"],
+            raw_ref=r["id"],
+            meta={"repo": r["repo"], "number": r["number"]} if r["kind"] == "pr" else {},
+        )
+        for r in rows
+        if r["id"] != a.id
+    ]
+    alias_rows = db.run("product_aliases", {"product_id": product}, graph=graph).rows
+    aliases = {product: list((alias_rows[0]["aliases"] if alias_rows else None) or [])}
+    return known, aliases
 
 
 DERIVE_EVERY_S = 300  # the derived layer is at most this stale after a live write (D112)
@@ -486,14 +518,6 @@ def _append(graph: str, name: str, rows: list[dict[str, Any]]) -> None:
     folder = live_dir(graph)
     folder.mkdir(parents=True, exist_ok=True)
     with (folder / name).open("a", encoding="utf-8", newline="\n") as f:
-        for r in rows:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
-
-
-def _rewrite(graph: str, name: str, keep) -> None:
-    rows = [r for r in _read(graph, name) if keep(r)]
-    path = live_dir(graph) / name
-    with path.open("w", encoding="utf-8", newline="\n") as f:
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 

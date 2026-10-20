@@ -70,13 +70,19 @@ class Dictionaries:
     active: dict[str, set[str]]  # product -> eids that authored something in it
 
 
-def dictionaries(meta: Metadata, products: dict[str, list[Artifact]]) -> Dictionaries:
+def dictionaries(
+    meta: Metadata,
+    products: dict[str, list[Artifact]],
+    aliases: dict[str, list[str]] | None = None,
+) -> Dictionaries:
+    """`aliases`: codenames known already (the graph's Product.aliases), beside the ones the
+    artifacts' renamed channels show (D113: the live linker has no channel history)."""
     by_url: dict[str, str] = {}
     active: dict[str, set[str]] = defaultdict(set)
     surfaces: dict[str, str] = {}
     for product, artifacts in products.items():
         surfaces[product] = product
-        for codename in channel_rows(product, artifacts)[1]:
+        for codename in [*channel_rows(product, artifacts)[1], *(aliases or {}).get(product, [])]:
             surfaces[codename] = product
         for a in artifacts:
             if a.url and a.kind in ("pr", "doc", "link"):
@@ -146,12 +152,14 @@ def build_rows(
     meta: Metadata,
     products: dict[str, list[Artifact]],
     context: dict[str, list[Artifact]] | None = None,
+    aliases: dict[str, list[str]] | None = None,
 ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
     """All link rows for the given products, plus a log of every unresolved mention.
     `context` artifacts only resolve urls, names and revert targets; they aren't linked again
-    (the live path links one new artifact against everything already loaded, 17.2)."""
+    (the live path links one new artifact against what is already loaded, 17.2, looked up in
+    the graph for that artifact, D113). `aliases`: product codenames already known."""
     pool = {p: [*arts, *(context or {}).get(p, [])] for p, arts in products.items()}
-    d = dictionaries(meta, pool)
+    d = dictionaries(meta, pool, aliases)
     rows: dict[str, list[dict[str, Any]]] = {name: [] for name in LOAD_ORDER}
     unresolved_log: list[dict[str, Any]] = []
     for product, artifacts in products.items():

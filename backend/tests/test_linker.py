@@ -198,3 +198,25 @@ def test_link_queries_find_nodes_by_index(empty_graph, name):
     plan = " / ".join(db.explain(name, {"rows": [{}]}, graph=empty_graph))
     assert "Node By Index Scan" in plan
     assert "Label Scan" not in plan and "All Node Scan" not in plan
+
+
+def test_a_codename_known_already_links_without_its_channel_history():
+    """D113: the live linker gets a product's codenames from the graph (Product.aliases), not
+    from the renamed channels of every artifact loaded so far."""
+    a = Artifact(
+        id="msg:x",
+        kind="message",
+        product_hint="Acme",
+        channel_id="bug-support",
+        ts_ms=1,
+        ts_iso="2027-03-09T10:00:00Z",
+        text="The acmX export fix is in https://github.com/acme/app/pull/1/ now.",
+        raw_ref="x",
+        meta={"channel_name": "bug-support"},
+    )
+    meta = structural.Metadata(employees={}, hierarchy=[], customers=[])
+    rows, _ = linker.build_rows(meta, {"Acme": [a]}, {"Acme": []}, {"Acme": ["acmX"]})
+    assert rows["link_mentions_product"] == [
+        {"artifact_id": "msg:x", "entity_id": "Acme", "surfaces": ["acmX"]}
+    ]
+    assert linker.build_rows(meta, {"Acme": [a]})[0]["link_mentions_product"] == []
