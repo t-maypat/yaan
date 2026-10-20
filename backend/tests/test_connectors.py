@@ -220,9 +220,15 @@ def test_deliver_hands_each_action_to_the_tool_that_holds_its_target(monkeypatch
     github, slack = Fake("github", takes="pr:"), Fake("slack", takes="eid_")
     notion = Fake("notion", fails=True)
     sent, unsent = runner.deliver([notion, github, slack], "lore_demo")
-    assert [(s["id"], s["via"]) for s in sent] == [("act:1", "github"), ("act:2", "slack")]
-    assert [m["id"] for m in marked] == ["act:1", "act:2"]
-    assert unsent == [{"id": "act:3", "kind": "doc_fix", "why": "notion: token expired"}]
+    assert [(s["id"], s["via"]) for s in sent] == [("act:2", "slack")]
+    assert [m["id"] for m in marked] == ["act:2"]
+    # the ticket comment reached GitHub but Notion failed: not marked sent, so the next round
+    # sends it again (GitHub's copy is found by its marker, D110)
+    why = "notion: ConnectorError: token expired"
+    assert unsent == [
+        {"id": "act:1", "kind": "ticket_comment", "why": why},
+        {"id": "act:3", "kind": "doc_fix", "why": why},
+    ]
 
 
 def test_the_repo_maps_parse():
@@ -236,11 +242,18 @@ def test_the_repo_maps_parse():
 @pytest.mark.db
 def test_actions_to_send_lists_approved_unsent_and_marking_removes_them(empty_graph):
     db.run_text(
-        "CREATE (:Action {id: 'act:1', kind: 'ticket_comment', status: 'approved', decided_ms: 2,"
-        " target_kind: 'issue', target_id: 'iss:W:1', target_name: 'Slow export', draft: 'Hi'}),"
-        " (:Action {id: 'act:2', kind: 'notify_owner', status: 'proposed', target_id: 'eid_1'}),"
+        "CREATE (done:Alert {id: 'alert:1', status: 'approved'}),"
+        " (busy:Alert {id: 'alert:2', status: 'responding'}),"
+        " (:Action {id: 'act:1', kind: 'ticket_comment', status: 'approved', decided_ms: 2,"
+        " target_kind: 'issue', target_id: 'iss:W:1', target_name: 'Slow export', draft: 'Hi'})"
+        "-[:FOR]->(done),"
+        " (:Action {id: 'act:2', kind: 'notify_owner', status: 'proposed', target_id: 'eid_1'})"
+        "-[:FOR]->(done),"
         " (:Action {id: 'act:3', kind: 'doc_fix', status: 'approved', decided_ms: 1,"
-        " target_id: 'msg:synthetic-slack-1'})",
+        " target_id: 'msg:synthetic-slack-1'})-[:FOR]->(done),"
+        # approved, but its response is still being written (D110): not sent yet
+        " (:Action {id: 'act:4', kind: 'doc_fix', status: 'approved', decided_ms: 0,"
+        " target_id: 'msg:synthetic-slack-2'})-[:FOR]->(busy)",
         label="actions",
         graph=empty_graph,
         readonly=False,

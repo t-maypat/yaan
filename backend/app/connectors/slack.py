@@ -208,16 +208,27 @@ class SlackConnector:
         its thread. Anything else belongs to another tool. Rendered as Block Kit (D083)."""
         target = action.get("target_id") or ""
         resolve = resolve or self.link
+        # the action's id rides along as message metadata, so a retry finds it (D110)
+        meta = {"event_type": "yaan_action", "event_payload": {"action_id": action["id"]}}
         if action["kind"] == "notify_owner":
             channel = self.alerts_channel()
+            if done := self.marked(action, channel, oldest_ms=action.get("decided_ms")):
+                return done
             text, blocks = render.slack_notify(action, resolve)
             r = self._call(
-                "chat_postMessage", channel=channel, text=text, blocks=blocks, unfurl_links=False
+                "chat_postMessage",
+                channel=channel,
+                text=text,
+                blocks=blocks,
+                unfurl_links=False,
+                metadata=meta,
             )
             return self.permalink(channel, r["ts"])
         prefix = base.id_prefix("msg", "slack")
         if target.startswith(prefix):
             cid, _, ts = target.removeprefix(prefix).partition("-")
+            if done := self.marked(action, cid, thread=ts):
+                return done
             r = self._call(
                 "chat_postMessage",
                 channel=cid,
@@ -225,8 +236,37 @@ class SlackConnector:
                 text=f"Correction from Lore: {action.get('target_name') or 'this message'}",
                 blocks=render.slack_correction(action, resolve),
                 unfurl_links=False,
+                metadata=meta,
             )
             return self.permalink(cid, r["ts"])
+        return None
+
+    def marked(
+        self,
+        action: dict[str, Any],
+        channel: str,
+        oldest_ms: int | None = None,
+        thread: str | None = None,
+    ) -> str | None:
+        """The message an earlier try of `action` already posted (by its metadata), if any."""
+        if thread:
+            r = self._call(
+                "conversations_replies", channel=channel, ts=thread, include_all_metadata=True
+            )
+        else:
+            oldest = f"{oldest_ms / 1000:.6f}" if oldest_ms else None
+            r = self._call(
+                "conversations_history",
+                channel=channel,
+                oldest=oldest,
+                include_all_metadata=True,
+                limit=200,
+            )
+        for m in r.get("messages") or []:
+            meta = m.get("metadata") or {}
+            payload = meta.get("event_payload") or {}
+            if meta.get("event_type") == "yaan_action" and payload.get("action_id") == action["id"]:
+                return self.permalink(channel, m["ts"])
         return None
 
     def link(self, artifact_id: str) -> render.Link | None:

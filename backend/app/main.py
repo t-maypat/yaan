@@ -42,8 +42,21 @@ mcp_http = mcp_server.HttpEndpoint()  # /mcp (17.1): Lore's tools for any MCP cl
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    finish_stuck_responses()
     async with mcp_http.running():
         yield
+
+
+def finish_stuck_responses() -> None:
+    """Approvals a stopped API left half-written are finished at start (D110). The API still
+    starts if FalkorDB isn't there yet: /health says so, and the worker retries every round."""
+    from app.sentinel import approve
+
+    try:
+        for alert_id in approve.complete_stuck(get_settings().api_graph()):
+            print(f"yaan: finished the response to {alert_id}", flush=True)
+    except Exception as e:
+        print(f"yaan: couldn't check for unfinished responses: {type(e).__name__}: {e}", flush=True)
 
 
 app = FastAPI(title="Lore", version=__version__, lifespan=lifespan)

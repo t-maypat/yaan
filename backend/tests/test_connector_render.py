@@ -65,8 +65,9 @@ def test_an_unknown_shape_still_posts_with_ids_linked():
 
 
 def test_github_markdown_quotes_under_their_lead_with_links():
-    md = render.markdown({"kind": "ticket_comment", "draft": TICKET}, resolve)
+    md = render.markdown({"id": "act:7", "kind": "ticket_comment", "draft": TICKET}, resolve)
     assert md.startswith("### Lore Sentinel · Follow-up")
+    assert md.endswith("<!-- yaan-action:act:7 -->")  # found again on a retry (D110)
     assert "- **Now 'reopened' since 2026-10-18** · [Message in #vizforce-bugs](" in md
     assert f"  > {QUOTE}" in md
     assert "([PR #1](https://github.com/t-maypat/lore-sandbox/pull/1), merged)" in md
@@ -74,9 +75,10 @@ def test_github_markdown_quotes_under_their_lead_with_links():
 
 
 def test_jira_adf_is_a_panel_a_list_and_a_footer_with_linked_sources():
-    doc = render.jira_adf({"kind": "ticket_comment", "draft": TICKET}, resolve)
+    doc = render.jira_adf({"id": "act:7", "kind": "ticket_comment", "draft": TICKET}, resolve)
     panel, items, footer = doc["content"]
     assert panel["attrs"]["panelType"] == "info" and len(items["content"]) == 4
+    assert footer["content"][-1]["text"] == " ref yaan-action:act:7"
     flat = json.dumps(doc)
     assert '"href": "https://github.com/t-maypat/lore-sandbox/pull/1"' in flat
     assert f"“{QUOTE}”" in json.dumps(doc, ensure_ascii=False)
@@ -84,9 +86,12 @@ def test_jira_adf_is_a_panel_a_list_and_a_footer_with_linked_sources():
 
 def test_an_id_no_tool_holds_stays_visible():
     herb = "msg:20270101-1-abc"
-    md = render.markdown({"kind": "doc_fix", "draft": f'It said "fixed" ({herb}).'}, resolve)
+    fix = {"id": "a", "kind": "doc_fix", "draft": f'It said "fixed" ({herb}).'}
+    md = render.markdown(fix, resolve)
     assert f"`{herb}`" in md
-    adf = json.dumps(render.jira_adf({"kind": "doc_fix", "draft": f"See ({herb})."}, resolve))
+    adf = json.dumps(
+        render.jira_adf({"id": "a", "kind": "doc_fix", "draft": f"See ({herb})."}, resolve)
+    )
     assert herb in adf and '"code"' in adf
 
 

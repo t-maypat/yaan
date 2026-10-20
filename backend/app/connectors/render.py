@@ -47,6 +47,12 @@ REASON = {  # blast-radius reasons, short, for a card's "notifies" line
 FOOTER = "Sent by Lore after a person approved it. Every quote is checked word for word."
 
 
+def marker(action: dict[str, Any]) -> str:
+    """What every post of an approved action carries, so sending it again can first look for
+    it: a retry after a timeout, a crash or a half-failed round never posts twice (D110)."""
+    return f"yaan-action:{action['id']}"
+
+
 def resolver(connectors: Iterable[Any]) -> Resolve:
     """The first connected tool that holds an artifact id gives its label and url."""
     tools = list(connectors)
@@ -237,7 +243,7 @@ def markdown(action: dict[str, Any], resolve: Resolve | None) -> str:
         out.append(f"  > {quote}")
         if tail:
             out.append(f"  {tail}")
-    out += ["", f"<sub>{FOOTER}</sub>"]
+    out += ["", f"<sub>{FOOTER}</sub>", f"<!-- {marker(action)} -->"]
     return "\n".join(out)
 
 
@@ -315,7 +321,10 @@ def jira_adf(action: dict[str, Any], resolve: Resolve | None) -> dict[str, Any]:
             {"type": "bulletList", "content": items},
             {
                 "type": "paragraph",
-                "content": [{"type": "text", "text": FOOTER, "marks": [{"type": "em"}]}],
+                "content": [
+                    {"type": "text", "text": FOOTER, "marks": [{"type": "em"}]},
+                    {"type": "text", "text": f" ref {marker(action)}", "marks": [{"type": "code"}]},
+                ],
             },
         ],
     }

@@ -97,10 +97,16 @@ def conn(monkeypatch):
         if path.endswith("/changelog"):
             return httpx.Response(200, json=CHANGELOG)
         if path.endswith("/comment") and request.method == "GET":
-            return httpx.Response(200, json=COMMENTS)
+            mine = [
+                {"id": str(76 + i), "body": body}
+                for i, (where, body) in enumerate(seen["posted"], 1)
+                if where == path
+            ]
+            found = COMMENTS["comments"] + mine
+            return httpx.Response(200, json={"total": len(found), "comments": found})
         if path.endswith("/comment") and request.method == "POST":
             seen["posted"].append((path, json.loads(request.content)["body"]))
-            return httpx.Response(201, json={"id": "77"})
+            return httpx.Response(201, json={"id": str(76 + len(seen["posted"]))})
         return httpx.Response(404, text="nope")
 
     client = httpx.Client(
@@ -178,6 +184,10 @@ def test_comments_go_on_the_ticket(conn, monkeypatch):
     assert ref == "https://lore-demo.atlassian.net/browse/VIZ-1?focusedCommentId=77"
     path, body = conn.seen["posted"][-1]
     assert path.endswith("/issue/VIZ-1/comment")
+    target = "msg:synthetic-jira-VIZ-1-change-101"
+    # a retry: found by its marker in the footer (D110), not posted twice
+    again = conn.post({"id": "a1", "kind": "doc_fix", "target_id": target, "draft": "x"})
+    assert again == ref and len(conn.seen["posted"]) == 1
     panel, items, footer = body["content"]  # a Lore panel, one list item a line, the footer
     assert panel["type"] == "panel" and panel["attrs"]["panelType"] == "warning"  # a correction
     assert items["type"] == "bulletList" and len(items["content"]) == 2

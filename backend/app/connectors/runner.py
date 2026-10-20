@@ -228,15 +228,17 @@ def deliver(connectors: list[Connector], graph: str) -> tuple[list[dict], list[d
         for c in connectors:
             try:
                 ref = c.post(action, resolve)
-            except ConnectorError as e:  # reported, and the next connector may still take it
-                errors.append(f"{c.name}: {e}")
+            except Exception as e:  # a refusal or a timeout (it may have gone through: the
+                errors.append(f"{c.name}: {why(e)}")  # retry looks for its marker first)
                 continue
             if ref:
                 refs.append(ref)
                 via.append(c.name)
                 if action["kind"] not in EVERYWHERE:
                     break
-        if refs:
+        if refs and not (errors and action["kind"] in EVERYWHERE):
+            # a ticket comment that reached Jira but not GitHub stays unsent: the next round
+            # sends it again, and Jira's copy is found by its marker, not posted twice (D110)
             row = {
                 "id": action["id"],
                 "ref": " ".join(refs),
@@ -246,8 +248,8 @@ def deliver(connectors: list[Connector], graph: str) -> tuple[list[dict], list[d
             db.run("mark_action_sent", {"rows": [row]}, graph=graph, readonly=False)
             sent.append(row)
         else:
-            why = "; ".join(errors) or "no connected tool holds its target"
-            unsent.append({"id": action["id"], "kind": action["kind"], "why": why})
+            reason = "; ".join(errors) or "no connected tool holds its target"
+            unsent.append({"id": action["id"], "kind": action["kind"], "why": reason})
     return sent, unsent
 
 
@@ -392,8 +394,10 @@ def run_forever(graph: str | None = None, every_s: float = 30, say=print) -> Non
 def one_round(connectors: list[Connector], graph: str, bot: Any, say=print) -> bool:
     """One sync round, said out loud, then the Slack cards of new alerts. True when nothing
     had to wait (the pause between rounds grows while rounds keep waiting)."""
-    from app.sentinel import engine
+    from app.sentinel import approve, engine
 
+    for alert_id in approve.complete_stuck(graph):  # responses a stopped process left (D110)
+        say(f"finished the response to {alert_id}")
     report = sync(connectors, graph)
     for r in report["ingested"]:
         say(f"in  {r['id']} ({r['freshness_lag_ms']:.0f} ms) alerts={r['alerts']}")

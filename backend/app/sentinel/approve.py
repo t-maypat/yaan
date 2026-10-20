@@ -13,10 +13,18 @@ Approving means "send the drafted follow-ups" for every alert kind, a conflict i
 conflict's drafts ask the owner to confirm, and only an authorized claim (through the fold)
 changes state. Each drafted Action becomes approved (optionally with edited text) or skipped;
 a dismissal dismisses them all. Nothing is deleted. A second response to the same alert is
-refused, in the database as well as here (set_alert_response matches only an open alert).
+refused, in the database as well as here (claim_alert_response matches only an open alert).
+
+A response is several writes, and FalkorDB has no multi-statement transaction, so it is made
+safe to interrupt instead (D110): every write is computed first and stored on the alert as it
+is claimed (open -> 'responding'), then applied (each a MERGE or a SET by id), then the alert
+closes. A process that stops midway leaves a 'responding' alert that `complete_stuck` (the
+connector worker, every round) finishes from the stored writes. Approved drafts are sent only
+once their alert has closed.
 """
 
 import hashlib
+import json
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -92,27 +100,6 @@ def respond(
     topic = f"{alert_id}/response"
     decision_id = f"dec:{topic}:{now_ms}"
     sent = sorted(chosen) if verdict == "approved" else []
-    claimed = db.run(
-        "set_alert_response",
-        {
-            "rows": [
-                {
-                    "alert_id": alert_id,
-                    "status": verdict,
-                    "decided_ms": now_ms,
-                    "decided_iso": iso(now_ms),
-                    "person_id": person_id,
-                    "decision_id": decision_id,
-                    "note": note,
-                }
-            ]
-        },
-        graph=graph,
-        readonly=False,
-    ).rows
-    if not claimed:  # someone answered between our read and this write
-        raise AlertError(f"alert {alert_id!r} was answered by someone else")
-
     name, title = alert["person_name"], alert["subject_title"]
     if verdict == "approved":
         statement = (
@@ -184,9 +171,25 @@ def respond(
                 "end": None,
             }
         ]
-    for name_, rows_ in writes.items():
-        if rows_:
-            db.run(name_, {"rows": rows_}, graph=graph, readonly=False)
+    close = {
+        "alert_id": alert_id,
+        "status": verdict,
+        "decided_ms": now_ms,
+        "decided_iso": iso(now_ms),
+        "person_id": person_id,
+        "decision_id": decision_id,
+        "note": note,
+    }
+    intent = {"writes": writes, "close": close}
+    claimed = db.run(
+        "claim_alert_response",
+        {"rows": [{"alert_id": alert_id, "intent": json.dumps(intent), "now_ms": now_ms}]},
+        graph=graph,
+        readonly=False,
+    ).rows
+    if not claimed:  # someone answered between our read and this write
+        raise AlertError(f"alert {alert_id!r} was answered by someone else")
+    complete(intent, graph)
     return {
         "alert_id": alert_id,
         "status": verdict,
@@ -196,3 +199,26 @@ def respond(
         "precedents": precedents,
         "cypher": ["get_alert.cypher", "alert_precedents.cypher", "set_alert_response.cypher"],
     }
+
+
+def complete(intent: dict[str, Any], graph: str | None) -> None:
+    """Apply a claimed response's writes, then close its alert. Every write is a MERGE or a
+    SET by id, so running it again after an interruption ends in the same graph."""
+    for name, rows in intent["writes"].items():
+        if rows:
+            db.run(name, {"rows": rows}, graph=graph, readonly=False)
+    db.run("set_alert_response", {"rows": [intent["close"]]}, graph=graph, readonly=False)
+
+
+STUCK_AFTER_MS = 60_000  # a response still 'responding' this long after its claim stopped
+
+
+def complete_stuck(graph: str | None, now_ms: int | None = None) -> list[str]:
+    """Finish every response a stopped process left half-done. Returns their alert ids."""
+    now_ms = now_ms or int(time.time() * 1000)
+    rows = db.run(
+        "stuck_responses", {"before_ms": now_ms - STUCK_AFTER_MS, "limit": 100}, graph=graph
+    ).rows
+    for r in rows:
+        complete(json.loads(r["intent"]), graph)
+    return [r["id"] for r in rows]

@@ -3,6 +3,7 @@ product and writes only what changed. The key property: folding events one at a 
 order, ends in exactly the layer one full fold gives, and a second fold changes nothing."""
 
 import random
+import time
 
 import pytest
 
@@ -176,9 +177,32 @@ def test_one_writer_at_a_time_and_a_dead_holder_stops_counting(base):
                 pass
     with db.writer_lock(base, wait_s=0.3):  # given back
         pass
-    with db.writer_lock(base, ttl_ms=1):  # a holder whose lease runs out...
-        with db.writer_lock(base, wait_s=2):  # ...doesn't block the next writer for long
-            pass
+    # a holder that died: it took the lock and stopped renewing it (no process left to)
+    dead = {"name": "derived", "holder": "dead-1", "now_ms": int(time.time() * 1000), "ttl_ms": 1}
+    assert db.run("acquire_lock", dead, graph=base, readonly=False).rows
+    with db.writer_lock(base, wait_s=2):  # it doesn't block the next writer for long
+        pass
+
+
+def test_a_long_write_keeps_its_lease_and_a_lost_one_stops_writing(base):
+    """D110: the lease is renewed while the holder works; if it is lost anyway (taken by
+    another writer after a renewal failed), the holder's next write raises LockLost."""
+    with db.writer_lock(base, ttl_ms=600):
+        time.sleep(1.5)  # more than twice the lease: renewed meanwhile
+        with pytest.raises(db.LockBusy):
+            with db.writer_lock(base, wait_s=0.3):
+                pass
+    with db.writer_lock(base, ttl_ms=600):
+        db.run_text(
+            "MATCH (l:Lock {id: 'derived'}) SET l.holder = 'someone-else'",
+            label="steal",
+            graph=base,
+            readonly=False,
+        )
+        time.sleep(0.5)  # the next renewal finds the lock gone
+        with pytest.raises(db.LockLost):
+            db.run_text("CREATE (:Probe {id: 'x'})", label="w", graph=base, readonly=False)
+    db.run_text("CREATE (:Probe {id: 'y'})", label="w", graph=base, readonly=False)  # outside: ok
 
 
 # --- the fold --------------------------------------------------------------------------------

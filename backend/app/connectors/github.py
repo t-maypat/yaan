@@ -9,7 +9,7 @@ Out: a ticket comment on an issue a sandbox PR fixes, or any draft aimed at a sa
 becomes a comment on that PR.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -159,7 +159,11 @@ class GitHubConnector:
             return None
         refs = []
         body = render.markdown(action, resolve or self.link)
+        mark = render.marker(action)
         for n in numbers:
+            if done := self.marked(n, mark, action.get("decided_ms")):  # sent before (D110)
+                refs.append(done)
+                continue
             r = self.http.post(f"/repos/{self.repo}/issues/{n}/comments", json={"body": body})
             if r.status_code >= 400:
                 raise ConnectorError(
@@ -167,3 +171,15 @@ class GitHubConnector:
                 )
             refs.append(r.json()["html_url"])
         return " ".join(refs)
+
+    def marked(self, n: int, mark: str, since_ms: int | None) -> str | None:
+        """The comment on #n that already carries `mark` (an earlier try went through)."""
+        params: dict[str, Any] = {"per_page": 100}
+        if since_ms:
+            params["since"] = datetime.fromtimestamp(since_ms / 1000, UTC).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+        r = self.http.get(f"/repos/{self.repo}/issues/{n}/comments", params=params)
+        if r.status_code >= 400:
+            raise ConnectorError(f"GitHub comments on #{n}: {r.status_code}")
+        return next((c["html_url"] for c in r.json() if mark in (c.get("body") or "")), None)

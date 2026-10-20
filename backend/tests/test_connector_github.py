@@ -65,7 +65,13 @@ def handler(posted):
         if request.method == "POST" and path.endswith("/comments"):
             n = int(path.split("/")[-2])
             posted.append((n, json.loads(request.content)["body"]))
-            return httpx.Response(201, json={"html_url": f"https://github.com/{REPO}/pull/{n}#c1"})
+            url = f"https://github.com/{REPO}/pull/{n}#c{len(posted)}"
+            return httpx.Response(201, json={"html_url": url})
+        if request.method == "GET" and path.endswith("/comments"):
+            n = int(path.split("/")[-2])
+            mine = [(i, body) for i, (m, body) in enumerate(posted, 1) if m == n]
+            url = f"https://github.com/{REPO}/pull/{n}#c"
+            return httpx.Response(200, json=[{"html_url": f"{url}{i}", "body": b} for i, b in mine])
         return httpx.Response(404, json={"message": "Not Found"})
 
     return handle
@@ -116,6 +122,9 @@ def test_comments_go_on_the_targeted_pr_or_the_issues_fix_pr(conn, monkeypatch):
     )
     conn.post({"id": "a2", "kind": "doc_fix", "target_id": conn.pr_id(2), "draft": "Note."})
     assert conn.posted[-1][0] == 2 and "Correction" in conn.posted[-1][1]
+    # the same action again (a retry): its comment is found by its marker, not posted twice
+    again = conn.post({"id": "a2", "kind": "doc_fix", "target_id": conn.pr_id(2), "draft": "Note."})
+    assert again == f"https://github.com/{REPO}/pull/2#c2" and len(conn.posted) == 2
     assert conn.link(conn.pr_id(7)) == ("PR #7", f"https://github.com/{REPO}/pull/7")
     assert conn.link("pr:github_com_salesforce_x_pull_3") is None  # HERB's: no sandbox url
     assert (

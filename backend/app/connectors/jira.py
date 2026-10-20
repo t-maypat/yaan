@@ -284,6 +284,10 @@ class JiraConnector:
             key = next((k for r in rows if (k := self.key_of(r["id"]))), None)
         if key is None:
             return None
+        mark = render.marker(action)
+        for c in self._paged(f"/rest/api/3/issue/{key}/comment"):  # sent before? (D110)
+            if mark in adf_text(c.get("body")):
+                return f"{self.http.base_url}/browse/{key}?focusedCommentId={c['id']}"
         out = self._req(
             "POST",
             f"/rest/api/3/issue/{key}/comment",

@@ -24,7 +24,8 @@ import threading
 import time
 from collections import deque
 from contextlib import contextmanager
-from dataclasses import dataclass
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -173,14 +174,41 @@ class LockBusy(RuntimeError):
     """Another writer held the graph's lock for longer than we wait."""
 
 
+class LockLost(RuntimeError):
+    """The lease ran out under a holder (its renewal failed): it must not write any more."""
+
+
+@dataclass
+class Lease:
+    """A held writer lock: renewed in the background while the holder works (D110)."""
+
+    graph: str
+    holder: str
+    lost: threading.Event = field(default_factory=threading.Event)
+
+
+_LEASE: ContextVar[Lease | None] = ContextVar("writer_lease", default=None)
+
+
+def check_lease(graph: str) -> None:
+    """Refuse a write by a holder whose lease on `graph` was lost: another writer may have
+    taken the lock, and two writers interleaving would leave a mixed derived layer."""
+    lease = _LEASE.get()
+    if lease is not None and lease.graph == graph and lease.lost.is_set():
+        raise LockLost(f"graph {graph!r}: the writer lock's lease was lost; not writing")
+
+
 @contextmanager
 def writer_lock(
     graph: str | None = None, *, name: str = "derived", ttl_ms: int = 120_000, wait_s: float = 60
 ):
     """One writer of a graph's derived layer at a time, across processes (the API, the
     connector loop, a batch ingest): a `:Lock` node taken by compare-and-set in one statement
-    (D101). A holder that dies stops counting after `ttl_ms`; a held lock is retried until
-    `wait_s`, then LockBusy."""
+    (D101). A held lock is retried until `wait_s`, then LockBusy.
+
+    The lease lasts `ttl_ms` and is renewed every third of that while the holder works, so a
+    long write keeps it and a holder that dies frees it within `ttl_ms` (D110). If a renewal
+    fails, the holder's next write raises LockLost instead of interleaving with a new holder."""
     holder = f"{os.getpid()}-{threading.get_ident()}-{time.time_ns()}"
     deadline = time.monotonic() + wait_s
     while True:
@@ -195,9 +223,29 @@ def writer_lock(
         if time.monotonic() > deadline:
             raise LockBusy(f"graph {graph!r}: the {name} lock stayed taken for {wait_s:g} s")
         time.sleep(0.1)
+    lease = Lease(graph or get_settings().lore_graph, holder)
+    done = threading.Event()
+
+    def renew() -> None:
+        while not done.wait(ttl_ms / 3000):
+            params = {"name": name, "holder": holder, "now_ms": int(time.time() * 1000)}
+            try:
+                kept = run("renew_lock", params | {"ttl_ms": ttl_ms}, graph=graph, readonly=False)
+            except Exception:  # FalkorDB unreachable: the lease may run out, assume it did
+                kept = None
+            if not (kept and kept.rows):
+                lease.lost.set()
+                return
+
+    renewer = threading.Thread(target=renew, name=f"lease-{holder}", daemon=True)
+    renewer.start()
+    token = _LEASE.set(lease)
     try:
         yield holder
     finally:
+        done.set()
+        renewer.join()
+        _LEASE.reset(token)
         run("release_lock", {"name": name, "holder": holder}, graph=graph, readonly=False)
 
 
@@ -276,6 +324,7 @@ def _run_text(text, params, label, graph, readonly, timeout_ms, batch_rows) -> R
             "writes can't take a per-query timeout: the server caps each write statement at "
             "TIMEOUT_DEFAULT (10 s) and rolls it back (A17). Use smaller batches instead."
         )
+    check_lease(graph)
     if batch_rows < 1:
         raise ValueError(f"batch_rows must be at least 1, got {batch_rows}")
     g = client(readonly=False).select_graph(graph)

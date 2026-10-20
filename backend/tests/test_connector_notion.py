@@ -70,6 +70,13 @@ def conn(monkeypatch):
         if request.method == "POST":
             posted.append(json.loads(request.content))
             return httpx.Response(200, json={"id": "new"})
+        if request.url.path == "/v1/comments":  # the review, then what Lore posted
+            mine = [
+                {"rich_text": [{"plain_text": p["rich_text"][0]["text"]["content"]}]}
+                for p in posted
+            ]
+            found = RESPONSES["/v1/comments"]["results"] + mine
+            return httpx.Response(200, json={"results": found, "has_more": False})
         return httpx.Response(200, json=RESPONSES[request.url.path])
 
     client = httpx.Client(base_url=notion.API, transport=httpx.MockTransport(handle))
@@ -99,6 +106,10 @@ def test_corrections_go_on_the_page(conn):
     )
     assert ref.endswith("aaaaaaaabbbbccccddddeeeeeeeeeeee")
     assert conn.posted[-1]["parent"] == {"page_id": "aaaaaaaabbbbccccddddeeeeeeeeeeee"}
+    again = conn.post(
+        {"id": "a1", "kind": "doc_fix", "target_id": conn.doc_id(PAGE), "draft": "Fix it."}
+    )
+    assert again == ref and len(conn.posted) == 1  # a retry finds its marker (D110)
     via_comment = "msg:synthetic-notion-aaaaaaaabbbbccccddddeeeeeeeeeeee-comment-c1"
     assert conn.post({"id": "a2", "kind": "doc_fix", "target_id": via_comment, "draft": "x"})
     assert (

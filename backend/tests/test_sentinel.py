@@ -303,6 +303,59 @@ def test_approving_writes_a_decision_trace_and_sends_the_chosen_drafts(company):
     assert d["id"] in ids(blast_radius.impact_of(REOPENED, graph=company)["caused"])
 
 
+class Crash(Exception):
+    """The process stopping midway through a response."""
+
+
+@pytest.mark.parametrize("after", range(7))  # claim, 6 writes, then the close
+def test_a_response_cut_off_after_any_write_is_finished_the_same_way(company, monkeypatch, after):
+    """D110: kill a response after its claim and `after` more writes; complete_stuck ends in
+    the same decision trace, draft statuses and alert status as an uninterrupted response."""
+    engine.run(company, now_ms=NOW)
+    alert_id = f"alert:{REOPENED}"
+    note_b2 = f"action:{alert_id}:notify_owner:eid_b2"
+    real, writes = db.run, []
+
+    def run(name, params=None, **kw):
+        if not kw.get("readonly", True):
+            if writes and len(writes) > after:
+                raise Crash(name)
+            if writes or name == "claim_alert_response":
+                writes.append(name)
+        return real(name, params, **kw)
+
+    monkeypatch.setattr(db, "run", run)
+    with pytest.raises(Crash):
+        approve.respond(
+            alert_id,
+            "approved",
+            "eid_b2",
+            action_ids=[f"action:{alert_id}:ticket_comment:iss:Widget:a1", note_b2],
+            edits={note_b2: "Bo, please re-review PR 1."},
+            graph=company,
+            now_ms=NOW + 5,
+        )
+    monkeypatch.setattr(db, "run", real)
+    assert alerts_by_id(company)[alert_id]["status"] == "responding"
+    assert db.run("actions_to_send", {"limit": 10}, graph=company).rows == []  # nothing sent yet
+    with pytest.raises(approve.AlertError, match="is responding, not open"):
+        approve.respond(alert_id, "dismissed", "eid_c3", graph=company)
+    assert approve.complete_stuck(company, now_ms=NOW + 5) == []  # not stuck yet: just started
+    assert approve.complete_stuck(company, now_ms=NOW + 5 + approve.STUCK_AFTER_MS + 1) == [
+        alert_id
+    ]
+    got = trace(company, f"dec:{alert_id}/response:{NOW + 5}")
+    assert got["origin"] == "approved_action" and got["by"] == "eid_b2"
+    assert got["cause"] == REOPENED and got["evidence"] == "msg:r3"
+    statuses = {
+        a["id"]: (a["status"], a["draft"]) for a in engine.alert_actions(alert_id, graph=company)
+    }
+    assert statuses[note_b2] == ("approved", "Bo, please re-review PR 1.")
+    assert sorted(s for s, _ in statuses.values()) == ["approved"] * 2 + ["skipped"] * 3
+    assert alerts_by_id(company)[alert_id]["status"] == "approved"
+    assert len(db.run("actions_to_send", {"limit": 10}, graph=company).rows) == 2
+
+
 def test_a_second_response_and_bad_input_are_refused(company):
     engine.run(company, now_ms=NOW)
     approve.respond("alert:clm:k1", "dismissed", "eid_c3", note="Ed was joking.", graph=company)

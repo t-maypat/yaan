@@ -28,13 +28,25 @@ class FakeClient:
             "channels": [{"name": "vizforce-bugs", "id": "C1"}, {"name": "lore-alerts", "id": "C9"}]
         }
 
-    def conversations_history(self, channel, oldest, limit, **kw):
-        assert channel == "C1"
-        return {"messages": [m for m in self.history if float(m["ts"]) > float(oldest)]}
+    def conversations_history(self, channel, oldest=None, limit=None, **kw):
+        if channel != "C1":  # the alerts channel holds only what the bot posted
+            return {"messages": self.mine(channel)}
+        return {"messages": [m for m in self.history if float(m["ts"]) > float(oldest or 0)]}
+
+    def conversations_replies(self, channel, ts, **kw):
+        return {"messages": [m for m in self.mine(channel) if m.get("thread_ts") == ts]}
+
+    def mine(self, channel):
+        return [
+            {"ts": p["ts"], "thread_ts": p.get("thread_ts"), "metadata": p.get("metadata")}
+            for p in self.posted
+            if p["channel"] == channel
+        ]
 
     def chat_postMessage(self, **kw):
+        kw["ts"] = f"1800000000.00000{len(self.posted) + 1}"
         self.posted.append(kw)
-        return {"ts": f"1800000000.00000{len(self.posted)}"}
+        return {"ts": kw["ts"]}
 
     def chat_getPermalink(self, channel, message_ts):
         stamp = message_ts.replace(".", "")
@@ -128,6 +140,11 @@ def test_post_routes_notifications_and_thread_corrections(conn):
     )
     other = {"id": "a3", "kind": "ticket_comment", "target_id": "iss:VizForce:1", "draft": "x"}
     assert conn.post(other) is None  # Jira's or GitHub's
+    # sending them again (a retry after a timeout or a crash) finds them: nothing posted twice
+    count = len(conn.client.posted)
+    assert conn.post(note) == ref and conn.post(fix).endswith("p1800000000000002")
+    assert len(conn.client.posted) == count
+    assert conn.client.posted[0]["metadata"]["event_payload"] == {"action_id": "a1"}
 
 
 def test_answer_text_keeps_the_checked_quotes_and_links_slack_sources():

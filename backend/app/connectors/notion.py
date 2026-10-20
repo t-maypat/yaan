@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 
 from app import db
-from app.connectors import base
+from app.connectors import base, render
 from app.connectors.base import ConnectorError, Item, Maps
 from app.ingest.normalize import Artifact
 
@@ -195,12 +195,18 @@ class NotionConnector:
             page = target.removeprefix(msg_prefix).split("-")[0]
         else:
             return None
+        mark = render.marker(action)
+        url = f"https://www.notion.so/{page}"
+        for c in self._all("/v1/comments", block_id=page):  # sent before? (D110)
+            if mark in "".join(t.get("plain_text", "") for t in c.get("rich_text") or []):
+                return url
+        body = action["draft"][: 2000 - len(mark) - 2] + f"\n{mark}"
         self._req(
             "POST",
             "/v1/comments",
             json={
                 "parent": {"page_id": page},
-                "rich_text": [{"type": "text", "text": {"content": action["draft"][:2000]}}],
+                "rich_text": [{"type": "text", "text": {"content": body}}],
             },
         )
-        return f"https://www.notion.so/{page}"
+        return url

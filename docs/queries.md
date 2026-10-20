@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-202 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+205 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -105,7 +105,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`link_works_at.cypher`](../backend/queries/link_works_at.cypher) | (Customer)-[:WORKS_AT]->(Company) |
 | [`mark_action_sent.cypher`](../backend/queries/mark_action_sent.cypher) | record where an approved action was delivered (a URL in the connected tool) and when, so it is sent once |
 | [`set_action_status.cypher`](../backend/queries/set_action_status.cypher) | record what happened to each drafted action (approved, skipped, dismissed), with the edited text when the approver changed it |
-| [`set_alert_response.cypher`](../backend/queries/set_alert_response.cypher) | close an open alert as approved or dismissed, with who and when (11.4); matches nothing when the alert is no longer open, so a second response is refused |
+| [`set_alert_response.cypher`](../backend/queries/set_alert_response.cypher) | the last step of a response: a 'responding' alert closes as approved or dismissed, with who and when (11.4, D110); matches nothing unless the response was claimed, so a second response is refused |
 | [`set_channel_visibility.cypher`](../backend/queries/set_channel_visibility.cypher) | who may read a channel in org mode: 'public' (everyone signed in) or 'private' (its MEMBER_OF people); from Slack, or declared in connectors.yaml (H1, D109) |
 | [`set_claim_hash.cypher`](../backend/queries/set_claim_hash.cypher) | the hash of the rows that wrote a claim, stamped last, so an interrupted write is redone by the next fold (D101) |
 | [`set_decision_hash.cypher`](../backend/queries/set_decision_hash.cypher) | the hash of the rows that wrote a decision, stamped last, so an interrupted write is redone by the next fold (D101) |
@@ -141,12 +141,12 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_prs.cypher`](../backend/queries/upsert_prs.cypher) | pull request artifacts, with current_status from their decision chain |
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (88)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (91)
 
 | Query | Purpose |
 |---|---|
 | [`acquire_lock.cypher`](../backend/queries/acquire_lock.cypher) | take a graph's writer lock if it is free or its holder's lease ran out: one statement, so two writers can't both get it (D101) |
-| [`actions_to_send.cypher`](../backend/queries/actions_to_send.cypher) | approved drafted actions not yet sent to a connected tool, oldest decision first, with what they target (17.2 write-back) |
+| [`actions_to_send.cypher`](../backend/queries/actions_to_send.cypher) | approved drafted actions not yet sent to a connected tool, of responses that finished (D110), oldest decision first, with what they target (17.2 write-back) |
 | [`alert_actions.cypher`](../backend/queries/alert_actions.cypher) | the drafted actions for one alert, for the Inbox: ticket comment first, then the correction, then notifications |
 | [`alert_precedents.cypher`](../backend/queries/alert_precedents.cypher) | earlier responses (approved or dismissed) to alerts of the same kind in the same product, newest first: the PRECEDENT_FOR sources of a new response (11.4, §9.5) |
 | [`all_derived.cypher`](../backend/queries/all_derived.cypher) | every derived node (claims, issues, extracted decisions), for the one-time rewrite of a graph whose derived layer predates D101 |
@@ -165,6 +165,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`artifacts_present.cypher`](../backend/queries/artifacts_present.cypher) | which of these ids are artifacts in the graph: the live path's "already ingested?" and the demo's injected flags (D101) |
 | [`channel_context.cypher`](../backend/queries/channel_context.cypher) | the messages before a new one in its channel, newest first: the conversation the live extraction reads it in, as the batch extraction does (D102) |
 | [`channel_members.cypher`](../backend/queries/channel_members.cypher) | the people a channel lists as members (org mode), so a membership sync changes only what changed (H1, D109) |
+| [`claim_alert_response.cypher`](../backend/queries/claim_alert_response.cypher) | the first step of a response: an open alert becomes 'responding' and stores every write the response will make, so a crash midway is finished, not left half-done (H2, D110); matches nothing when the alert isn't open |
 | [`collab_meetings.cypher`](../backend/queries/collab_meetings.cypher) | who attended each meeting: the co-attendance part of COLLAB (10.1) |
 | [`collab_messages.cypher`](../backend/queries/collab_messages.cypher) | who wrote each (non-system) Slack message and in which channel: the conversation part of COLLAB (10.1) |
 | [`collab_paths.cypher`](../backend/queries/collab_paths.cypher) | the shortest COLLAB path (at most 4 hops) between each given pair of people: how a listed owner reaches the real expert, or how close a backup already is to a key person (10.5, D065) |
@@ -222,11 +223,13 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`rank_companies.cypher`](../backend/queries/rank_companies.cypher) | the companies (or customers) whose customers reported a product's issues, with counts per current status and each issue's title, status and report message as evidence; the agent's ranking by issues reported / unresolved / resolved / reopened / dismissed (tool 7 rank, R2) |
 | [`rank_people.cypher`](../backend/queries/rank_people.cypher) | engineers of a product ranked by one metric, counted in the graph: PRs authored / merged / reviewed / approved / sent back, bugs fixed (authored a PR that FIXES an issue), open bugs assigned; each row carries up to 5 counted items as evidence: the PR (or the issue's report message) with its title, to cite (tool 7 rank, R2) |
 | [`release_lock.cypher`](../backend/queries/release_lock.cypher) | give a graph's writer lock back, only if this holder still has it (D101) |
+| [`renew_lock.cypher`](../backend/queries/renew_lock.cypher) | extend a graph's writer lock, only while this holder still has it: a long write keeps its lease, a lost one stays lost (H2, D110) |
 | [`resolve_names.cypher`](../backend/queries/resolve_names.cypher) | people, products, customers or companies whose name matches the words (full-text on Entity.name), most active in the product first |
 | [`resolve_product.cypher`](../backend/queries/resolve_product.cypher) | products whose id, name or codename equals the text (codenames come from renamed channels, D029) |
 | [`retract_events.cypher`](../backend/queries/retract_events.cypher) | a newer version of an artifact no longer states these events: close them (retracted_ms), never delete them, so the belief at an earlier moment can be replayed (D101) |
 | [`sentinel_changes.cypher`](../backend/queries/sentinel_changes.cypher) | the decision changes the Sentinel judges (11.1): every extracted supersession (old and new value, subject, evidence quote, decider) and every claim that CONFLICTS_WITH an active decision (§9.4 rule 5) |
 | [`states_at.cypher`](../backend/queries/states_at.cypher) | the decisions in force at one moment for a product's issues and own PRs (valid_from_ms <= t < valid_to_ms, or still open): the as-of view of list_issues, list_prs and decision_lineage (R2) |
+| [`stuck_responses.cypher`](../backend/queries/stuck_responses.cypher) | responses claimed but never closed (the process stopped midway), with the writes they still owe (H2, D110) |
 | [`subject_product.cypher`](../backend/queries/subject_product.cypher) | the product an issue or pull request belongs to, for the API's lineage endpoint |
 | [`unlink_channel_members.cypher`](../backend/queries/unlink_channel_members.cypher) | a person left a private channel (or was removed): they stop seeing it (H1, D109) |
 | [`viewer_channels.cypher`](../backend/queries/viewer_channels.cypher) | the channels a person belongs to (they posted there), for viewer-scoped answers (W7) |
