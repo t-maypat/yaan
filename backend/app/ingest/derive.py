@@ -25,7 +25,10 @@ def works_on(graph: str | None = None, min_artifacts: int = MIN_ARTIFACTS) -> di
 
 
 EXPERTISE_ORDER = ("upsert_areas", "link_in_area_issue", "link_in_area_pr", "upsert_knows")
-READ_LIMIT = 50_000
+# The periodic job's whole-graph reads (D112, D115): a cap that fails loudly far past the
+# planned size, never one that cuts a result, and the server's longest read timeout.
+READ_LIMIT = 1_000_000
+READ_TIMEOUT_MS = 120_000
 
 
 def run_stamp() -> int:
@@ -43,7 +46,7 @@ def expertise(graph: str | None = None) -> dict:
     run = run_stamp()
 
     def read(name: str) -> list[dict]:
-        return db.run_all(name, {}, cap=READ_LIMIT, graph=graph, timeout_ms=60_000)
+        return db.run_all(name, {}, cap=READ_LIMIT, graph=graph, timeout_ms=READ_TIMEOUT_MS)
 
     areas = ex.build_areas(
         read("area_issues"), read("area_issue_people"), read("area_prs"), read("area_reviews")
@@ -151,7 +154,7 @@ def collab(graph: str | None = None, min_w: float = COLLAB_MIN_W) -> dict:
     FalkorDB's PageRank on it and store each person's score and rank."""
 
     def read(name: str) -> list[dict]:
-        return db.run_all(name, {}, cap=READ_LIMIT, graph=graph, timeout_ms=60_000)
+        return db.run_all(name, {}, cap=READ_LIMIT, graph=graph, timeout_ms=READ_TIMEOUT_MS)
 
     pairs = collab_weights(
         read("collab_meetings"), read("collab_messages"), read("area_prs"), read("area_reviews")
@@ -167,7 +170,9 @@ def collab(graph: str | None = None, min_w: float = COLLAB_MIN_W) -> dict:
     if rows:
         result = db.run("upsert_collab", {"rows": rows}, graph=graph, readonly=False)
         report["upsert_collab"] = {"rows": len(rows), **result.stats}
-    ranked = db.run_all("person_pagerank", {}, cap=READ_LIMIT, graph=graph, timeout_ms=60_000)
+    ranked = db.run_all(
+        "person_pagerank", {}, cap=READ_LIMIT, graph=graph, timeout_ms=READ_TIMEOUT_MS
+    )
     scores = [
         {"id": r["id"], "score": round(r["score"], 6), "rank": n} for n, r in enumerate(ranked, 1)
     ]
@@ -187,7 +192,7 @@ def communities(graph: str | None = None) -> dict:
     from collections import Counter, defaultdict
 
     def read(name: str) -> list[dict]:
-        return db.run_all(name, {}, cap=READ_LIMIT, graph=graph, timeout_ms=60_000)
+        return db.run_all(name, {}, cap=READ_LIMIT, graph=graph, timeout_ms=READ_TIMEOUT_MS)
 
     groups: dict[int, list[str]] = defaultdict(list)
     for r in read("person_communities"):
@@ -249,7 +254,7 @@ def precedents(graph: str | None = None, min_sim: float = PRECEDENT_MIN_SIM) -> 
 
     run = run_stamp()
     rows = db.run_all(
-        "precedent_candidates", {}, cap=READ_LIMIT, graph=graph, timeout_ms=60_000
+        "precedent_candidates", {}, cap=READ_LIMIT, graph=graph, timeout_ms=READ_TIMEOUT_MS
     )
     vecs = chunk_embed.embed_passages([r["text"][:800] for r in rows]) if rows else []
     links = similar_earlier(rows, vecs, min_sim)

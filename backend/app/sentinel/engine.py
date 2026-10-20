@@ -37,6 +37,8 @@ RULES: dict[tuple[str, str, str], tuple[str, str]] = {
     ("pr_action", "to_merge", "reverted"): ("reversal", "medium"),
     ("pr_action", "to_close", "to_merge"): ("reversal", "medium"),
 }
+BULK_ROWS = 1_000_000  # the full run's whole-graph reads: fail loudly past this, never cut (D115)
+BULK_TIMEOUT_MS = 120_000
 CONFLICT = ("conflict", "high")  # an unauthorized claim against an active decision (§9.4 rule 5)
 LOAD_ORDER = (
     "upsert_alerts",
@@ -115,9 +117,10 @@ def run(
             changes = db.run_all("sentinel_changes_for", given, cap=50_000, graph=graph)
             changes += db.run_all("outside_decisions_for", given, cap=10_000, graph=graph)
     else:
-        changes = db.run_all("sentinel_changes", {}, cap=50_000, graph=graph)
+        full = {"cap": BULK_ROWS, "graph": graph, "timeout_ms": BULK_TIMEOUT_MS}
+        changes = db.run_all("sentinel_changes", {}, **full)
         # dismissals by someone outside the area's working group (CDLP, D064); none before derive
-        changes += db.run_all("outside_decisions", {}, cap=10_000, graph=graph, timeout_ms=30_000)
+        changes += db.run_all("outside_decisions", {}, **full)
     rows: dict[str, list[dict[str, Any]]] = {name: [] for name in LOAD_ORDER}
     seen: set[str] = set()
     progress = 0
@@ -220,7 +223,7 @@ def key_person_alerts(graph: str | None, now_ms: int, now_iso: str) -> list[tupl
     """11.5 (D062): one `key_person` alert per person who is first in a product's truck-factor
     order and the only author of >= MIN_SOLE_AREAS areas; `bus_factor` (high) when that
     product's truck factor is 1. Dated on HERB's clock (the products' last artifact)."""
-    rows = db.run_all("key_people", {}, cap=50_000, graph=graph)
+    rows = db.run_all("key_people", {}, cap=BULK_ROWS, graph=graph, timeout_ms=BULK_TIMEOUT_MS)
     clock = {
         r["product_id"]: r["last_ms"]
         for r in db.run_all("product_clock", {}, cap=1000, graph=graph, timeout_ms=30_000)
