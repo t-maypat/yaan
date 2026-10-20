@@ -13,15 +13,25 @@ Hardening after the post-event review (docs/hardening-plan.md).
 ### Upgrading
 - Connectors now run in their own container: `docker compose --profile app --profile connectors up -d` replaces `docker compose exec -d api yaan connectors run`.
 - Org mode: every source other than Slack needs `visibility: everyone` or `visibility: members` (with `members:`) in `connectors.yaml`; `yaan init` says which is missing. Slack's private channels and members are now read from Slack, so a private Slack channel needs a Yaan channel of its own.
+- The web UI keeps no token: signing in trades it for an HttpOnly session cookie, so a token saved by an earlier version is exchanged once and deleted. Sign in again if asked.
+- Tokens now expire (90 days unless `yaan token issue --days` says otherwise). Tokens issued before this version stay valid until revoked.
+- `yaan seed` checks the snapshot's sha256 against `snapshots/SHA256SUMS`; pass `--unpinned` for a snapshot you made yourself.
 - The containers no longer run as root. On Linux, `./data` must be writable by uid 10001 (`sudo chown -R 10001:10001 data`), or set `LORE_UID` and `LORE_GID` in `.env` to its owner. The container says so at start if it isn't. Docker Desktop needs nothing.
 
 ### Added
+- `yaan token list` and `yaan token revoke <person> --id <id>` (one token, not all of a person's); tokens record when they were last used.
+- A Content-Security-Policy and other security headers on every response.
+- A release workflow: a version tag publishes the image to GitHub's registry and opens the release.
 - A `worker` service for the connector loop, restarted by Docker and healthchecked; `/health` reports whether it is running.
 - The containers run unprivileged, on a read-only filesystem apart from `./data` and `/tmp`, with no Linux capabilities.
 - CI: lint, tests without a database, the full suite on FalkorDB, and the web build.
 - SECURITY.md: how to report a vulnerability privately.
 
 ### Fixed
+- An approval interrupted midway left an approved alert with a half-written decision. Responses are now claimed with all their writes and finished on restart; drafts are sent only once their response is complete.
+- An approved follow-up could be posted twice after a timeout or a crash, or marked sent when it reached one tool but not another. Every post now carries a marker and is looked for before posting again.
+- A long write could outlive the writer lock's lease; the lease is now renewed, and a writer that loses it stops.
+- Org-mode approvals were limited per IP address, so a team behind one proxy shared six a minute; they are now limited per person.
 - Org mode showed a private Slack channel to every signed-in person unless its name matched `permissions.yaml`, and decided membership by who had posted there. Privacy and members now come from Slack, other sources declare their readers, and anything undeclared is hidden.
 - `@yaan` in a Slack channel answered from what the asker could see and posted it where everyone could read it. It now answers from what everyone in the channel may read; a direct message gets the asker's full answer.
 - Alert cards and drafted comments sent to Slack, Jira, GitHub or Notion could quote a private message. They now quote only sources everyone may read.

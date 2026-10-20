@@ -1,13 +1,14 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { getToken, SIGN_IN_EVENT, setToken } from "../api";
+import { SIGN_IN_EVENT, signIn, signOut } from "../api";
 
 // Org mode signs people in (D100): when an API call answers 401, ask for the token that
-// `lore token issue "<name>"` printed, keep it in this browser, and reload so every view
-// asks again as that person. A sign-in proxy never gets here: it sends the identity itself.
+// `lore token issue "<name>"` printed, trade it for a session cookie this page can't read
+// (D111), and reload so every view asks again as that person. A sign-in proxy never gets
+// here: it sends the identity itself.
 export function SignIn() {
   const [needed, setNeeded] = useState(false);
   const [draft, setDraft] = useState("");
-  const rejected = needed && getToken() !== null;
+  const [refused, setRefused] = useState<string | null>(null);
 
   useEffect(() => {
     const on = () => setNeeded(true);
@@ -16,10 +17,11 @@ export function SignIn() {
   }, []);
 
   if (!needed) return null;
-  const save = (e: FormEvent) => {
+  const save = async (e: FormEvent) => {
     e.preventDefault();
-    setToken(draft.trim());
-    window.location.reload();
+    const answer = await signIn(draft.trim());
+    if (answer === "ok") window.location.reload();
+    else setRefused(answer);
   };
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="sign-in-title" className="fixed inset-0 z-50 grid place-items-center bg-ink/40 px-4">
@@ -29,7 +31,7 @@ export function SignIn() {
         </h2>
         <p className="text-sm text-muted mt-2">
           This Yaan holds your team's own data, so it answers as you and leaves out what you can't see.
-          {rejected ? " The token this browser had was refused: it may have been revoked." : ""}
+          {refused ? ` That token was refused: ${refused}` : ""}
         </p>
         <label htmlFor="token" className="block text-[0.78rem] text-muted mt-4">
           Your token, from <code>lore token issue "Your Name"</code>
@@ -44,9 +46,9 @@ export function SignIn() {
           placeholder="yaan_…"
         />
         <div className="mt-5 flex justify-end gap-3">
-          {rejected && (
-            <button type="button" className="btn btn-line" onClick={() => (setToken(null), window.location.reload())}>
-              Forget it
+          {refused && (
+            <button type="button" className="btn btn-line" onClick={() => void signOut().then(() => window.location.reload())}>
+              Sign out
             </button>
           )}
           <button type="submit" disabled={!draft.trim()} className="btn btn-ink">

@@ -59,5 +59,23 @@ def test_a_damaged_snapshot_is_refused(setup):
         for name, data in members.items():
             snapshot._add(tar, name, data)
     snapshot.admin().delete(graph)
-    with pytest.raises(snapshot.SnapshotError, match="sha256"):
-        snapshot.seed(bad)
+    with pytest.raises(snapshot.SnapshotError, match="pinned in neither"):
+        snapshot.seed(bad)  # no pin names it: refused before anything is restored
+    with pytest.raises(snapshot.SnapshotError, match="doesn't match its sha256"):
+        snapshot.seed(bad, unpinned=True)  # and the manifest's own check still holds
+
+
+def test_only_a_pinned_snapshot_is_loaded(setup, monkeypatch):
+    graph, out, _ = setup
+    manifest = snapshot.snapshot((graph,), out)
+    line = out.with_name("SHA256SUMS").read_text(encoding="utf-8")
+    assert line == f"{manifest['file_sha256']}  {out.name}\n"  # written beside the file
+    moved = out.with_name("elsewhere") / out.name
+    moved.parent.mkdir()
+    moved.write_bytes(out.read_bytes())
+    monkeypatch.setattr(snapshot, "SUMS", out.with_name("none"))
+    snapshot.admin().delete(graph)
+    with pytest.raises(snapshot.SnapshotError, match="pinned in neither"):
+        snapshot.seed(moved)  # a copy without its SHA256SUMS
+    monkeypatch.setattr(snapshot, "SUMS", out.with_name("SHA256SUMS"))  # the committed pins
+    assert snapshot.seed(moved)["graphs"][graph]["nodes"] > 0

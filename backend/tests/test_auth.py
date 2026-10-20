@@ -133,3 +133,107 @@ def test_me_says_how_people_sign_in_and_who_you_are(signed, monkeypatch):
     }
     refused = TestClient(main.app).get("/me")
     assert refused.status_code == 401 and refused.json()["auth"] == "token"
+
+
+# --- D111: lifetimes, revoking one token, browser sessions, CSRF, security headers -------------
+def test_a_token_expires_and_remembers_when_it_was_last_used(signed, monkeypatch):
+    from datetime import timedelta
+
+    token = auth.issue("eid_0000beef", days=1)
+    assert auth.principal({"authorization": f"Bearer {token}"}) == "eid_0000beef"
+    (entry,) = auth.listing()
+    assert entry["person"] == "eid_0000beef" and entry["last_used"] is not None
+    assert token not in str(auth.listing())  # the listing never shows a secret
+    later = auth.now() + timedelta(days=2)
+    monkeypatch.setattr(auth, "now", lambda: later)
+    with pytest.raises(auth.AuthError, match="expired"):
+        auth.principal({"authorization": f"Bearer {token}"})
+    with pytest.raises(ValueError, match="at least a day"):
+        auth.issue("eid_0000beef", days=0)
+
+
+def test_one_token_can_be_revoked_and_the_others_stay(signed, capsys):
+    laptop, ci = auth.issue("eid_0000beef", "laptop"), auth.issue("eid_0000beef", "ci")
+    ids = {t["label"]: t["id"] for t in auth.listing()}
+    with pytest.raises(auth.AuthError, match="at least 6"):
+        auth.revoke_id(ids["ci"][:3])
+    assert cli.main(["token", "revoke", "Ken Ito", "--id", ids["ci"]]) == 0
+    assert auth.principal({"authorization": f"Bearer {laptop}"}) == "eid_0000beef"
+    with pytest.raises(auth.AuthError, match="unknown or revoked"):
+        auth.principal({"authorization": f"Bearer {ci}"})
+    assert cli.main(["token", "list"]) == 0
+    assert ids["laptop"] in capsys.readouterr().out
+
+
+def test_a_browser_session_is_a_signed_cookie_tied_to_its_token(signed, monkeypatch):
+    from datetime import timedelta
+
+    token = auth.issue("eid_0000beef", days=10)
+    cookie, person, max_age = auth.open_session(token)
+    assert person == "eid_0000beef" and token not in cookie
+    assert 9 * 86400 < max_age <= 10 * 86400  # never past the token's own expiry
+    assert auth.principal({}, {auth.SESSION_COOKIE: cookie}) == "eid_0000beef"
+    payload, _, sig = cookie.partition(".")
+    forged = auth._b64(b'{"p": "eid_12345678", "t": "x", "e": 9999999999}')
+    for bad in (f"{payload}.{sig[:-2]}xx", f"{forged}.{sig}", payload, "é.ü", "..."):
+        with pytest.raises(auth.AuthError, match="isn't valid"):
+            auth.principal({}, {auth.SESSION_COOKIE: bad})
+    auth.revoke("eid_0000beef")  # revoking the token ends its sessions
+    with pytest.raises(auth.AuthError, match="revoked or expired"):
+        auth.principal({}, {auth.SESSION_COOKIE: cookie})
+    cookie, _, _ = auth.open_session(auth.issue("eid_0000beef"))
+    later = auth.now() + timedelta(days=auth.SESSION_DAYS + 1)
+    monkeypatch.setattr(auth, "now", lambda: later)
+    with pytest.raises(auth.AuthError, match="ended|expired"):
+        auth.principal({}, {auth.SESSION_COOKIE: cookie})
+
+
+def test_the_web_ui_signs_in_with_a_cookie_and_writes_need_the_csrf_header(signed, monkeypatch):
+    responded = []
+
+    def fake_respond(alert_id, verdict, person_id, *, graph=None, **_):
+        responded.append(person_id)
+        return {"status": verdict}
+
+    monkeypatch.setattr(approve, "respond", fake_respond)
+    monkeypatch.setattr(main, "demo_limiter", main.RateLimiter(10))
+    token = auth.issue("eid_0000beef")
+    browser = TestClient(main.app)
+    assert browser.post("/auth/session").status_code == 401  # no token, no session
+    opened = browser.post("/auth/session", headers={"Authorization": f"Bearer {token}"})
+    assert opened.status_code == 200 and opened.json()["person"] == "eid_0000beef"
+    set_cookie = opened.headers["set-cookie"].lower()
+    assert "httponly" in set_cookie and "samesite=strict" in set_cookie
+    # the cookie alone: reads work, a write from a page that can't set the header doesn't
+    refused = browser.post("/alerts/approve", json={"alert_id": "alert:x"})
+    assert refused.status_code == 403 and "x-yaan-csrf" in refused.json()["detail"]
+    ok = browser.post("/alerts/approve", json={"alert_id": "alert:x"}, headers={"X-Yaan-CSRF": "1"})
+    assert ok.json() == {"status": "approved"} and responded == ["eid_0000beef"]
+    # a bearer token is not ambient, so it needs no CSRF header
+    api = TestClient(main.app, headers={"Authorization": f"Bearer {token}"})
+    assert api.post("/alerts/approve", json={"alert_id": "alert:y"}).status_code == 200
+    browser.delete("/auth/session")
+    assert browser.post(
+        "/alerts/approve", json={"alert_id": "alert:z"}, headers={"X-Yaan-CSRF": "1"}
+    ).status_code == 401
+
+
+def test_every_response_carries_the_security_headers(signed):
+    r = TestClient(main.app).get("/health")
+    csp = r.headers["content-security-policy"]
+    assert "script-src 'self'" in csp and "frame-ancestors 'none'" in csp
+    assert "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0]
+    assert r.headers["x-content-type-options"] == "nosniff"
+
+
+def test_approvals_are_rate_limited_per_person_not_per_address(signed, monkeypatch):
+    monkeypatch.setattr(approve, "respond", lambda *a, **k: {"status": "approved"})
+    monkeypatch.setattr(main, "demo_limiter", main.RateLimiter(1))
+    ken = TestClient(main.app, headers={"Authorization": f"Bearer {auth.issue('eid_0000beef')}"})
+    priya_id = org.roster()
+    priya = next(e for e, p in priya_id.items() if p["name"] == "Priya Shah")
+    pri = TestClient(main.app, headers={"Authorization": f"Bearer {auth.issue(priya)}"})
+    assert ken.post("/alerts/approve", json={"alert_id": "a"}).status_code == 200
+    assert ken.post("/alerts/approve", json={"alert_id": "b"}).status_code == 429
+    # the same address (the test client's), another person: her own budget
+    assert pri.post("/alerts/approve", json={"alert_id": "c"}).status_code == 200

@@ -50,34 +50,53 @@ export type Artifact = {
 };
 export type Product = { id: string; name: string; aliases: string[]; artifacts: number };
 
-// Sign-in (D100). In org mode the API names a person on every call: a token from
-// `lore token issue`, kept in this browser, or a sign-in proxy's header (nothing to store).
-// A 401 tells the app to ask for a token; the demo never answers 401.
-const TOKEN_KEY = "yaan_token";
+// Sign-in (D100, D111). In org mode the API names a person on every call. The browser trades
+// the token from `lore token issue` once for an HttpOnly session cookie, so no script on the
+// page can read it; a sign-in proxy's header needs nothing at all. A 401 tells the app to ask
+// for a token; the demo never answers 401. Every call sends X-Yaan-CSRF, which the API asks of
+// a cookie session before it changes anything (a page on another site can't send it).
+const OLD_TOKEN_KEY = "yaan_token"; // where earlier versions kept the token itself
 export const SIGN_IN_EVENT = "yaan:sign-in";
 
-export function getToken(): string | null {
+/** "ok", or why the token was refused. */
+export async function signIn(token: string): Promise<"ok" | string> {
+  const r = await fetch("/auth/session", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "X-Yaan-CSRF": "1" },
+  });
+  if (r.ok) return "ok";
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    return (await r.json()).detail ?? r.statusText;
   } catch {
-    return null;
+    return r.statusText;
   }
 }
 
-export function setToken(token: string | null): void {
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* storage blocked: the token lasts until the page reloads */
-  }
+export async function signOut(): Promise<void> {
+  await fetch("/auth/session", { method: "DELETE", headers: { "X-Yaan-CSRF": "1" } });
+}
+
+// A token an earlier version left in localStorage becomes a session once, then is deleted.
+let migrated: Promise<void> | null = null;
+function migrateOldToken(): Promise<void> {
+  migrated ??= (async () => {
+    let old: string | null = null;
+    try {
+      old = localStorage.getItem(OLD_TOKEN_KEY);
+      localStorage.removeItem(OLD_TOKEN_KEY);
+    } catch {
+      /* storage blocked: nothing was kept there */
+    }
+    if (old) await signIn(old);
+  })();
+  return migrated;
 }
 
 async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const token = getToken();
+  await migrateOldToken();
   const headers = new Headers(init.headers);
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  const r = await fetch(path, { ...init, headers });
+  headers.set("X-Yaan-CSRF", "1");
+  const r = await fetch(path, { ...init, headers, credentials: "same-origin" });
   if (r.status === 401) window.dispatchEvent(new Event(SIGN_IN_EVENT));
   return r;
 }

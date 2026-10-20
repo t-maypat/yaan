@@ -241,6 +241,7 @@ args = ["exec", "-i", "lore-api-1", "yaan", "mcp"]</code></pre>
         <li><b>Set a daily AI spend cap.</b> Use <code>LORE_DAILY_SPEND_CAP_USD</code>.</li>
         <li><b>For a public demo, replay answers only.</b> Set <code>LORE_LLM_CACHE_ONLY=1</code>. Yaan then never calls the AI model for a new question. Also set <code>LORE_MCP_ASK=0</code>.</li>
         <li><b>Keep the request limits on.</b> The defaults limit questions per address, per day and in total, and limit how many answers run at the same time.</li>
+        <li><b>Give each device its own token.</b> Tokens expire after 90 days. <code>yaan token list</code> shows them with when each was last used; <code>yaan token revoke "Name" --id &lt;id&gt;</code> ends one, and every browser session signed in with it.</li>
       </ul>
       <div class="safety">
         <h3>Safety is built in</h3>

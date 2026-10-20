@@ -66,10 +66,20 @@ def cmd_init(args: argparse.Namespace) -> int:
 
 
 def cmd_token(args: argparse.Namespace) -> int:
-    """Sign-in tokens (D100): issue one for a people.yaml person (shown once; only its hash is
-    kept), or revoke all of a person's tokens."""
+    """Sign-in tokens (D100, D111): issue one for a people.yaml person (shown once; only its
+    hash is kept; it expires after --days), list them, or revoke one (--id) or all of a
+    person's tokens."""
     from app import auth, org
 
+    if args.action == "list":
+        mine = [t for t in auth.listing() if args.person in (None, "", t["person"])]
+        for t in mine:
+            used, label = t["last_used"] or "never", t["label"] or "-"
+            print(f"{t['id']}  {t['person']}  {label}  expires {t['expires']}  used {used}")
+        return 0
+    if not args.person:
+        print("lore token: name the person (people.yaml name, email or id)", file=sys.stderr)
+        return 1
     want = args.person.strip().casefold()
     try:
         people = list(org.roster().values())
@@ -87,14 +97,18 @@ def cmd_token(args: argparse.Namespace) -> int:
         return 1
     person = found[0]
     if args.action == "issue":
-        token = auth.issue(person["id"], label=args.label or "")
+        token = auth.issue(person["id"], label=args.label or "", days=args.days)
         print(f"token for {person['name']} ({person['id']}), shown once; keep it secret:")
         print(token)
+        print(f"it expires in {args.days} days (--days)", file=sys.stderr)
         if auth.mode() != "token":
             print(
                 f"note: LORE_AUTH is {auth.mode()!r}; tokens are read in token mode",
                 file=sys.stderr,
             )
+    elif args.id:
+        auth.revoke_id(args.id)
+        print(f"revoked token {args.id} of {person['name']}")
     else:
         print(f"revoked {auth.revoke(person['id'])} token(s) of {person['name']}")
     return 0
@@ -558,7 +572,9 @@ def cmd_seed(args: argparse.Namespace) -> int:
         )
         return 1
     try:
-        out = snapshot.seed(args.source or snapshot.SNAPSHOT, force=args.force)
+        out = snapshot.seed(
+            args.source or snapshot.SNAPSHOT, force=args.force, unpinned=args.unpinned
+        )
     except (snapshot.SnapshotError, OSError) as e:
         print(f"lore seed: {e}", file=sys.stderr)
         return 1
@@ -691,9 +707,14 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"}),
     ],
     "token": [
-        ("action", {"choices": ("issue", "revoke")}),
-        ("person", {"help": "a people.yaml name, email or eid_ id (quote a full name)"}),
+        ("action", {"choices": ("issue", "revoke", "list")}),
+        (
+            "person",
+            {"nargs": "?", "help": "a people.yaml name, email or eid_ id (quote a full name)"},
+        ),
         ("--label", {"help": "issue: what the token is for, e.g. 'laptop' or 'claude code'"}),
+        ("--days", {"type": int, "default": 90, "help": "issue: days until it expires"}),
+        ("--id", {"help": "revoke: only this token (an id from `lore token list`)"}),
     ],
     "normalize": [
         ("--products", {"nargs": "+", "help": "product names (default: the dev products)"})
@@ -737,6 +758,13 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
     "seed": [
         ("--from", {"dest": "source", "help": "snapshot path or URL (default: snapshots/)"}),
         ("--force", {"action": "store_true", "help": "replace existing graphs and files"}),
+        (
+            "--unpinned",
+            {
+                "action": "store_true",
+                "help": "load a snapshot whose sha256 no SHA256SUMS pins (one you made yourself)",
+            },
+        ),
     ],
     "connectors": [
         (

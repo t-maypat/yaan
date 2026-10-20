@@ -121,21 +121,84 @@ API_PREFIXES = (
 )
 
 
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+# The web UI's own files and nothing else (H2, D111): no inline script (the theme script is a
+# file), no frames, no plugins, no posting forms to other sites. Styles may be inline: React
+# and the graph view set element styles.
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; "
+        "base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Frame-Options": "DENY",
+}
+
+
 @app.middleware("http")
 async def identify(request: Request, call_next):
     """Who is asking (app/auth.py): the principal every route below reads, never the body.
-    Defined before the rate limit, so the limit wraps it and guessing tokens is limited too."""
+    Defined before the rate limit, so the limit wraps it and guessing tokens is limited too.
+    A browser session (cookie) may change something only with the X-Yaan-CSRF header (D111)."""
     request.state.principal = None
     if request.url.path.startswith(API_PREFIXES):
         try:
-            request.state.principal = auth.principal(request.headers)
+            who, how = auth.identify(request.headers, request.cookies)
         except auth.AuthError as e:
             return JSONResponse(
                 {"detail": str(e), "auth": auth.mode()},
                 status_code=401,
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        if how == "cookie" and request.method not in SAFE_METHODS:
+            if not request.headers.get(auth.CSRF_HEADER):
+                return JSONResponse(
+                    {"detail": f"a browser session needs the {auth.CSRF_HEADER} header"},
+                    status_code=403,
+                )
+        request.state.principal = who
     return await call_next(request)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for name, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    return response
+
+
+@app.post("/auth/session")
+def open_session(request: Request, response: Response) -> dict:
+    """The web UI's sign-in (D111): the token, sent once as a bearer header, becomes an
+    HttpOnly session cookie, so no page script ever holds it."""
+    if auth.mode() != "token":
+        raise HTTPException(404, f"sign-in sessions are for LORE_AUTH=token, not {auth.mode()!r}")
+    scheme, _, token = (request.headers.get("authorization") or "").partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(401, "send the token as 'Authorization: Bearer <token>'")
+    try:
+        cookie, person, max_age = auth.open_session(token)
+    except auth.AuthError as e:
+        raise HTTPException(401, str(e)) from e
+    response.set_cookie(
+        auth.SESSION_COOKIE,
+        cookie,
+        max_age=max_age,
+        httponly=True,
+        samesite="strict",
+        secure=request.url.scheme == "https",
+        path="/",
+    )
+    return {"person": person, "expires_in_s": max_age}
+
+
+@app.delete("/auth/session")
+def close_session(response: Response) -> dict:
+    response.delete_cookie(auth.SESSION_COOKIE, path="/")
+    return {"signed_out": True}
 
 
 @app.middleware("http")
@@ -194,7 +257,8 @@ def demo_write(request: Request, work):
     """Run one demo write: rate-limited, serialized, and refused on the main graph."""
     from app.sentinel import approve, live
 
-    if not demo_limiter.allow(client_ip(request)):
+    # per person when signed in (a team behind one proxy shares an address, D111), else per IP
+    if not demo_limiter.allow(principal(request) or client_ip(request)):
         raise HTTPException(429, f"at most {DEMO_PER_MINUTE} demo actions per minute")
     try:
         target = live.demo_graph(graph())

@@ -12,6 +12,12 @@ A snapshot is one file, `snapshots/lore-snapshot.tar.gz`:
 and the declared indexes, and copies the HERB graph to the demo graph. DUMP/RESTORE run as the
 admin user: the writer's ACL has neither command. A DUMP payload carries FalkorDB's encoding
 version, so it restores on the pinned tag (FALKORDB_TAG); the manifest says which one made it.
+
+The manifest's sha256s only catch a damaged file: whoever made the file wrote them too. So the
+whole file's sha256 is also pinned outside it (H2, D111): `snapshot` writes it to SHA256SUMS
+next to the file, the release's line is committed in snapshots/SHA256SUMS, and `seed` refuses
+a file no pin names, unless told `unpinned` (a snapshot you made yourself elsewhere). The
+graph payload is RESTOREd as the Redis admin, so an unchecked file must not get that far.
 """
 
 import hashlib
@@ -28,6 +34,7 @@ import redis
 from app.config import REPO_ROOT, get_settings
 
 SNAPSHOT = REPO_ROOT / "snapshots" / "lore-snapshot.tar.gz"
+SUMS = REPO_ROOT / "snapshots" / "SHA256SUMS"  # the released snapshots' pins, committed
 DATA_DIRS = ("normalized", "extract")
 
 
@@ -91,13 +98,47 @@ def snapshot(graphs: tuple[str, ...] | None = None, out: Path = SNAPSHOT) -> dic
         _add(tar, "manifest.json", json.dumps(manifest, indent=1).encode())
     manifest["file"] = str(out)
     manifest["file_mb"] = round(out.stat().st_size / 1e6, 1)
+    manifest["file_sha256"] = pin(out)
     return manifest
 
 
-def seed(source: str | Path = SNAPSHOT, force: bool = False) -> dict[str, Any]:
-    """Restore a snapshot (path or http(s) URL): graphs, then data folders, then the demo copy."""
+def pin(path: Path) -> str:
+    """Record the file's sha256 in SHA256SUMS beside it (one line per file name)."""
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    sums = path.with_name("SHA256SUMS")
+    lines = [ln for ln in _lines(sums) if not ln.endswith(f"  {path.name}")]
+    sums.write_text("\n".join([*lines, f"{digest}  {path.name}"]) + "\n", encoding="utf-8")
+    return digest
+
+
+def _lines(sums: Path) -> list[str]:
+    if not sums.is_file():
+        return []
+    return [ln.strip() for ln in sums.read_text(encoding="utf-8").splitlines()]
+
+
+def pinned(source: str | Path) -> set[str]:
+    """The sha256s a snapshot may have: the committed pins, and for a local file the
+    SHA256SUMS `snapshot` wrote beside it."""
+    files = [SUMS]
+    if not str(source).startswith(("http://", "https://")):
+        files.append(Path(source).with_name("SHA256SUMS"))
+    return {ln.split()[0] for f in files for ln in _lines(f) if ln}
+
+
+def seed(source: str | Path = SNAPSHOT, force: bool = False, unpinned: bool = False) -> dict:
+    """Restore a snapshot (path or http(s) URL): graphs, then data folders, then the demo copy.
+    The file's sha256 must be pinned (see the module docstring) unless `unpinned`."""
     s = get_settings()
     blob = _read(source)
+    digest = hashlib.sha256(blob).hexdigest()
+    if not unpinned and digest not in pinned(source):
+        raise SnapshotError(
+            f"this snapshot's sha256 ({digest[:16]}…) is pinned in neither snapshots/SHA256SUMS "
+            "nor a SHA256SUMS beside it: it isn't the one this version of Yaan was released "
+            "with. Use the release that matches your checkout, or pass --unpinned for a "
+            "snapshot you made yourself."
+        )
     r = admin()
     report: dict[str, Any] = {"source": str(source), "graphs": {}}
     with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tar:

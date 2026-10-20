@@ -6,14 +6,7 @@
     <meta name="theme-color" content="#f1f3f5" />
     <title>Yaan</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2317181a'/%3E%3Cpath d='M8 7.5 L16 17 L24 7.5' fill='none' stroke='%235fb3c9' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M16 17 V26' stroke='%23ecedee' stroke-width='3.4' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='17' r='3' fill='%23ecedee'/%3E%3Crect x='4.6' y='4' width='6.6' height='6.6' rx='1.6' fill='%23f2d24b'/%3E%3Ccircle cx='24' cy='7.5' r='3' fill='%235fb3c9'/%3E%3C/svg%3E" />
-    <script>
-      // Light by default; a saved choice (or ?theme=) wins. Before first paint, so no flash.
-      (function () {
-        var t = null;
-        try { t = new URLSearchParams(location.search).get("theme") || localStorage.getItem("lore-theme"); } catch (e) {}
-        document.documentElement.dataset.theme = t === "dark" ? "dark" : "light";
-      })();
-    </script>
+    <script src="/theme.js"></script>
   </head>
   <body>
     <div id="root"></div>
