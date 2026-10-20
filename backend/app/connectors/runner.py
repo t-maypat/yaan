@@ -60,6 +60,9 @@ WAITING = (  # the system isn't ready: retry later, the item isn't at fault
     RedisTimeoutError,
 )
 POISON_AFTER = 5  # other failures of one item version before it becomes a dead letter
+BACKFILL_DAYS = 30  # a connector's first sync reaches back this far (`backfill_days` per source)
+MAX_BATCH = 200  # items per live batch; state is saved after each (D114)
+EXTRACT_WORKERS = 4  # items extracted at once within a batch
 KEEP_SEEN_MS = 86_400_000  # versions remembered a day behind the cursor: more than any re-read
 MAX_PAUSE_S = 900  # the longest wait between failing rounds
 
@@ -101,6 +104,8 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
     for c in connectors:
         mine = state.setdefault(c.name, {"since_ms": 0, "seen": {}})
         failures = mine.setdefault("failures", {})  # "<id>@<version>" -> failures so far
+        if not mine["since_ms"]:  # the first sync: not the whole history at once (D114)
+            mine["since_ms"] = first_cursor(c)
         try:
             items = c.fetch(mine["since_ms"])
         except Exception as e:  # the tool is down or refused us: this one waits, the rest go on
@@ -123,14 +128,17 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
             if a.id not in latest or item.updated_ms > latest[a.id].updated_ms:
                 latest[a.id] = item
         todo = sorted(latest.values(), key=lambda i: (i.artifact.ts_ms or 0, i.artifact.id))
-        batch = [
-            (i.artifact, i.events, i.artifact.id in mine["seen"] or i.artifact.id in present)
-            for i in todo
-        ]
-        try:
-            outcomes = live.ingest_batch(batch, graph) if batch else []
-        except Exception as e:  # the batch as a whole: the lock stayed busy, FalkorDB went away
-            outcomes = [e] * len(batch)
+        outcomes: list[Any] = []
+        for lo in range(0, len(todo), MAX_BATCH):  # big rounds (a backfill) in saved chunks
+            chunk = todo[lo : lo + MAX_BATCH]
+            batch = [
+                (i.artifact, i.events, i.artifact.id in mine["seen"] or i.artifact.id in present)
+                for i in chunk
+            ]
+            try:
+                outcomes += live.ingest_batch(batch, graph, workers=EXTRACT_WORKERS)
+            except Exception as e:  # the batch as a whole: the lock stayed busy, FalkorDB left
+                outcomes += [e] * len(batch)
         for item, out in zip(todo, outcomes, strict=True):
             a = item.artifact
             key = f"{a.id}@{item.updated_ms}"
@@ -168,6 +176,42 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
         save_state(graph, state)
     report["sent"], report["unsent"] = deliver(connectors, graph)
     report["derived"] = live.derive_if_due(graph)  # the derived layer, if a write made it due
+    return report
+
+
+def first_cursor(c: Connector, now_ms: int | None = None) -> int:
+    """Where a connector's first sync starts: `backfill_days` ago (connectors.yaml, per
+    source; BACKFILL_DAYS by default). Further back is `yaan connectors backfill`."""
+    maps = getattr(c, "maps", None) or base.maps()
+    days = float(maps.source(c.name).get("backfill_days", BACKFILL_DAYS))
+    return (now_ms or int(time.time() * 1000)) - int(days * 86_400_000)
+
+
+def backfill(
+    connectors: list[Connector], graph: str | None, days: float, spend: bool = False
+) -> dict[str, Any]:
+    """Reach `days` back (D114). Without `spend`, a dry run: what each tool holds in that
+    window and what extracting it would cost. With it, each connector's cursor moves back
+    to there and one sync round ingests it (in saved chunks; items already in are skipped,
+    and the daily spend cap still stops the model: what waits goes in on later rounds)."""
+    graph = live.demo_graph(graph)
+    since = int(time.time() * 1000) - int(days * 86_400_000)
+    report: dict[str, Any] = {"graph": graph, "since_ms": since, "sources": {}}
+    for c in connectors:
+        items = c.fetch(since)
+        arts = sorted((i.artifact for i in items if i.events is None), key=lambda a: a.ts_ms or 0)
+        report["sources"][c.name] = {"items": len(items), **live.estimate_extraction(arts, graph)}
+    totals = report["sources"].values()
+    report["expected_usd"] = round(sum(s["expected_usd"] for s in totals), 4)
+    report["worst_case_usd"] = round(sum(s["worst_case_usd"] for s in totals), 4)
+    if not spend:
+        return report
+    state = load_state(graph)
+    for c in connectors:
+        mine = state.setdefault(c.name, {"since_ms": since, "seen": {}})
+        mine["since_ms"] = min(mine["since_ms"] or since, since)
+    save_state(graph, state)
+    report["sync"] = sync(connectors, graph)
     return report
 
 

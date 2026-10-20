@@ -140,21 +140,33 @@ def ingest_artifact(
 Batch = list[tuple[Artifact, list[dict[str, Any]] | None, bool]]
 
 
-def ingest_batch(items: Batch, graph: str | None = None) -> list[dict[str, Any] | Exception]:
+def ingest_batch(
+    items: Batch, graph: str | None = None, workers: int = 1
+) -> list[dict[str, Any] | Exception]:
     """Many artifacts, one graph pass (D112): each is checked and extracted on its own (S1,
     S5-S6, outside the writer lock), then, under one lock, each one's S2-S4 and events, ONE
     fold per product they touch and ONE Sentinel pass over every chain those folds changed.
     A connector round's cost no longer grows with the number of items in it. Returns, in
     order, each item's result or the exception that stopped it; an exception in the shared
-    fold or Sentinel is every written item's (the runner retries them)."""
+    fold or Sentinel is every written item's (the runner retries them). `workers`: items
+    extracted at once (a backfill); the spend cap holds across them (D098)."""
+    from concurrent.futures import ThreadPoolExecutor
+
     graph = demo_graph(graph)
-    prepared: list[dict[str, Any] | Exception] = []
-    for a, events, replace in items:
-        earlier = [p["a"] for p in prepared if not isinstance(p, Exception)]
-        try:
-            prepared.append(_prepare(a, graph, events, replace, earlier))
+    artifacts = [a for a, _, _ in items]
+
+    def prepare(n: int) -> dict[str, Any] | Exception:
+        a, events, replace = items[n]
+        try:  # an item's context: the batch's items before it, whatever happens to them
+            return _prepare(a, graph, events, replace, artifacts[:n])
         except Exception as e:  # this item only
-            prepared.append(e)
+            return e
+
+    if workers > 1 and len(items) > 1:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            prepared = list(pool.map(prepare, range(len(items))))
+    else:
+        prepared = [prepare(n) for n in range(len(items))]
     ready = [p for p in prepared if not isinstance(p, Exception)]
     if ready:
         with db.writer_lock(graph):
@@ -354,6 +366,35 @@ def link_context(a: Artifact, graph: str) -> tuple[list[Artifact], dict[str, lis
     alias_rows = db.run("product_aliases", {"product_id": product}, graph=graph).rows
     aliases = {product: list((alias_rows[0]["aliases"] if alias_rows else None) or [])}
     return known, aliases
+
+
+EXPECTED_OUTPUT_TOKENS = 130  # an extraction's typical answer (D102: 109-137 per unit)
+
+
+def estimate_extraction(items: list[Artifact], graph: str | None = None) -> dict[str, Any]:
+    """What extracting `items` would cost, before anything is spent (a backfill's dry run,
+    D114): how many need the model, and the worst case (every output token the call may use)
+    and the expected cost (a typical answer), from each one's real extraction unit."""
+    graph = demo_graph(graph)
+    model = get_settings().lore_extract_model
+    need = worst = expected = 0.0
+    chars = 0
+    for n, a in enumerate(items):
+        for unit in live_units(a, graph, items[:n]):
+            prompt = len(extract.SYSTEM) + len(unit.render())
+            need += 1
+            chars += prompt
+            worst += llm.worst_case(model, prompt, 8000)
+            tokens = int(prompt / llm.CHARS_PER_TOKEN_WORST)
+            expected += llm.cost_usd(model, tokens, EXPECTED_OUTPUT_TOKENS)
+    return {
+        "items": len(items),
+        "need_the_model": int(need),
+        "prompt_chars": chars,
+        "expected_usd": round(expected, 4),
+        "worst_case_usd": round(worst, 4),
+        "model": model,
+    }
 
 
 DERIVE_EVERY_S = 300  # the derived layer is at most this stale after a live write (D112)

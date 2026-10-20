@@ -650,6 +650,16 @@ def cmd_connectors(args: argparse.Namespace) -> int:
         if args.action == "retry":
             print(json.dumps(runner.retry(graph, args.id), indent=1))
             return 0
+        if args.action == "backfill":  # a dry run unless --yes (D114)
+            out = runner.backfill(runner.configured(graph), graph, args.days, spend=args.yes)
+            print(json.dumps(out, indent=1, default=str))
+            if not args.yes:
+                print(
+                    f"dry run: about ${out['expected_usd']:.2f} expected, at most "
+                    f"${out['worst_case_usd']:.2f}; add --yes to ingest it",
+                    file=sys.stderr,
+                )
+            return 0
         if args.action == "status":
             mode = "demo" if base.is_demo() else "org"
             print(f"mode: {mode}, graph {graph!r}")
@@ -770,12 +780,24 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         (
             "action",
             {
-                "choices": ("sync", "run", "status", "seed", "dead", "retry", "health"),
+                "choices": (
+                    "sync",
+                    "run",
+                    "status",
+                    "seed",
+                    "dead",
+                    "retry",
+                    "health",
+                    "backfill",
+                ),
                 "help": "what to do (dead: items that couldn't go in; retry: replay them; "
-                "health: is the connector loop running)",
+                "health: is the connector loop running; backfill: reach --days back, a dry "
+                "run with its cost unless --yes)",
             },
         ),
         ("--id", {"help": "dead / retry: one dead letter's id (default: all)"}),
+        ("--days", {"type": float, "default": 30, "help": "backfill: how far back"}),
+        ("--yes", {"action": "store_true", "help": "backfill: ingest it (spends on the model)"}),
         ("--act", {"choices": ("setup", "regression"), "default": "setup", "help": "seed act"}),
         ("--graph", {"help": "default: LORE_DEMO_GRAPH, or LORE_ORG_GRAPH in org mode"}),
         ("--every", {"type": float, "default": 30, "help": "run: seconds between polls"}),

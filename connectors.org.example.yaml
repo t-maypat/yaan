@@ -12,6 +12,8 @@
 #   visibility: members  + members: [...]     only these people.yaml names or emails
 # A source without one stops `yaan init`, and nothing from it is shown.
 product: Acme Platform              # the product everything below belongs to
+# A tool's first sync reads its last 30 days (`backfill_days: 90` under a tool reads more).
+# To reach further back later, price it first: yaan connectors backfill --days 365
 
 slack:
   channels:                         # Slack channel name -> the Yaan channel it feeds

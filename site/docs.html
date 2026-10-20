@@ -200,6 +200,7 @@ docker compose --profile app exec api yaan connectors status</code></pre>
 docker compose --profile connectors exec worker yaan connectors health</code></pre>
       <p>An item a connector can&rsquo;t ingest is kept, not dropped: <code>yaan connectors dead</code> lists them and <code>yaan connectors retry</code> replays them once you have fixed the cause.</p>
       <p class="tip"><b>Tip:</b> Slack uses Socket Mode. You do not need a public URL. GitHub, Jira and Notion are checked every 30 seconds.</p>
+      <p>The first sync reads the last 30 days. To go further back, see what it would cost first: <code>yaan connectors backfill --days 365</code> is a dry run; add <code>--yes</code> to ingest it.</p>
     </section>
 
     <section id="ai">

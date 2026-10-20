@@ -206,8 +206,11 @@ def test_an_org_sync_prepares_the_graph_and_takes_unlabeled_items(org_mode, monk
     monkeypatch.setattr(live, "present_ids", lambda graph, ids: set())
     monkeypatch.setattr(live, "derive_if_due", lambda graph: None)
     monkeypatch.setattr(
-        live, "ingest_batch", lambda items, graph: [ingest(a, graph, e, r) for a, e, r in items]
+        live,
+        "ingest_batch",
+        lambda items, graph, workers=1: [ingest(a, graph, e, r) for a, e, r in items],
     )
+    monkeypatch.setattr(runner, "first_cursor", lambda c, now_ms=None: 0)
 
     def ingest(a, graph, events=None, replace=False):
         ingested.append((a.id, graph))

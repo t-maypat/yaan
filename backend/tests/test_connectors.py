@@ -65,7 +65,7 @@ def test_synthetic_ids_have_the_live_paths_rule5_shape():
         live.check_synthetic("msg:20270309-0-abc")
 
 
-def one_by_one(items, graph):
+def one_by_one(items, graph, workers=1):
     """live.ingest_batch as the tests fake it: each item through live.ingest_artifact (the
     test's fake), its exception kept in its place."""
     out = []
@@ -86,6 +86,7 @@ def offline(tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "deliver", lambda connectors, graph: ([], []))
     monkeypatch.setattr(live, "derive_if_due", lambda graph: None)
     monkeypatch.setattr(live, "ingest_batch", one_by_one)
+    monkeypatch.setattr(runner, "first_cursor", lambda c, now_ms=None: 0)  # tiny test clocks
     dead = []
 
     def record_dead(graph, source, item, error, attempts):
@@ -323,3 +324,49 @@ def test_a_dead_letter_keeps_its_item_and_retry_replays_it(empty_graph, monkeypa
     assert [(r["source"], r["attempts"], r["error"]) for r in left] == [
         ("jira", 6, "LiveError: still unknown")
     ]
+
+
+def test_a_first_sync_reaches_back_backfill_days_not_the_whole_history():
+    """D114: a connector's first cursor is `backfill_days` ago (30 by default, per source)."""
+    day = 86_400_000
+    plain = Fake("slack")
+    plain.maps = Maps(product="Widget", default_person=None, sources={})
+    assert runner.first_cursor(plain, now_ms=100 * day) == 70 * day
+    seven = {"slack": {"backfill_days": 7}}
+    plain.maps = Maps(product="Widget", default_person=None, sources=seven)
+    assert runner.first_cursor(plain, now_ms=100 * day) == 93 * day
+
+
+def test_a_backfill_is_a_dry_run_with_its_cost_until_told_to_spend(offline, monkeypatch):
+    monkeypatch.setattr(
+        live,
+        "estimate_extraction",
+        lambda arts, graph: {
+            "need_the_model": len(arts),
+            "expected_usd": 0.01 * len(arts),
+            "worst_case_usd": 0.1 * len(arts),
+        },
+    )
+    import time
+
+    monkeypatch.setattr(live, "ingest_artifact", answers)
+    recent = int(time.time() * 1000) - 86_400_000  # a day ago: inside the 90 days
+    fake = Fake("slack", [Item(msg(1), updated_ms=recent), Item(msg(2), updated_ms=recent + 1)])
+    dry = runner.backfill([fake], "lore_demo", days=90)
+    assert dry["sources"]["slack"]["items"] == 2 and dry["worst_case_usd"] == 0.2
+    assert "sync" not in dry and runner.load_state("lore_demo") == {}  # nothing touched
+    spent = runner.backfill([fake], "lore_demo", days=90, spend=True)
+    assert [r["id"] for r in spent["sync"]["ingested"]] == [msg(1).id, msg(2).id]
+
+
+def test_estimating_an_extraction_calls_no_model(empty_graph, monkeypatch):
+    from app import llm
+
+    def no(*a, **k):
+        raise AssertionError("the estimate called the model")
+
+    monkeypatch.setattr(llm, "complete", no)
+    pr = msg(3).model_copy(update={"kind": "pr", "channel_id": None, "meta": {}})
+    out = live.estimate_extraction([msg(1), msg(2), pr], empty_graph)
+    assert out["items"] == 3 and out["need_the_model"] == 2  # a PR isn't read by the model
+    assert 0 < out["expected_usd"] < out["worst_case_usd"]
