@@ -188,6 +188,7 @@ cd yaan</code></pre>
       <h3 class="h3-doc">Start the connectors</h3>
       <p>Switch Yaan from the demo to your own data. In <code>.env</code>, set <code>LORE_DATA_MODE=org</code>. Your data then goes into its own graph, <code>yaan_org</code>. Nothing from the demo graph is mixed in.</p>
       <p>Copy the example map, then edit it. Name your product and the channels Yaan reads. Each channel name starts with <code>bug-</code>, <code>develop-</code> or <code>planning-</code>. The prefix tells Yaan what to read from it.</p>
+      <p>Say who may read each source other than Slack: <code>visibility: everyone</code>, or <code>visibility: members</code> with a <code>members</code> list. Slack tells Yaan which channels are private and who is in them. Until a source says, Yaan shows nothing from it.</p>
       <pre class="code"><code>cp connectors.org.example.yaml connectors.yaml</code></pre>
       <p>Optional: list your people in <code>people.yaml</code>, with their role and their account in each tool. A role decides who may close or reopen an issue. Yaan adds everyone else the first time they appear.</p>
       <p>Apply your settings, create your graph, and check the connectors:</p>

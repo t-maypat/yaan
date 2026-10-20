@@ -58,7 +58,7 @@ Open **http://127.0.0.1:8000**: Ask, Inbox, Timeline, Graph health. Yaan and Fal
 Org mode points Yaan at your team's tools instead of the demo. Your data goes into its own graph, and nothing from the demo is mixed in.
 
 1. In `.env`, set `LORE_DATA_MODE=org` and each tool's token.
-2. `cp connectors.org.example.yaml connectors.yaml`, then name your product and the channels Yaan reads. A channel's name starts with `bug-`, `develop-` or `planning-`, which tells Yaan what to read from it.
+2. `cp connectors.org.example.yaml connectors.yaml`, then name your product and the channels Yaan reads. A channel's name starts with `bug-`, `develop-` or `planning-`, which tells Yaan what to read from it. Say who may read each non-Slack source (`visibility: everyone`, or `members`); Slack's private channels and their members are read from Slack.
 3. List the people who will use Yaan in [`people.yaml`](people.yaml), with their email, role and account in each tool. Yaan registers everyone else the first time they appear in a tool, but only listed people can sign in.
 4. Create the graph and start the connectors:
 
@@ -75,7 +75,7 @@ docker compose --profile app exec api yaan token issue "Priya Shah"   # prints h
 docker compose --profile app exec api yaan token revoke "Priya Shah"
 ```
 
-   Behind a single-sign-on proxy (oauth2-proxy, Cloudflare Access), set `LORE_AUTH=header` instead: the proxy sends the user's email in `X-Forwarded-Email` and `LORE_AUTH_PROXY_SECRET` in `X-Lore-Proxy-Secret`. In Slack, `@yaan` answers as the Slack user who asked.
+   Behind a single-sign-on proxy (oauth2-proxy, Cloudflare Access), set `LORE_AUTH=header` instead: the proxy sends the user's email in `X-Forwarded-Email` and `LORE_AUTH_PROXY_SECRET` in `X-Lore-Proxy-Secret`. In a Slack channel, `@yaan` answers from what everyone in that channel may read; a direct message to the bot answers from everything the asker may read.
 
 | Tool | In | Out, once you approve |
 |---|---|---|
@@ -129,7 +129,7 @@ FalkorDB features Yaan depends on: Cypher over a property graph, a **full-text i
 | [`connection_path`](backend/queries/connection_path.cypher) | the shortest chain of collaborators between two people |
 | [`find_missing`](backend/queries/find_missing.cypher) | what isn't there: unfixed issues, unreviewed PRs, single-author areas |
 
-All 197 queries, one parameterized statement per file, each with a fixture test: **[docs/queries.md](docs/queries.md)**.
+All 202 queries, one parameterized statement per file, each with a fixture test: **[docs/queries.md](docs/queries.md)**.
 
 ## Results
 

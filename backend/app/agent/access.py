@@ -17,6 +17,15 @@ Without that, an issue reported only in a private channel kept its title, status
 Fail-closed: an id the policy can't place (not in the graph, or a derived node with no source)
 is hidden. When anything is hidden, the result's counts (`counts_by_status`, `count`, a
 ranking's `n` ...) are left out, since they were computed over everything; a note says so.
+
+Org mode (H1, D109) reads a team's real access instead of the synthetic policy: a channel is
+`public` or `private` (from Slack, or declared in connectors.yaml), a private one is read by
+its MEMBER_OF people, an item outside any channel (a pull request) by its source's declared
+audience, and anything whose access isn't known is hidden.
+
+An audience (`Access.audience`) is a set of readers rather than one person: everyone in one
+channel (a Slack answer posted there, S1), or everyone in the company (text that leaves Yaan:
+alert cards and drafted comments, S3). It sees what is open to all, plus that channel's own.
 """
 
 import re
@@ -27,7 +36,7 @@ from typing import Any
 
 import yaml
 
-from app import db
+from app import db, org
 from app.config import REPO_ROOT
 
 POLICY = REPO_ROOT / "permissions.yaml"
@@ -58,20 +67,37 @@ def scoped(value: str) -> bool:
     return bool(ARTIFACT_ID.match(value) or DERIVED_ID.match(value))
 
 
+def source_of(artifact_id: str) -> str:
+    """The tool an org-mode artifact came from: `pr:github-…` -> github."""
+    return artifact_id.partition(":")[2].split("-", 1)[0]
+
+
 @dataclass
 class Access:
-    viewer: str
+    viewer: str | None  # a person; None for an audience (see `audience`)
     graph: str | None = None
     rules: Policy = field(default_factory=policy)
+    channel: str | None = None  # an audience's channel: everyone who reads it
     _known: dict[str, bool] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if self.viewer is None:  # an audience: the channel its readers share, no meetings
+            self.channels = {self.channel} if self.channel else set()
+            self.meetings = set()
+            return
+
         def ids(name: str) -> set[str]:
             rows = db.run_all(name, {"viewer": self.viewer}, cap=50_000, graph=self.graph)
             return {r["id"] for r in rows}
 
-        self.channels = ids("viewer_channels")
+        self.channels = ids("viewer_member_channels" if org.active() else "viewer_channels")
         self.meetings = ids("viewer_meetings")
+
+    @classmethod
+    def audience(cls, channel: str | None = None, graph: str | None = None) -> "Access":
+        """What every reader of `channel` may see: what is open to the whole company, plus
+        that channel's own messages. With no channel, what the whole company may see."""
+        return cls(None, graph, channel=channel)
 
     def private(self, channel: str | None) -> bool:
         return bool(channel) and any(fnmatch(channel, p) for p in self.rules.private_channels)
@@ -102,6 +128,8 @@ class Access:
         for r in rows.rows:
             if r["kind"] == "meeting" and self.rules.meetings == "attendees":
                 ok = r["id"] in self.meetings
+            elif org.active():
+                ok = self.org_visible(r)
             elif self.private(r["channel"]):
                 ok = r["channel_id"] in self.channels
             else:
@@ -109,6 +137,19 @@ class Access:
             self._known[r["id"]] = ok
         for a in todo:  # not in the graph: nothing proves the viewer may see it
             self._known.setdefault(a, False)
+
+    def org_visible(self, r: dict[str, Any]) -> bool:
+        """Org mode: a channel's synced or declared visibility, else the source's declared
+        audience. Unknown is hidden: a Slack channel before its first sync, an undeclared
+        source."""
+        if r["channel_id"]:
+            if r["visibility"] == "public":
+                return True
+            return r["visibility"] == "private" and r["channel_id"] in self.channels
+        seen = org.source_audiences().get(source_of(r["id"]))
+        if seen is None:
+            return False
+        return seen.visibility == "everyone" or self.viewer in seen.members
 
     def redact(self, value: Any) -> tuple[Any, set[str]]:
         """The result without what the viewer can't see, and the ids removed. A row that is

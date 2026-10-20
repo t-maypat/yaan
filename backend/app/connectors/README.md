@@ -9,8 +9,9 @@ The setup steps below are the same for a team's real workspace. What changes is 
 
 - **No label.** Items need no "[synthetic demo]" prefix, and their ids drop `synthetic-` (`msg:slack-…`, `pr:github-…`).
 - **Your channels.** Copy `connectors.org.example.yaml` over `connectors.yaml`. Each Yaan channel's name starts with `bug-` (issues reported, fixed, reopened), `develop-` (pull requests, development decisions) or `planning-` (documents and their review). Extraction reads `bug-` and `develop-` channels.
+- **Who may read what.** Slack tells Yaan which channels are private and who is in them; each round re-reads it, so someone who leaves a channel stops seeing it in Yaan. A private Slack channel needs a Yaan channel of its own. Every other source declares its readers in `connectors.yaml`: `visibility: everyone`, or `visibility: members` with `members:` (names or emails from `people.yaml`). Until a source is declared, `lore init` stops and nothing from it is shown. Text Yaan sends out (alert cards, drafted comments) quotes only sources everyone may read. In a channel, `@yaan` answers from what everyone there may read; send the bot a direct message for an answer from everything you may read.
 - **Your people.** `people.yaml` lists people with their role (what the authority policy reads) and their account in each tool, so one person's Slack, GitHub and Jira accounts are one node. Anyone not listed is registered the first time they appear, under their name in that tool, with no role: their claims apply, marked unverified.
-- **Set up once:** `lore init` creates the graph, its indexes, the product, the channels and the listed people. It checks both files first and changes nothing if one is wrong. Then run `lore connectors run` as below.
+- **Set up once:** `lore init` creates the graph, its indexes, the product, the channels and the listed people. It checks both files first and changes nothing if one is wrong. Then start the connector worker (`docker compose --profile app --profile connectors up -d`), or `lore connectors run` as below.
 - **The demo stays out.** In org mode, `lore seed`, `lore demo` and `lore connectors seed` refuse, live writes refuse the HERB graphs, and the web UI hides the demo's sample questions, viewers and injections.
 
 `connectors.yaml` and `people.yaml` are mounted into the `api` container, so an edit applies on `docker compose --profile app restart api`. One product per install: everything the connectors read belongs to the product `connectors.yaml` names.
@@ -37,6 +38,9 @@ display_information:
   description: Company brain on FalkorDB. Answers with sources and flags changes. Demo with synthetic data.
   background_color: "#18202b"
 features:
+  app_home:
+    messages_tab_enabled: true # direct messages to the bot: answers scoped to the asker
+    messages_tab_read_only_enabled: false
   bot_user:
     display_name: lore
     always_online: true

@@ -6,6 +6,11 @@ Out: notification drafts go to the alerts channel; corrections go into the threa
 Slack message they correct. The bot (`SlackBot`) answers `@lore <question>` in the thread with
 Lore's checked citations, and posts each new alert as a card with Approve and Dismiss buttons
 that record the verdict as a decision (sentinel/approve.respond), as the Inbox does.
+
+Who may read what (H1, D109): in org mode each round also reads which mapped channels are
+private and who is in them, so Yaan shows a private channel only to its members. An answer
+posted in a channel uses only what everyone there may read; a direct message to the bot gets
+an answer from everything the asker may read.
 """
 
 import re
@@ -44,8 +49,10 @@ class SlackConnector:
         self.maps = maps or base.maps()
         self.conf = self.maps.source("slack")
         self._channels: dict[str, str] | None = None
+        self._private: set[str] = set()  # names of the private channels among _channels
         self._team_url: str | None = None
         self._names: dict[str, str | None] = {}  # org mode: Slack user id -> display name
+        self._bots: set[str] = set()  # accounts users.info says are bots
 
     # --- reading ---------------------------------------------------------------------------
     def channel_ids(self) -> dict[str, str]:
@@ -61,6 +68,7 @@ class SlackConnector:
                     cursor=cursor,
                 )
                 out.update({c["name"]: c["id"] for c in r["channels"]})
+                self._private |= {c["name"] for c in r["channels"] if c.get("is_private")}
                 cursor = (r.get("response_metadata") or {}).get("next_cursor")
                 if not cursor:
                     break
@@ -68,6 +76,9 @@ class SlackConnector:
         return self._channels
 
     def fetch(self, since_ms: int) -> list[Item]:
+        if not base.is_demo():
+            self._channels = None  # re-read: a channel may have turned private, or been added
+            self.sync_access()
         items = []
         for slack_name, herb_id in (self.conf.get("channels") or {}).items():
             cid = self.channel_ids().get(slack_name)
@@ -93,6 +104,49 @@ class SlackConnector:
                     break
         return items
 
+    def sync_access(self) -> dict[str, int]:
+        """Org mode: each mapped channel's privacy, and a private one's members, from Slack
+        into the graph (D109). A private Slack channel must feed a Yaan channel of its own:
+        merged with another, its messages would be shown to the other channel's readers."""
+        from app import org
+
+        by_target: dict[str, list[str]] = {}
+        for slack_name, target in (self.conf.get("channels") or {}).items():
+            by_target.setdefault(target, []).append(slack_name)
+        ids = self.channel_ids()
+        if unseen := sorted(n for names in by_target.values() for n in names if n not in ids):
+            # never guess "public" for a channel we can't see: it may be private
+            raise ConnectorError(f"the bot can't see #{unseen[0]}: /invite @lore there")
+        rows, members = [], {}
+        for target, names in sorted(by_target.items()):
+            private = [n for n in names if n in self._private]
+            if private and len(names) > 1:
+                raise ConnectorError(
+                    f"connectors.yaml maps #{', #'.join(names)} to {target!r}, and "
+                    f"#{private[0]} is private: give a private channel a Yaan channel of its own"
+                )
+            if not private:
+                rows.append({"id": target, "visibility": "public"})
+                continue
+            rows.append({"id": target, "visibility": "private"})
+            members[target] = set(self.members(ids[private[0]]))
+        org.ensure_people(self.graph, [e for m in members.values() for e in m])
+        return org.set_channel_access(self.graph, rows, members)
+
+    def members(self, cid: str) -> list[str]:
+        """The people in a Slack channel (bots left out), as person ids."""
+        out, cursor = [], None
+        while True:
+            r = self._call("conversations_members", channel=cid, limit=200, cursor=cursor)
+            out += [self.who(u) for u in r["members"] if not self.is_bot(u)]
+            cursor = (r.get("response_metadata") or {}).get("next_cursor")
+            if not cursor:
+                return out
+
+    def is_bot(self, user: str) -> bool:
+        self.user_name(user)  # one users.info call per account, which also says "bot"
+        return user in self._bots
+
     def plain(self, text: str) -> str:
         """Slack markup to the plain text HERB messages have: <url|label> -> label (url),
         <@U123> -> @eid_… of the person that account plays."""
@@ -110,6 +164,8 @@ class SlackConnector:
             try:
                 profile = self._call("users_info", user=user)["user"]
                 self._names[user] = profile.get("real_name") or profile.get("name")
+                if profile.get("is_bot") or profile.get("is_app_user"):
+                    self._bots.add(user)
             except ConnectorError:  # no users:read scope, or a deleted user: keep the id
                 self._names[user] = None
         return self._names[user]
@@ -189,6 +245,11 @@ class SlackConnector:
         url = f"{self._team_url}archives/{cid}/p{ts.replace('.', '')}" if self._team_url else None
         return label, url
 
+    def yaan_channel(self, slack_channel_id: str) -> str | None:
+        """The Yaan channel a Slack channel feeds, by its Slack id (None: not mapped)."""
+        names = {v: k for k, v in self.channel_ids().items()}
+        return (self.conf.get("channels") or {}).get(names.get(slack_channel_id, ""))
+
     def alerts_channel(self) -> str:
         name = self.conf.get("alerts_channel") or "lore-alerts"
         cid = self.channel_ids().get(name)
@@ -208,6 +269,12 @@ class SlackConnector:
 
 
 # --- the bot: @lore questions and alert cards ----------------------------------------------
+IN_A_DM = (
+    "\n_Not everyone in this channel can see those sources, so this answer leaves them out. "
+    "Send me the question as a direct message for an answer from everything you can see._"
+)
+
+
 def answer_text(out: dict[str, Any], permalink: Callable[[str], str | None]) -> str:
     """Lore's answer in Slack mrkdwn: the text, then each citation with its verbatim quote and,
     for a Slack message, a link back to it."""
@@ -266,7 +333,7 @@ class SlackBot:
             return None
 
     def _mention(self, event: dict[str, Any], say: Callable[..., Any]) -> None:
-        from app.agent import loop
+        from app.agent import access, loop
 
         question = MENTION.sub("", event.get("text") or "").strip()
         thread = event.get("thread_ts") or event["ts"]
@@ -275,17 +342,43 @@ class SlackBot:
             say(text=hint, thread_ts=thread)
             return
         try:
-            viewer = self.connector.who(event.get("user"))  # W7
+            # Posted in the channel, so it may use only what everyone there can read, not
+            # what the asker alone may (D109); a DM to the bot answers from all of that.
+            channel = self.connector.yaan_channel(event.get("channel") or "")
+            scope = access.Access.audience(channel, self.graph)
             out = loop.answer(
-                question, self.connector.maps.product, graph=self.graph, viewer_id=viewer
+                question, self.connector.maps.product, graph=self.graph, audience=scope
             )
         except Exception as e:  # shown in the thread, never a made-up answer
             say(text=f"I couldn't answer: {type(e).__name__}: {e}", thread_ts=thread)
             return
-        say(text=answer_text(out, self._permalink), thread_ts=thread, unfurl_links=False)
+        text = answer_text({**out, "hidden_sources": 0}, self._permalink)
+        if out.get("hidden_sources"):
+            text += IN_A_DM
+        say(text=text, thread_ts=thread, unfurl_links=False)
 
-    def _message(self, event: dict[str, Any]) -> None:
+    def _direct(self, event: dict[str, Any], say: Callable[..., Any]) -> None:
+        """A direct message to the bot: answered from everything the asker may read (W7)."""
+        from app.agent import loop
+
+        question = MENTION.sub("", event.get("text") or "").strip()
+        if len(question) < 3:
+            return
+        try:
+            viewer = self.connector.who(event.get("user"))
+            out = loop.answer(
+                question, self.connector.maps.product, graph=self.graph, viewer_id=viewer
+            )
+        except Exception as e:  # shown to the asker, never a made-up answer
+            say(text=f"I couldn't answer: {type(e).__name__}: {e}")
+            return
+        say(text=answer_text(out, self._permalink), unfurl_links=False)
+
+    def _message(self, event: dict[str, Any], say: Callable[..., Any] | None = None) -> None:
         if event.get("bot_id") or event.get("subtype"):
+            return
+        if event.get("channel_type") == "im" and say is not None:
+            self._direct(event, say)
             return
         self.on_message()
 
@@ -311,6 +404,7 @@ class SlackBot:
             except Exception as e:
                 note = f"Couldn't record it: {e}"
             alert = next((a for a in _alerts(self.graph) if a["id"] == alert_id), {"id": alert_id})
+            alert = base.public_alert(alert, self.graph)  # the card stays as open as it was
             blocks = (
                 alert_blocks(alert, decided=note, resolve=self.resolve)
                 if "summary" in alert

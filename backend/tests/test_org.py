@@ -28,8 +28,8 @@ MAPS = Maps(
     default_person=None,
     sources={
         "slack": {"channels": {"support": "bug-support"}, "people": {"U7": "eid_0000beef"}},
-        "jira": {"channel": "bug-tickets"},
-        "notion": {"channel": "planning-specs"},
+        "jira": {"channel": "bug-tickets", "visibility": "everyone"},
+        "notion": {"channel": "planning-specs", "visibility": "members", "members": ["Ken Ito"]},
     },
 )
 
@@ -42,11 +42,11 @@ def org_mode(tmp_path, monkeypatch):
     monkeypatch.setenv("LORE_DATA_MODE", "org")
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(org, "PEOPLE_FILE", people)
-    for cached in (get_settings, org.roster, org.accounts):
+    for cached in (get_settings, org.roster, org.accounts, org.source_audiences):
         cached.cache_clear()
     org._hints.clear()
     yield tmp_path
-    for cached in (get_settings, org.roster, org.accounts):
+    for cached in (get_settings, org.roster, org.accounts, org.source_audiences):
         cached.cache_clear()
     org._hints.clear()
 

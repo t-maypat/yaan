@@ -257,6 +257,7 @@ def answer(
     toolset: tuple[str, ...] | None = None,
     viewer_id: str | None = None,
     cancel: threading.Event | None = None,
+    audience: access.Access | None = None,
 ) -> dict:
     """Answer one question with the tools, validated citations, or an abstention.
 
@@ -265,14 +266,17 @@ def answer(
 
     `viewer_id` (W7, D077) answers as that person: every tool result is redacted to what they
     may see, `graph_query` is left out (its free-form rows can't be redacted by id), and the
-    result says how many sources were hidden. None = no filtering.
+    result says how many sources were hidden. None = no filtering. `audience` scopes the
+    answer to a set of readers instead (`access.Access.audience`): a Slack answer posted in a
+    channel may use only what everyone there can read (D109).
 
     `as_of_ms` answers for the state at that moment (the Timeline's slider, 12.4): the
     status tools use it unless the model names another date. `toolset` limits the tools,
     for the Lore − graph tools ablation (`tools.SEARCH_ONLY`, 9.8); the prompt follows it.
     """
     names = list(toolset) if toolset else [t["name"] for t in tools.TOOL_SPECS]
-    if viewer_id:
+    scoped = audience or (access.Access(viewer_id, graph) if viewer_id else None)
+    if scoped:
         names = [n for n in names if n != "graph_query"]
     specs = [tools.REGISTRY[n].spec for n in names]
     system = system_prompt(names)
@@ -285,7 +289,7 @@ def answer(
         "urls": {},
         "related": {},
         "facts": {},
-        "access": access.Access(viewer_id, graph) if viewer_id else None,
+        "access": scoped,
         "hidden": set(),
         "trace": [],
         "graph_query_errors": 0,

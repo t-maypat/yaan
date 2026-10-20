@@ -5,6 +5,12 @@
 # Every Yaan channel name starts with what kind of talk it holds, because that decides what Yaan
 # reads from it: bug-… (issues reported, fixed, reopened), develop-… (pull requests and
 # development decisions), planning-… (documents and their review; not read for events).
+#
+# Who may read what: Slack says which of its channels are private and who is in them (a private
+# Slack channel needs a Yaan channel of its own). Every other source declares its readers:
+#   visibility: everyone                      every signed-in person
+#   visibility: members  + members: [...]     only these people.yaml names or emails
+# A source without one stops `yaan init`, and nothing from it is shown.
 product: Acme Platform              # the product everything below belongs to
 
 slack:
@@ -15,12 +21,15 @@ slack:
   people: {}                        # optional: Slack member id -> person id (people.yaml is easier)
 
 github:
+  visibility: everyone              # who may read its pull requests in Yaan
   people: {}                        # optional: GitHub login -> person id
 
 jira:
   channel: bug-tickets              # ticket changes are filed as messages in this channel
+  visibility: everyone
   people: {}
 
 notion:
   channel: planning-docs            # where Notion pages are shared for review
+  visibility: everyone              # or: members, with members: [Priya Shah, ken@acme.example]
   people: {}

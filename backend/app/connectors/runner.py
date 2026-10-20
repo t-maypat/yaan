@@ -222,6 +222,8 @@ def deliver(connectors: list[Connector], graph: str) -> tuple[list[dict], list[d
     pending = db.run("actions_to_send", {"limit": 100}, graph=graph).rows
     resolve = render.resolver(connectors)  # each source cited as a link in its own tool
     for action in pending:
+        # what leaves Yaan quotes only what the whole company may read (D109)
+        action = {**action, "draft": base.public_quotes(action.get("draft"), graph)}
         errors, refs, via = [], [], []
         for c in connectors:
             try:
@@ -410,7 +412,7 @@ def one_round(connectors: list[Connector], graph: str, bot: Any, say=print) -> b
         carded = state.setdefault("slack_cards", {})
         for alert in engine.list_alerts("open", graph=graph):
             if from_connector(alert) and alert["id"] not in carded:
-                carded[alert["id"]] = bot.post_card(alert)
+                carded[alert["id"]] = bot.post_card(base.public_alert(alert, graph))
                 say(f"card {alert['id']}")
         save_state(graph, state)
     return not report["waiting"]

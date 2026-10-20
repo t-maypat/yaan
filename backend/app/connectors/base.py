@@ -162,3 +162,36 @@ def structured_event(
         "start": max(start, 0),
         "end": max(start, 0) + len(quote),
     }
+
+
+# --- what may leave Yaan (H1, D109) ------------------------------------------------------------
+# A drafted comment goes to a Jira ticket the whole project reads, an alert card to a Slack
+# channel anyone may join: Yaan can't know each destination's readers, so text that leaves it
+# quotes only sources the whole company may read. The rest keep their id, not their words.
+WITHHELD = "quote withheld: its source isn't open to everyone"
+
+
+def public_quotes(text: str | None, graph: str | None) -> str | None:
+    """`text` with every `"quote" (id)` whose source isn't open to everyone replaced."""
+    from app.agent import access
+    from app.connectors.render import CITE
+
+    if not text:
+        return text
+    ids = {m["id"] for m in CITE.finditer(text)}
+    if not ids:
+        return text
+    open_ = access.Access.audience(None, graph).allowed(ids)
+    return CITE.sub(lambda m: m[0] if m["id"] in open_ else f'"{WITHHELD}" ({m["id"]})', text)
+
+
+def public_alert(alert: dict[str, Any], graph: str | None) -> dict[str, Any]:
+    """An alert as a card outside Yaan may show it: its evidence quote only if open to all."""
+    from app.agent import access
+
+    aid = alert.get("artifact_id")
+    if not alert.get("quote") or not aid:
+        return alert
+    if aid in access.Access.audience(None, graph).allowed({aid}):
+        return alert
+    return {**alert, "quote": WITHHELD}

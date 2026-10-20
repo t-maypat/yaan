@@ -12,6 +12,7 @@ Hardening after the post-event review (docs/hardening-plan.md).
 
 ### Upgrading
 - Connectors now run in their own container: `docker compose --profile app --profile connectors up -d` replaces `docker compose exec -d api yaan connectors run`.
+- Org mode: every source other than Slack needs `visibility: everyone` or `visibility: members` (with `members:`) in `connectors.yaml`; `yaan init` says which is missing. Slack's private channels and members are now read from Slack, so a private Slack channel needs a Yaan channel of its own.
 - The containers no longer run as root. On Linux, `./data` must be writable by uid 10001 (`sudo chown -R 10001:10001 data`), or set `LORE_UID` and `LORE_GID` in `.env` to its owner. The container says so at start if it isn't. Docker Desktop needs nothing.
 
 ### Added
@@ -21,6 +22,9 @@ Hardening after the post-event review (docs/hardening-plan.md).
 - SECURITY.md: how to report a vulnerability privately.
 
 ### Fixed
+- Org mode showed a private Slack channel to every signed-in person unless its name matched `permissions.yaml`, and decided membership by who had posted there. Privacy and members now come from Slack, other sources declare their readers, and anything undeclared is hidden.
+- `@yaan` in a Slack channel answered from what the asker could see and posted it where everyone could read it. It now answers from what everyone in the channel may read; a direct message gets the asker's full answer.
+- Alert cards and drafted comments sent to Slack, Jira, GitHub or Notion could quote a private message. They now quote only sources everyone may read.
 - The connector loop no longer ends on an error: an item that can't go in is kept as a dead letter (`yaan connectors dead`, `yaan connectors retry`), an item that may still go in (spend cap, FalkorDB restarting) waits without being dropped, and the cursor never skips past it.
 - Connector state is written atomically, and remembers versions for a day instead of forever.
 - A test that needs FalkorDB ran under `pytest -m "not db"`: every test using a database fixture is now marked `db` automatically.

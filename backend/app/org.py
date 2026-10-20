@@ -20,7 +20,9 @@ Nothing here runs in demo mode, so the demo and the evaluation behave exactly as
 import hashlib
 import json
 import re
+import time
 from collections.abc import Iterable
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -233,18 +235,145 @@ def channel_row(channel: str, product: str) -> dict[str, Any]:
     }
 
 
+# --- who may read what (H1, D109) ---------------------------------------------------------------
+# Slack says which of its channels are private and who is in them (connectors/slack.py syncs
+# it). Every other source says nothing we can read cheaply, so connectors.yaml declares its
+# audience; until it does, nothing from that source is shown to anyone.
+VISIBILITY = ("everyone", "members")
+FROM_THE_TOOL = frozenset({"slack"})
+
+
+@dataclass(frozen=True)
+class Audience:
+    visibility: str  # everyone | members
+    members: frozenset[str] = frozenset()  # eids, for `members`
+
+
+def member_id(source: str, who: Any) -> str:
+    """A person connectors.yaml names as a member: their people.yaml id, name or email."""
+    key = str(who).strip().casefold()
+    for eid, p in roster().items():
+        if key in (eid, p["name"].casefold(), (p.get("email") or "").casefold()):
+            return eid
+    raise OrgError(f"connectors.yaml: {source} lists member {who!r}, who isn't in people.yaml")
+
+
+def audience(source: str, conf: dict[str, Any]) -> Audience:
+    """A source's declared audience, or OrgError saying what to write."""
+    seen_by, members = conf.get("visibility"), conf.get("members") or []
+    if seen_by not in VISIBILITY:
+        raise OrgError(
+            f"connectors.yaml: {source} needs `visibility: everyone` (every signed-in person "
+            "may read it) or `visibility: members` with `members: [names or emails from "
+            "people.yaml]`. Until then nothing from it is shown to anyone."
+        )
+    if seen_by == "members" and not members:
+        raise OrgError(f"connectors.yaml: {source} has `visibility: members` but no `members`")
+    if seen_by == "everyone" and members:
+        raise OrgError(f"connectors.yaml: {source}'s `members` needs `visibility: members`")
+    return Audience(seen_by, frozenset(member_id(source, m) for m in members))
+
+
+def audiences(sources: dict[str, dict[str, Any]]) -> dict[str, Audience]:
+    """Every declared source's audience (Slack's comes from Slack)."""
+    return {
+        name: audience(name, conf) for name, conf in sources.items() if name not in FROM_THE_TOOL
+    }
+
+
+@lru_cache
+def source_audiences() -> dict[str, Audience]:
+    """The audiences connectors.yaml declares, read once (restart to pick up an edit)."""
+    from app.connectors import base
+
+    return audiences(base.maps().sources)
+
+
+def channel_sources(sources: dict[str, dict[str, Any]]) -> dict[str, set[str]]:
+    """Yaan channel -> the sources that feed it."""
+    out: dict[str, set[str]] = {}
+    for name, conf in sources.items():
+        if name in ("slack", "discord"):
+            targets = list((conf.get("channels") or {}).values())
+        else:
+            targets = [conf["channel"]] if conf.get("channel") else []
+        for t in targets:
+            out.setdefault(str(t), set()).add(name)
+    return out
+
+
+def channel_access(sources: dict[str, dict[str, Any]]) -> tuple[list[dict], dict[str, set]]:
+    """The visibility rows and member lists the declarations give to channels. A channel fed
+    by Slack gets its access from Slack, so no other source may feed it."""
+    declared = audiences(sources)
+    rows, members = [], {}
+    for channel, feeders in sorted(channel_sources(sources).items()):
+        if "slack" in feeders and len(feeders) > 1:
+            others = sorted(feeders - {"slack"})
+            raise OrgError(
+                f"connectors.yaml: {channel!r} is fed by Slack and by {others}: Slack decides "
+                "who may read a Slack channel, so give the others a channel of their own"
+            )
+        if "slack" in feeders:
+            continue
+        found = {declared[s] for s in feeders}
+        if len(found) > 1:
+            raise OrgError(f"connectors.yaml: {channel!r} is fed by sources with other audiences")
+        (seen,) = found
+        visibility = "public" if seen.visibility == "everyone" else "private"
+        rows.append({"id": channel, "visibility": visibility})
+        members[channel] = set(seen.members)
+    return rows, members
+
+
+def set_channel_access(
+    graph: str, rows: list[dict[str, Any]], members: dict[str, set[str]]
+) -> dict[str, int]:
+    """Write channels' visibility and bring their MEMBER_OF edges to `members`, removing only
+    who left and adding only who joined (readers never see a channel emptied)."""
+    now = int(time.time() * 1000)
+    if rows:
+        db.run(
+            "set_channel_visibility",
+            {"rows": [r | {"now_ms": now} for r in rows]},
+            graph=graph,
+            readonly=False,
+        )
+    have: dict[str, set[str]] = {c: set() for c in members}
+    if members:
+        found = db.run_all("channel_members", {"ids": sorted(members)}, cap=100_000, graph=graph)
+        for r in found:
+            have[r["channel_id"]].add(r["person_id"])
+    gone = [
+        {"channel_id": c, "person_id": p}
+        for c in sorted(members)
+        for p in sorted(have[c] - members[c])
+    ]
+    new = [
+        {"channel_id": c, "person_id": p, "now_ms": now}
+        for c in sorted(members)
+        for p in sorted(members[c] - have[c])
+    ]
+    if gone:
+        db.run("unlink_channel_members", {"rows": gone}, graph=graph, readonly=False)
+    if new:
+        db.run("link_channel_members", {"rows": new}, graph=graph, readonly=False)
+    return {"channels": len(rows), "joined": len(new), "left": len(gone)}
+
+
 def check(product: str, sources: dict[str, dict[str, Any]]) -> tuple[list[dict], list[dict]]:
     """The channel and people rows connectors.yaml and people.yaml give, or OrgError naming
     what to fix. Touches no graph."""
     channels = [channel_row(c, product) for c in declared_channels(sources)]
     people = [{k: v for k, v in p.items() if k != "accounts"} for p in roster().values()]
     accounts()  # an account listed twice is an error too
+    channel_access(sources)  # every source's audience is declared, and no channel is fed twice
     return channels, people
 
 
 def prepare(graph: str, product: str, sources: dict[str, dict[str, Any]]) -> dict[str, int]:
-    """Create (or refresh) the product, the declared channels and the people.yaml roster in
-    `graph`. Idempotent: every row is a MERGE on its id."""
+    """Create (or refresh) the product, the declared channels, their declared access and the
+    people.yaml roster in `graph`. Idempotent: every row is a MERGE on its id."""
     channels, people = check(product, sources)
     db.run(
         "upsert_products",
@@ -256,6 +385,8 @@ def prepare(graph: str, product: str, sources: dict[str, dict[str, Any]]) -> dic
         db.run("upsert_channels", {"rows": channels}, graph=graph, readonly=False)
     if people:
         db.run("upsert_people", {"rows": people}, graph=graph, readonly=False)
+    access_rows, members = channel_access(sources)
+    set_channel_access(graph, access_rows, members)
     return {"products": 1, "channels": len(channels), "people": len(people)}
 
 

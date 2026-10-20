@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-197 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+202 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -35,7 +35,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`health_pr_chains.cypher`](../backend/queries/health_pr_chains.cypher) | PRs with and without a status decision chain, internal vs external |
 | [`health_spoke_in.cypher`](../backend/queries/health_spoke_in.cypher) | resolved meeting speakers per resolution method (S10) |
 
-**Writes: ingestion, linking, the fold, derived layers, the Sentinel** (99)
+**Writes: ingestion, linking, the fold, derived layers, the Sentinel** (101)
 
 | Query | Purpose |
 |---|---|
@@ -70,6 +70,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`link_attended.cypher`](../backend/queries/link_attended.cypher) | (Person)-[:ATTENDED]->(Meeting) from participants |
 | [`link_authored.cypher`](../backend/queries/link_authored.cypher) | (Person)-[:AUTHORED]->(Artifact) |
 | [`link_caused.cypher`](../backend/queries/link_caused.cypher) | (Decision)-[:CAUSED]->(Decision): the change that led to a response decision (11.4) |
+| [`link_channel_members.cypher`](../backend/queries/link_channel_members.cypher) | (Person)-[:MEMBER_OF]->(Channel): who may read a private channel in org mode (H1, D109) |
 | [`link_claim_about_issue.cypher`](../backend/queries/link_claim_about_issue.cypher) | (Claim)-[:ABOUT]->(Issue): the issue a lifecycle claim is about |
 | [`link_claim_about_pr.cypher`](../backend/queries/link_claim_about_pr.cypher) | (Claim)-[:ABOUT]->(PR): the pull request a PR-intent claim is about |
 | [`link_claim_from.cypher`](../backend/queries/link_claim_from.cypher) | (Claim)-[:FROM {quote, start, end}]->(Artifact): the message a claim's verbatim quote comes from (S6) |
@@ -105,6 +106,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`mark_action_sent.cypher`](../backend/queries/mark_action_sent.cypher) | record where an approved action was delivered (a URL in the connected tool) and when, so it is sent once |
 | [`set_action_status.cypher`](../backend/queries/set_action_status.cypher) | record what happened to each drafted action (approved, skipped, dismissed), with the edited text when the approver changed it |
 | [`set_alert_response.cypher`](../backend/queries/set_alert_response.cypher) | close an open alert as approved or dismissed, with who and when (11.4); matches nothing when the alert is no longer open, so a second response is refused |
+| [`set_channel_visibility.cypher`](../backend/queries/set_channel_visibility.cypher) | who may read a channel in org mode: 'public' (everyone signed in) or 'private' (its MEMBER_OF people); from Slack, or declared in connectors.yaml (H1, D109) |
 | [`set_claim_hash.cypher`](../backend/queries/set_claim_hash.cypher) | the hash of the rows that wrote a claim, stamped last, so an interrupted write is redone by the next fold (D101) |
 | [`set_decision_hash.cypher`](../backend/queries/set_decision_hash.cypher) | the hash of the rows that wrote a decision, stamped last, so an interrupted write is redone by the next fold (D101) |
 | [`set_issue_hash.cypher`](../backend/queries/set_issue_hash.cypher) | the hash of the rows that wrote a issue, stamped last, so an interrupted write is redone by the next fold (D101) |
@@ -139,7 +141,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_prs.cypher`](../backend/queries/upsert_prs.cypher) | pull request artifacts, with current_status from their decision chain |
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (85)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (88)
 
 | Query | Purpose |
 |---|---|
@@ -156,12 +158,13 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`area_owners.cypher`](../backend/queries/area_owners.cypher) | the listed owners of the given areas: who the area's issues are assigned to, with each issue's status and its report message (where the assignment is asked, to cite), to compare with who actually knows it (10.7) |
 | [`area_prs.cypher`](../backend/queries/area_prs.cypher) | the internal pull requests with author, time, the PR each one reverts and the issue it fixes: the input for work-item areas (10.0, D059) |
 | [`area_reviews.cypher`](../backend/queries/area_reviews.cypher) | every review of an internal pull request: who, which PR, when (10.1 COLLAB, 10.2 discussion signal) |
-| [`artifact_access.cypher`](../backend/queries/artifact_access.cypher) | what the permission policy needs per artifact: its kind and its channel, for viewer-scoped answers (W7) |
+| [`artifact_access.cypher`](../backend/queries/artifact_access.cypher) | what the permission policy needs per artifact: its kind, its channel and that channel's visibility, for viewer-scoped answers (W7, D109) |
 | [`artifact_people.cypher`](../backend/queries/artifact_people.cypher) | author and participant ids of given artifacts (metadata for search results) |
 | [`artifact_people_detail.cypher`](../backend/queries/artifact_people_detail.cypher) | the people around one artifact: authors, attendees, speakers, reviewers (with review state) and people it mentions |
 | [`artifact_texts.cypher`](../backend/queries/artifact_texts.cypher) | every quotable text of the given artifacts (title, url, text, chunk spans), for the citation validator |
 | [`artifacts_present.cypher`](../backend/queries/artifacts_present.cypher) | which of these ids are artifacts in the graph: the live path's "already ingested?" and the demo's injected flags (D101) |
 | [`channel_context.cypher`](../backend/queries/channel_context.cypher) | the messages before a new one in its channel, newest first: the conversation the live extraction reads it in, as the batch extraction does (D102) |
+| [`channel_members.cypher`](../backend/queries/channel_members.cypher) | the people a channel lists as members (org mode), so a membership sync changes only what changed (H1, D109) |
 | [`collab_meetings.cypher`](../backend/queries/collab_meetings.cypher) | who attended each meeting: the co-attendance part of COLLAB (10.1) |
 | [`collab_messages.cypher`](../backend/queries/collab_messages.cypher) | who wrote each (non-system) Slack message and in which channel: the conversation part of COLLAB (10.1) |
 | [`collab_paths.cypher`](../backend/queries/collab_paths.cypher) | the shortest COLLAB path (at most 4 hops) between each given pair of people: how a listed owner reaches the real expert, or how close a backup already is to a key person (10.5, D065) |
@@ -225,7 +228,9 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`sentinel_changes.cypher`](../backend/queries/sentinel_changes.cypher) | the decision changes the Sentinel judges (11.1): every extracted supersession (old and new value, subject, evidence quote, decider) and every claim that CONFLICTS_WITH an active decision (§9.4 rule 5) |
 | [`states_at.cypher`](../backend/queries/states_at.cypher) | the decisions in force at one moment for a product's issues and own PRs (valid_from_ms <= t < valid_to_ms, or still open): the as-of view of list_issues, list_prs and decision_lineage (R2) |
 | [`subject_product.cypher`](../backend/queries/subject_product.cypher) | the product an issue or pull request belongs to, for the API's lineage endpoint |
+| [`unlink_channel_members.cypher`](../backend/queries/unlink_channel_members.cypher) | a person left a private channel (or was removed): they stop seeing it (H1, D109) |
 | [`viewer_channels.cypher`](../backend/queries/viewer_channels.cypher) | the channels a person belongs to (they posted there), for viewer-scoped answers (W7) |
 | [`viewer_meetings.cypher`](../backend/queries/viewer_meetings.cypher) | the meetings a person attended or spoke in, for viewer-scoped answers (W7) |
+| [`viewer_member_channels.cypher`](../backend/queries/viewer_member_channels.cypher) | the channels a person is a member of (org mode: from Slack or connectors.yaml), for viewer-scoped answers (H1, D109) |
 | [`withdraw_alerts.cypher`](../backend/queries/withdraw_alerts.cypher) | open alerts whose change is gone after a rebuild (e.g. a corrected extraction) become 'withdrawn'; never deleted, and approved or dismissed ones keep their status |
 <!-- /queries -->
