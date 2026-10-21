@@ -100,7 +100,7 @@ class GitHubConnector:
         a = Artifact(
             id=self.pr_id(pr["number"]),
             kind="pr",
-            product_hint=self.maps.product,
+            product_hint=self.maps.product_of("github"),
             ts_ms=created,
             ts_iso=pr["created_at"].replace("+00:00", "Z"),
             author_eid=author,

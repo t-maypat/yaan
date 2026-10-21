@@ -28,6 +28,7 @@ from typing import Any
 
 import httpx
 
+from app import org
 from app.connectors import base, render
 from app.connectors.base import ConnectorError, Item, Maps
 from app.connectors.experimental import HttpConnector, to_ms
@@ -68,7 +69,7 @@ class DiscordConnector(HttpConnector):
                 headers={"Authorization": f"Bot {bot_token}", "User-Agent": "Lore (scaffold, 0.1)"},
             ),
         )
-        self.channel = (self.maps.source("discord").get("channels") or {}).get(channel_id)
+        self.channel = org.channel_map(self.maps.source("discord")).get(channel_id)
 
     def msg_ref(self, artifact_id: str) -> tuple[str, str] | None:
         """(discord channel id, message id) of a message this connector brought in."""

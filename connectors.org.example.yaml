@@ -2,9 +2,11 @@
 #   cp connectors.org.example.yaml connectors.yaml
 # then run `yaan init`, which creates the product and the channels below in your graph.
 #
-# Every Yaan channel name starts with what kind of talk it holds, because that decides what Yaan
-# reads from it: bug-… (issues reported, fixed, reopened), develop-… (pull requests and
-# development decisions), planning-… (documents and their review; not read for events).
+# A Yaan channel's kind decides what Yaan reads from it: bug (issues reported, fixed, reopened),
+# develop (pull requests and development decisions), planning (documents and their review; not
+# read for events) or mixed (bugs and pull requests both discussed: everything is read). Name the
+# Yaan channel with the kind as its prefix (bug-support), or give it: {channel: backend, kind: mixed}.
+# A tool, or one mapped channel, may belong to another product than the one below: `product:`.
 #
 # Who may read what: Slack says which of its channels are private and who is in them (a private
 # Slack channel needs a Yaan channel of its own). Every other source declares its readers:
@@ -19,6 +21,8 @@ slack:
   channels:                         # Slack channel name -> the Yaan channel it feeds
     support: bug-support
     backend: develop-backend
+    # eng: {channel: eng, kind: mixed}             # bugs and PR talk in one channel
+    # mobile: {channel: bug-mobile, product: Acme Mobile}
   alerts_channel: yaan-alerts       # alert cards with Approve / Dismiss, and notifications
   people: {}                        # optional: Slack member id -> person id (people.yaml is easier)
 

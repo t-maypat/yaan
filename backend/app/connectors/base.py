@@ -66,6 +66,13 @@ class Maps:
     def source(self, name: str) -> dict[str, Any]:
         return self.sources.get(name) or {}
 
+    def product_of(self, source: str, channel: str | None = None) -> str:
+        """The product an item belongs to (D116): its channel's, else its source's, else the
+        top-level `product`."""
+        if channel and (p := org.channel_products(self.sources).get(channel)):
+            return p
+        return str(self.source(source).get("product") or self.product)
+
     def person(
         self,
         source: str,

@@ -114,7 +114,7 @@ class GitLabConnector(HttpConnector):
         a = Artifact(
             id=self.pr_id(mr["iid"]),
             kind="pr",
-            product_hint=self.maps.product,
+            product_hint=self.maps.product_of("gitlab"),
             ts_ms=created,
             ts_iso=mr["created_at"].replace("+00:00", "Z"),
             author_eid=author,

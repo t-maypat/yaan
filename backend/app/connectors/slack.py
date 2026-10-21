@@ -22,7 +22,7 @@ from typing import Any
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from app import db
+from app import db, org
 from app.connectors import base, render
 from app.connectors.base import ConnectorError, Item, Maps
 from app.ingest.normalize import Artifact
@@ -80,7 +80,7 @@ class SlackConnector:
             self._channels = None  # re-read: a channel may have turned private, or been added
             self.sync_access()
         items = []
-        for slack_name, herb_id in (self.conf.get("channels") or {}).items():
+        for slack_name, herb_id in org.channel_map(self.conf).items():
             cid = self.channel_ids().get(slack_name)
             if not cid:
                 raise ConnectorError(f"the bot can't see #{slack_name}: /invite @lore there")
@@ -111,7 +111,7 @@ class SlackConnector:
         from app import org
 
         by_target: dict[str, list[str]] = {}
-        for slack_name, target in (self.conf.get("channels") or {}).items():
+        for slack_name, target in org.channel_map(self.conf).items():
             by_target.setdefault(target, []).append(slack_name)
         ids = self.channel_ids()
         if unseen := sorted(n for names in by_target.values() for n in names if n not in ids):
@@ -184,7 +184,7 @@ class SlackConnector:
         a = Artifact(
             id=base.synthetic_id("msg", "slack", f"{cid}-{m['ts']}"),
             kind="message",
-            product_hint=self.maps.product,
+            product_hint=self.maps.product_of("slack", herb_id),
             channel_id=herb_id,
             ts_ms=created,
             ts_iso=iso(created),
@@ -288,7 +288,7 @@ class SlackConnector:
     def yaan_channel(self, slack_channel_id: str) -> str | None:
         """The Yaan channel a Slack channel feeds, by its Slack id (None: not mapped)."""
         names = {v: k for k, v in self.channel_ids().items()}
-        return (self.conf.get("channels") or {}).get(names.get(slack_channel_id, ""))
+        return org.channel_map(self.conf).get(names.get(slack_channel_id, ""))
 
     def alerts_channel(self) -> str:
         name = self.conf.get("alerts_channel") or "lore-alerts"
@@ -386,9 +386,8 @@ class SlackBot:
             # what the asker alone may (D109); a DM to the bot answers from all of that.
             channel = self.connector.yaan_channel(event.get("channel") or "")
             scope = access.Access.audience(channel, self.graph)
-            out = loop.answer(
-                question, self.connector.maps.product, graph=self.graph, audience=scope
-            )
+            product = self.connector.maps.product_of("slack", channel)
+            out = loop.answer(question, product, graph=self.graph, audience=scope)
         except Exception as e:  # shown in the thread, never a made-up answer
             say(text=f"I couldn't answer: {type(e).__name__}: {e}", thread_ts=thread)
             return

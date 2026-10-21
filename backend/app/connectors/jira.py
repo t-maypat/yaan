@@ -177,7 +177,7 @@ class JiraConnector:
         return Artifact(
             id=self.msg_id(key, part),
             kind="message",
-            product_hint=self.maps.product,
+            product_hint=self.maps.product_of("jira", self.channel),
             channel_id=self.channel,
             ts_ms=stamp,
             ts_iso=iso(stamp),

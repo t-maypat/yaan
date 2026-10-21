@@ -151,12 +151,27 @@ def test_the_people_an_artifact_involves(org_mode):
 
 
 # --- channels --------------------------------------------------------------------------------
-def test_declared_channels_need_a_kind_prefix():
-    assert org.declared_channels(MAPS.sources) == ["bug-support", "bug-tickets", "planning-specs"]
+def test_declared_channels_need_a_kind_prefix_or_a_declared_kind():
+    assert org.declared_channels(MAPS.sources) == {
+        "bug-support": None,
+        "bug-tickets": None,
+        "planning-specs": None,
+    }
     assert org.channel_row("develop-backend", "Acme")["stage"] == "dev"
     for bad in ("support", "bug", "eng-bugs"):
         with pytest.raises(org.OrgError, match="must start with bug-, develop- or planning-"):
             org.channel_row(bad, "Acme")
+    # D116: a channel named freely says what it holds; `mixed` is bugs and PR talk together
+    sources = {
+        "slack": {"channels": {"backend": {"channel": "backend", "kind": "mixed"}}},
+        "jira": {"channel": "tickets", "kind": "bug", "visibility": "everyone"},
+    }
+    assert org.declared_channels(sources) == {"backend": "mixed", "tickets": "bug"}
+    assert org.channel_map(sources["slack"]) == {"backend": "backend"}
+    row = org.channel_row("backend", "Acme", "mixed")
+    assert (row["stage"], row["kind"]) == ("mixed", "mixed")
+    with pytest.raises(org.OrgError, match="use bug, develop, planning or mixed"):
+        org.channel_row("backend", "Acme", "chatter")
 
 
 # --- guards: nothing from HERB reaches an org graph ------------------------------------------
@@ -632,3 +647,83 @@ def test_the_live_linker_finds_what_is_loaded_in_the_graph(org_mode, empty_graph
     ).rows[0]
     assert edges == {"shared": first.id, "reverted": first.id}
     assert not (live.live_dir(empty_graph) / "artifacts.jsonl").exists()  # no log any more
+
+
+@pytest.mark.db
+def test_a_mixed_channel_is_read_for_events_and_a_planning_one_is_not(org_mode, empty_graph):
+    """D116: the kind a channel declares, not its name, decides what extraction reads."""
+    sources = {
+        "slack": {
+            "channels": {
+                "backend": {"channel": "backend", "kind": "mixed"},
+                "roadmap": {"channel": "roadmap", "kind": "planning"},
+            }
+        }
+    }
+    org.prepare(empty_graph, "Acme", sources)
+    priya = org.eid_for("priya@acme.example")
+
+    def message(channel):
+        return Artifact(
+            id=base.synthetic_id("msg", "slack", f"{channel}-1"),
+            kind="message",
+            product_hint="Acme",
+            channel_id=channel,
+            ts_ms=1804586400000,
+            ts_iso="2027-03-09T10:00:00Z",
+            author_eid=priya,
+            text="The CSV export bug is fixed; PR 12 can merge.",
+            raw_ref="x",
+            meta={"channel_name": channel},
+        )
+
+    mixed = live.estimate_extraction([message("backend")], empty_graph)
+    planning = live.estimate_extraction([message("roadmap")], empty_graph)
+    assert (mixed["need_the_model"], planning["need_the_model"]) == (1, 0)
+
+
+def test_a_source_or_a_channel_may_name_its_own_product():
+    """D116: one org graph, several products. A channel's own `product` wins, then its
+    source's, then the top-level one."""
+    maps = Maps(
+        product="Acme",
+        default_person=None,
+        sources={
+            "slack": {
+                "channels": {
+                    "support": "bug-support",
+                    "mobile": {"channel": "bug-mobile", "product": "Acme Mobile"},
+                }
+            },
+            "github": {"product": "Acme Mobile", "visibility": "everyone"},
+            "jira": {"channel": "bug-tickets", "visibility": "everyone"},
+        },
+    )
+    assert maps.product_of("slack", "bug-support") == "Acme"
+    assert maps.product_of("slack", "bug-mobile") == "Acme Mobile"
+    assert maps.product_of("github") == "Acme Mobile"
+    assert maps.product_of("jira", "bug-tickets") == "Acme"
+    assert org.declared_products(maps.product, maps.sources) == ["Acme", "Acme Mobile"]
+
+
+@pytest.mark.db
+def test_prepare_makes_every_product_and_puts_each_channel_in_its_own(org_mode, empty_graph):
+    sources = {
+        "slack": {
+            "channels": {
+                "support": "bug-support",
+                "mobile": {"channel": "bug-mobile", "product": "Acme Mobile"},
+            }
+        }
+    }
+    made = org.prepare(empty_graph, "Acme", sources)
+    assert made["products"] == 2
+    rows = db.run_text(
+        "MATCH (c:Channel) RETURN c.id AS id, c.product_id AS product ORDER BY id LIMIT 10",
+        label="channels",
+        graph=empty_graph,
+    ).rows
+    assert rows == [
+        {"id": "bug-mobile", "product": "Acme Mobile"},
+        {"id": "bug-support", "product": "Acme"},
+    ]

@@ -27,7 +27,7 @@ from app.config import get_settings
 from app.ingest.normalize import Artifact
 
 UNIT_CHARS = 12_000  # ~4k tokens of conversation (§9.3 S5)
-CHANNEL_KINDS = ("bug", "develop")  # support and develop channels (R1-6)
+CHANNEL_KINDS = ("bug", "develop", "mixed")  # support, develop, and both at once (R1-6, D116)
 PROMPT_VERSION = 1  # part of the cache key through the system prompt text
 
 EventType = Literal[
@@ -147,7 +147,9 @@ class Unit:
 
 
 def channel_kind(a: Artifact) -> str:
-    return str(a.meta.get("channel_name", "")).split("-", 1)[0]
+    """The kind its channel declares (the live path copies it from the graph, D116), else the
+    channel name's prefix (HERB's convention: bug-…, develop-…, planning-…)."""
+    return a.meta.get("channel_kind") or str(a.meta.get("channel_name", "")).split("-", 1)[0]
 
 
 def conversation_key(a: Artifact) -> str:

@@ -214,7 +214,8 @@ def _prepare(
         raise LiveError(f"unknown author {a.author_eid!r}")
     if present_ids(graph, [a.id]) and not replace:
         raise LiveError(f"{a.id!r} is already in {graph!r}: run `lore demo reset` to replay it")
-    if a.channel_id and not db.run("get_channel", {"id": a.channel_id}, graph=graph).rows:
+    a, found = with_channel_kind(a, graph)
+    if a.channel_id and not found:
         raise LiveError(f"channel {a.channel_id!r} is not in {graph!r}: run `lore demo reset`")
     if a.kind == "message" and not a.channel_id:
         raise LiveError("a live message needs its channel")
@@ -368,6 +369,17 @@ def link_context(a: Artifact, graph: str) -> tuple[list[Artifact], dict[str, lis
     return known, aliases
 
 
+def with_channel_kind(a: Artifact, graph: str) -> tuple[Artifact, bool]:
+    """`a` carrying its channel's declared kind (what extraction reads from it, D116), and
+    whether the channel is in the graph at all."""
+    if not a.channel_id:
+        return a, False
+    rows = db.run("get_channel", {"id": a.channel_id}, graph=graph).rows
+    if rows and rows[0]["kind"]:
+        a = a.model_copy(update={"meta": {**a.meta, "channel_kind": rows[0]["kind"]}})
+    return a, bool(rows)
+
+
 EXPECTED_OUTPUT_TOKENS = 130  # an extraction's typical answer (D102: 109-137 per unit)
 
 
@@ -380,7 +392,7 @@ def estimate_extraction(items: list[Artifact], graph: str | None = None) -> dict
     need = worst = expected = 0.0
     chars = 0
     for n, a in enumerate(items):
-        for unit in live_units(a, graph, items[:n]):
+        for unit in live_units(with_channel_kind(a, graph)[0], graph, items[:n]):
             prompt = len(extract.SYSTEM) + len(unit.render())
             need += 1
             chars += prompt

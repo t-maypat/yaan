@@ -162,11 +162,13 @@ def channel_rows(product: str, artifacts: list[Artifact]) -> tuple[list[dict], l
         original = name
         if a.system and CHANNEL_START in a.text:  # the channel's first message names it
             original = a.text.split(CHANNEL_START, 1)[1].removesuffix(" channel.")
+        prefix = name.split("-", 1)[0]
         channels[a.channel_id] = {
             "id": a.channel_id,
             "name": name,
             "original_name": original,
-            "stage": STAGES.get(name.split("-", 1)[0]),
+            "stage": STAGES.get(prefix),
+            "kind": prefix if prefix in STAGES else None,
             "product_id": product,
         }
     codenames = set()

@@ -71,7 +71,7 @@ class HttpConnector:
         return Artifact(
             id=base.synthetic_id("msg", self.name, key),
             kind="message",
-            product_hint=self.maps.product,
+            product_hint=self.maps.product_of(self.name, channel or self.channel),
             channel_id=channel or self.channel,
             ts_ms=stamp,
             ts_iso=to_iso(stamp),
@@ -106,7 +106,7 @@ class HttpConnector:
         doc = Artifact(
             id=doc_id,
             kind="doc",
-            product_hint=self.maps.product,
+            product_hint=self.maps.product_of(self.name, self.channel),
             ts_ms=created,
             ts_iso=to_iso(created),
             author_eid=author,

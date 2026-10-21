@@ -21,6 +21,7 @@ Hardening after the post-event review (docs/hardening-plan.md).
 - The containers no longer run as root. On Linux, `./data` must be writable by uid 10001 (`sudo chown -R 10001:10001 data`), or set `LORE_UID` and `LORE_GID` in `.env` to its owner. The container says so at start if it isn't. Docker Desktop needs nothing.
 
 ### Added
+- Org mode: a mapped channel can declare its kind instead of carrying it as a name prefix, including `mixed` for channels where bugs and pull requests are both discussed; a tool or a channel can name its own `product`, so one graph holds several.
 - A connector's first sync reads its last 30 days (`backfill_days` per tool) instead of its whole history, and `yaan connectors backfill --days N` prices a longer reach before spending anything.
 - The live path no longer keeps a log of every live artifact (`data/live/<graph>/artifacts.jsonl`, which only grew): what a new item links to is looked up in the graph.
 - Live ingestion in batches: a connector round's items go through one fold and one Sentinel pass. On a copy of the demo graph with twice its events, a message costs about 80 ms in a batch of ten, down from 7 s (`scripts/bench_live.py` measures it).

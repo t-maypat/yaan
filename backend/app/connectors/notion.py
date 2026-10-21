@@ -127,7 +127,7 @@ class NotionConnector:
         doc = Artifact(
             id=self.doc_id(block["id"]),
             kind="doc",
-            product_hint=self.maps.product,
+            product_hint=self.maps.product_of("notion", self.channel),
             ts_ms=created,
             ts_iso=iso(created),
             author_eid=author,
@@ -150,7 +150,7 @@ class NotionConnector:
             return Artifact(
                 id=base.synthetic_id("msg", "notion", f"{block['id'].replace('-', '')}-{part}"),
                 kind="message",
-                product_hint=self.maps.product,
+                product_hint=self.maps.product_of("notion", self.channel),
                 channel_id=self.channel,
                 ts_ms=stamp,
                 ts_iso=iso(stamp),

@@ -10,9 +10,10 @@
 - the product and the channels `connectors.yaml` declares are created in the graph by
   `prepare` (`lore init`, and every connector sync).
 
-Channels keep HERB's naming convention, because extraction and stages read it: a channel's
-name starts with `bug-` (support), `develop-` (dev) or `planning-` (planning). Extraction reads
-`bug-` and `develop-` channels.
+A channel's kind says what Yaan reads from it: `bug` (support), `develop` (dev), `planning`, or
+`mixed` (a channel where bugs and pull requests are both discussed: every event type is read).
+By default the name's prefix says (`bug-support`, HERB's convention); a mapping may instead
+name its channel freely and give the kind: `backend: {channel: backend, kind: mixed}` (D116).
 
 Nothing here runs in demo mode, so the demo and the evaluation behave exactly as before.
 """
@@ -34,6 +35,7 @@ from app.config import REPO_ROOT, get_settings
 
 PEOPLE_FILE = REPO_ROOT / "people.yaml"
 STAGES = {"planning": "planning", "develop": "dev", "bug": "support"}  # = structural.STAGES
+KINDS = {**STAGES, "mixed": "mixed"}  # a declared kind -> the channel's stage (D116)
 EID = re.compile(r"^eid_[0-9a-f]{8}$")  # the linker's mention pattern (@eid_…) needs this shape
 SOURCE_NAMES = {
     "slack": "Slack",
@@ -205,32 +207,74 @@ def metadata(graph: str):
 
 
 # --- products and channels from connectors.yaml ------------------------------------------------
-def declared_channels(sources: dict[str, dict[str, Any]]) -> list[str]:
-    """Every channel connectors.yaml names: Slack's mapped channels, Discord's, and each
-    source's own `channel` (Jira, Notion, Linear, Confluence, Drive, Gmail)."""
-    out: list[str] = []
+def channel_map(conf: dict[str, Any]) -> dict[str, str]:
+    """A tool's mapped channels as {its channel: Yaan channel}. A mapping is a Yaan channel
+    name, or `{channel: <name>, kind: <kind>}` (D116)."""
+    return {
+        str(k): str(v["channel"] if isinstance(v, dict) else v)
+        for k, v in (conf.get("channels") or {}).items()
+    }
+
+
+def channel_products(sources: dict[str, dict[str, Any]]) -> dict[str, str]:
+    """Yaan channel -> the product it belongs to, where connectors.yaml says: a mapping's own
+    `product`, else its source's. Unnamed channels belong to the top-level `product` (D116)."""
+    out: dict[str, str] = {}
     for name, conf in sources.items():
-        if name == "slack":
-            out += list((conf.get("channels") or {}).values())
-        elif name == "discord":
-            out += list((conf.get("channels") or {}).values())
+        if name in ("slack", "discord"):
+            for v in (conf.get("channels") or {}).values():
+                target = str(v["channel"] if isinstance(v, dict) else v)
+                product = (v.get("product") if isinstance(v, dict) else None) or conf.get("product")
+                if product:
+                    out[target] = str(product)
+        elif conf.get("channel") and conf.get("product"):
+            out[str(conf["channel"])] = str(conf["product"])
+    return out
+
+
+def declared_products(product: str, sources: dict[str, dict[str, Any]]) -> list[str]:
+    """Every product connectors.yaml names: the default, then any a source or channel names."""
+    named = [*channel_products(sources).values(), *(c.get("product") for c in sources.values())]
+    return list(dict.fromkeys([product, *(str(p) for p in named if p)]))
+
+
+def declared_channels(sources: dict[str, dict[str, Any]]) -> dict[str, str | None]:
+    """Every channel connectors.yaml names, with its declared kind (None: its prefix says):
+    Slack's and Discord's mapped channels, and each other source's own `channel`."""
+    out: dict[str, str | None] = {}
+    for name, conf in sources.items():
+        if name in ("slack", "discord"):
+            for v in (conf.get("channels") or {}).values():
+                target = str(v["channel"] if isinstance(v, dict) else v)
+                out[target] = out.get(target) or (v.get("kind") if isinstance(v, dict) else None)
         elif conf.get("channel"):
-            out.append(conf["channel"])
-    return list(dict.fromkeys(str(c) for c in out))
+            out[str(conf["channel"])] = out.get(str(conf["channel"])) or conf.get("kind")
+    return out
 
 
-def channel_row(channel: str, product: str) -> dict[str, Any]:
-    prefix = channel.split("-", 1)[0]
-    if prefix not in STAGES or channel == prefix:
-        raise OrgError(
-            f"connectors.yaml: channel {channel!r} must start with bug-, develop- or planning- "
-            "(e.g. bug-support, develop-backend): the prefix says what Yaan reads from it"
-        )
+def channel_row(channel: str, product: str, kind: str | None = None) -> dict[str, Any]:
+    if kind is not None:
+        if kind not in KINDS:
+            raise OrgError(
+                f"connectors.yaml: channel {channel!r} has kind {kind!r}: use bug, develop, "
+                "planning or mixed (bugs and pull requests both discussed there)"
+            )
+        stage = KINDS[kind]
+    else:
+        kind = channel.split("-", 1)[0]
+        if kind not in STAGES or channel == kind:
+            raise OrgError(
+                f"connectors.yaml: channel {channel!r} must start with bug-, develop- or "
+                "planning- (e.g. bug-support), or say what it holds: "
+                f"`{{channel: {channel}, kind: bug | develop | planning | mixed}}`"
+            )
+        stage = STAGES[kind]
     return {
         "id": channel,
         "name": channel,
         "original_name": channel,
-        "stage": STAGES[prefix],
+        "stage": stage,
+        "kind": kind,
         "product_id": product,
     }
 
@@ -294,7 +338,7 @@ def channel_sources(sources: dict[str, dict[str, Any]]) -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}
     for name, conf in sources.items():
         if name in ("slack", "discord"):
-            targets = list((conf.get("channels") or {}).values())
+            targets = list(channel_map(conf).values())
         else:
             targets = [conf["channel"]] if conf.get("channel") else []
         for t in targets:
@@ -364,7 +408,10 @@ def set_channel_access(
 def check(product: str, sources: dict[str, dict[str, Any]]) -> tuple[list[dict], list[dict]]:
     """The channel and people rows connectors.yaml and people.yaml give, or OrgError naming
     what to fix. Touches no graph."""
-    channels = [channel_row(c, product) for c in declared_channels(sources)]
+    belongs = channel_products(sources)
+    channels = [
+        channel_row(c, belongs.get(c, product), k) for c, k in declared_channels(sources).items()
+    ]
     people = [{k: v for k, v in p.items() if k != "accounts"} for p in roster().values()]
     accounts()  # an account listed twice is an error too
     channel_access(sources)  # every source's audience is declared, and no channel is fed twice
@@ -375,9 +422,10 @@ def prepare(graph: str, product: str, sources: dict[str, dict[str, Any]]) -> dic
     """Create (or refresh) the product, the declared channels, their declared access and the
     people.yaml roster in `graph`. Idempotent: every row is a MERGE on its id."""
     channels, people = check(product, sources)
+    products = declared_products(product, sources)
     db.run(
         "upsert_products",
-        {"rows": [{"id": product, "name": product, "aliases": []}]},
+        {"rows": [{"id": p, "name": p, "aliases": []} for p in products]},
         graph=graph,
         readonly=False,
     )
@@ -387,7 +435,7 @@ def prepare(graph: str, product: str, sources: dict[str, dict[str, Any]]) -> dic
         db.run("upsert_people", {"rows": people}, graph=graph, readonly=False)
     access_rows, members = channel_access(sources)
     set_channel_access(graph, access_rows, members)
-    return {"products": 1, "channels": len(channels), "people": len(people)}
+    return {"products": len(products), "channels": len(channels), "people": len(people)}
 
 
 def people_in(artifact) -> list[str]:

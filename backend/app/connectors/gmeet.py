@@ -117,7 +117,7 @@ class GoogleMeetConnector(HttpConnector):
         a = Artifact(
             id=base.synthetic_id("mtg", "gmeet", key),
             kind="meeting",
-            product_hint=self.maps.product,
+            product_hint=self.maps.product_of(self.name),
             ts_ms=started,
             ts_iso=to_iso(started),
             participants=people,
