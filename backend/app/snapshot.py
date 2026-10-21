@@ -107,7 +107,8 @@ def pin(path: Path) -> str:
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     sums = path.with_name("SHA256SUMS")
     lines = [ln for ln in _lines(sums) if not ln.endswith(f"  {path.name}")]
-    sums.write_text("\n".join([*lines, f"{digest}  {path.name}"]) + "\n", encoding="utf-8")
+    body = "\n".join([*lines, f"{digest}  {path.name}"]) + "\n"
+    sums.write_text(body, encoding="utf-8", newline="\n")  # LF: `sha256sum -c` reads it anywhere
     return digest
 
 
