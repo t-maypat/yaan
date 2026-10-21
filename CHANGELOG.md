@@ -37,6 +37,7 @@ Hardening after the post-event review (docs/hardening-plan.md).
 - SECURITY.md: how to report a vulnerability privately.
 
 ### Fixed
+- An answer could state a number none of its sources held (a count, a day). The citation check now drops such a sentence.
 - Rebuilding expertise, precedents and company-use emptied them first, so an answer during a rebuild could find none. They are now replaced in place.
 - An approval interrupted midway left an approved alert with a half-written decision. Responses are now claimed with all their writes and finished on restart; drafts are sent only once their response is complete.
 - An approved follow-up could be posted twice after a timeout or a crash, or marked sent when it reached one tool but not another. Every post now carries a marker and is looked for before posting again.

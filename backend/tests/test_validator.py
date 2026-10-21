@@ -258,3 +258,32 @@ def test_reports_listed_in_an_issue_row_share_its_companies():
     loop.row_facts(out, facts)
     assert {"CUST-0067", "NextGenTech", "iss:W:1"} <= facts["msg:5"]
     assert "eid_cccccccc" in facts["msg:5"]  # its own record, from collect
+
+
+def test_a_number_must_come_from_a_quote_or_a_cited_record():
+    """Rule 7 (D119): counts, days and years a sentence states come from what it cites."""
+    quoted = gcheck("The deploy to staging went fine on Tuesday, 3 times [1].",
+                    [(1, "msg:1", "The deploy to staging went fine on Tuesday")])
+    assert any("the number 3 is in none" in p for p in quoted.problems)
+    texts = {**GTEXTS, "msg:3": ["Shipped 12 fixes."]}
+    facts = {**GFACTS, "msg:3": {"2027-02-24T10:00:00Z", "41"}}
+
+    def check(markdown, citations):
+        return validator.check(answer(markdown, citations), set(texts), texts, facts, GRELATED)
+
+    assert check("On 24 February 2027 the team shipped 12 fixes [1].",
+                 [(1, "msg:3", "Shipped 12 fixes.")]).ok  # the record's date backs the day
+    assert check("The team shipped 12 fixes across 41 reviews [1].",
+                 [(1, "msg:3", "Shipped 12 fixes.")]).ok  # a count the tool row holds
+    made_up = check("The team shipped 12 fixes in 9 days [1].", [(1, "msg:3", "Shipped 12 fixes.")])
+    assert any("the number 9 is in none" in p for p in made_up.problems)
+    # identifiers aren't numbers here: PR #7's 7 is checked as an id (rule 6)
+    assert gcheck("PR #7 adds the GraphQL schema [1].", [(1, "pr:7", "Add GraphQL schema")]).ok
+
+
+def test_a_not_sentence_is_not_cut_for_lacking_a_not_quote():
+    """D119: a negation check was measured on the dev run and rejected (all 25 sentences it cut
+    were right). "Approved but not merged" stands on a quote that says approved."""
+    report = gcheck("Hannah Johnson said it does not require a fix [1].",
+                    [(1, "msg:2", "this behavior is expected")])
+    assert report.ok, report.problems

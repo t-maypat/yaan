@@ -43,6 +43,11 @@ IDENT = re.compile(
     r"https?://[^\s)\]>\"'`|]+|\beid_[0-9a-f]{8}\b|\bCUST-\d{3,}\b|\bPR\s*#?\s*\d+\b|(?<![\w/&])#\d+\b",
     re.I,
 )
+# 7. every number a sentence states (outside its identifiers) is in a quote or in the cited
+#    records: a count, a date's day or year, a version, not one the model added (H5, D119).
+#    A negation check (a "not" sentence needs a quote that negates) was measured on the dev
+#    run and rejected: all 25 sentences it cut were correct ("approved but not merged").
+NUMBER = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)*(?![\w])")
 STOP = frozenset(
     """the and for with that this from have has had was were are been being into onto over
     under about than then they them their there what when where which while who whom whose
@@ -211,7 +216,7 @@ def unsupported(
     facts: dict[str, set[str]],
     related: dict[str, set[str]],
 ) -> str | None:
-    """Why the unit's valid citations don't back it (rules 5 and 6), or None.
+    """Why the unit's valid citations don't back it (rules 5 to 7), or None.
 
     Rule 5 is lexical: the sentence must share a content word or identifier with its quotes
     or with the cited artifacts' records (author, title, people), so a correct paraphrase
@@ -229,7 +234,22 @@ def unsupported(
     for ident in sorted(idents(claim)):
         if not any(in_record(ident, texts.get(a, []), facts.get(a, set())) for a in near):
             return f"{ident} is in none of the artifacts this sentence cites"
+    stated = numbers(IDENT.sub(" ", claim))
+    if stated:
+        known = numbers(" ".join([quotes, record, *(t for a in near for t in texts.get(a, []))]))
+        if missing := sorted(stated - known):
+            return f"the number {missing[0]} is in none of the quotes or records this cites"
     return None
+
+
+def numbers(text: str) -> set[str]:
+    """The numbers in a text, as digit runs ("1,234" and "2027-02-24" give 1234 / 2027, 02,
+    24), leading zeros dropped, so a record's date backs the day a sentence names."""
+    out = set()
+    for raw in NUMBER.findall(text.replace("-", " ").replace("T", " ").replace(":", " ")):
+        n = raw.replace(",", "")
+        out.add(n.lstrip("0") or "0")
+    return out
 
 
 def autocite(
