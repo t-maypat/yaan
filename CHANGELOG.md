@@ -21,6 +21,7 @@ Hardening after the post-event review (docs/hardening-plan.md).
 - The containers no longer run as root. On Linux, `./data` must be writable by uid 10001 (`sudo chown -R 10001:10001 data`), or set `LORE_UID` and `LORE_GID` in `.env` to its owner. The container says so at start if it isn't. Docker Desktop needs nothing.
 
 ### Added
+- `yaan export` writes a graph to plain JSON lines and `yaan import` loads one into a new graph: the graph leaves Yaan in a format any tool reads.
 - One install reads several GitHub repositories, Jira projects or Notion pages (`repos:`, `projects:`, `pages:` in `connectors.yaml`), each with its own cursor.
 - Org mode answers with a prompt that leaves out the demo dataset's conventions; the demo and the evaluation keep theirs, unchanged.
 - `people.yaml` can map a team's own titles to authority (`authority_rules`) and hold people with no known role to their own work (`unknown_speakers: conflict`); Graph health counts the status changes applied without a known authority.

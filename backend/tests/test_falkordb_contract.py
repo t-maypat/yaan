@@ -442,3 +442,13 @@ def test_a21_two_computed_grouping_keys_give_every_aggregate_the_first_ones_valu
     assert [r[2:] for r in read(empty_graph, broken)] == [[2, 2], [1, 1]]  # s should be 9, 2
     assert [r[2:] for r in read(empty_graph, fixed)] == [[2, 9], [1, 2]]
     assert [r[1:] for r in read(empty_graph, one_key)] == [[2, 9], [1, 2]]
+
+
+def test_a22_a_node_id_filter_below_zero_matches_no_node(empty_graph):
+    """Found 21 Oct (D120). On 6.0.1, `WHERE id(n) > -1` (a literal or a parameter) returns no
+    node at all, though every node id is >= 0; on relationships the same filter works. Page
+    nodes with `id(n) >= $from`, starting at 0."""
+    writer(empty_graph).query("CREATE (:A {i: 1})-[:R]->(:A {i: 2})")
+    assert read(empty_graph, "MATCH (n) WHERE id(n) > -1 RETURN id(n) LIMIT 5") == []
+    assert len(read(empty_graph, "MATCH (n) WHERE id(n) >= 0 RETURN id(n) LIMIT 5")) == 2
+    assert len(read(empty_graph, "MATCH ()-[e]->() WHERE id(e) > -1 RETURN id(e) LIMIT 5")) == 1

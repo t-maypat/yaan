@@ -545,6 +545,39 @@ def cmd_bench_experts(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export(args: argparse.Namespace) -> int:
+    """A graph as plain JSONL (D120): portable, unlike a snapshot's DUMP payload."""
+    import json
+    from pathlib import Path
+
+    from app import export
+    from app.config import get_settings
+
+    graph = args.graph or get_settings().api_graph()
+    try:
+        out = export.export(graph, Path(args.out), embeddings=args.with_embeddings)
+    except (export.ExportError, OSError) as e:
+        print(f"lore export: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(out, indent=1))
+    return 0
+
+
+def cmd_import(args: argparse.Namespace) -> int:
+    import json
+    from pathlib import Path
+
+    from app import export
+
+    try:
+        out = export.load(Path(args.path), args.graph)
+    except (export.ExportError, OSError) as e:
+        print(f"lore import: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(out, indent=1))
+    return 0
+
+
 def cmd_snapshot(args: argparse.Namespace) -> int:
     import json
 
@@ -701,6 +734,8 @@ COMMANDS = {
     "mcp": ("serve Yaan's read-only tools (and ask) over MCP on stdio (17.1)", cmd_mcp),
     "snapshot": ("save the graph + live-path data to snapshots/ (no LLM; 15.2)", cmd_snapshot),
     "seed": ("restore a snapshot (file or URL) and the demo graph, no API key (15.2)", cmd_seed),
+    "export": ("write a graph to plain JSONL, readable anywhere (D120)", cmd_export),
+    "import": ("load a JSONL export into a new graph (D120)", cmd_import),
     "connectors": (
         "company tools in, approved actions out: sync once, run, or status (17.2)",
         cmd_connectors,
@@ -765,6 +800,15 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--viewer", {"help": "answer as this employee (eid_...): hidden sources left out"}),
     ],
     "snapshot": [("--graphs", {"nargs": "+", "help": "graphs to save (default: LORE_GRAPH)"})],
+    "export": [
+        ("--out", {"required": True, "help": "file to write: .jsonl, or .jsonl.gz"}),
+        ("--graph", {"help": "default: the graph the API serves"}),
+        ("--with-embeddings", {"action": "store_true", "help": "keep chunk vectors (1.5 KB each)"}),
+    ],
+    "import": [
+        ("path", {"help": "an export file (.jsonl or .jsonl.gz)"}),
+        ("--graph", {"required": True, "help": "a new graph to load it into"}),
+    ],
     "seed": [
         ("--from", {"dest": "source", "help": "snapshot path or URL (default: snapshots/)"}),
         ("--force", {"action": "store_true", "help": "replace existing graphs and files"}),

@@ -112,7 +112,7 @@ Diagrams: [architecture](docs/diagrams/lore-overview.svg) · [graph data model](
 | Who | `Person`, `Team`, `Customer`, `Company`, `Community` | `AUTHORED`, `REVIEWED`, `KNOWS {score}`, `COLLAB {w}`, `WORKS_AT`, `REPORTED_BY`, `ASSIGNED_TO` |
 | What was said | `Message`, `Meeting`, `Doc`, `PR`, `Link` (all `:Artifact`), `Chunk` (384-d vector), `Channel`, `Product` | `IN_PRODUCT`, `IN_CHANNEL`, `MENTIONS`, `FIXES`, `HAS_CHUNK` |
 
-Every property: [docs/schema_card.md](docs/schema_card.md).
+Every property: [docs/schema_card.md](docs/schema_card.md). The whole graph exports to plain JSON lines (`yaan export --out graph.jsonl.gz`, one node or edge a line) and loads back with `yaan import`.
 
 ### Cypher queries and algorithms
 
