@@ -1,0 +1,12 @@
+%% What happens when something fails (H1-H2, D107, D110): nothing is dropped, nothing is half-written, nothing is posted twice.
+flowchart TB
+  I["An item from a tool"]:::ext --> O{"Ingest it"}:::code
+  O -->|went in| OK["Seen; cursor moves on"]:::file
+  O -->|refused: bad item| DL["Dead letter in the graph<br/>with the item and why<br/>yaan connectors retry"]:::guard
+  O -->|not ready: spend cap,<br/>FalkorDB down, lock busy| WT["Waits for a later round<br/>cursor held below it"]:::human
+  O -->|other error| CT["Retried; after 5 failures<br/>a dead letter"]:::guard
+  A["Approve an alert"]:::human --> C1["Claim: open to responding<br/>with every write it will make"]:::code
+  C1 --> C2["Apply the writes<br/>(all MERGE or SET by id)"]:::code
+  C2 --> C3["Close: approved"]:::code
+  C2 -. process stopped .-> ST["complete_stuck finishes it<br/>from the stored writes"]:::guard
+  C3 --> SEND["Send each draft<br/>look for its marker first<br/>never posted twice"]:::ext

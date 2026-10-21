@@ -1,0 +1,10 @@
+%% The live path after hardening (H3, D112-D114): a connector round is one batch; per-message work no longer grows with the graph.
+flowchart LR
+  R["Connector round<br/>items since the cursor<br/>(first sync: 30 days)"]:::ext --> P["Per item, no lock<br/>check it, register people,<br/>channel kind, extract<br/>(4 at once, LLM cached)"]:::code
+  P --> L{"Writer lock<br/>lease renewed<br/>while held"}:::guard
+  L --> W["Per item<br/>structure, chunks,<br/>links looked up in<br/>the graph, events"]:::code
+  W --> F["One fold<br/>per product<br/>writes only<br/>what changed"]:::code
+  F --> S["Sentinel on the<br/>topics that changed<br/>(topic index)"]:::code
+  S --> G[("FalkorDB<br/>graph")]:::store
+  F -. marks due .-> D["Every 5 min at most<br/>expertise, precedents,<br/>USES, key-person alerts<br/>rebuilt in place"]:::code
+  D --> G
