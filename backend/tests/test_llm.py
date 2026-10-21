@@ -394,3 +394,18 @@ def test_a_ledger_held_open_elsewhere_is_retried_not_lost(gateway, monkeypatch):
     with llm.spend(0.01, path) as pay:
         pay(0.004)
     assert len(refusals) == 3 and llm.spent_today(path) == pytest.approx(0.004)
+
+
+def test_a_prices_file_adds_a_model_and_changes_a_price(tmp_path, monkeypatch):
+    """D121: LORE_PRICES_FILE overrides or extends the price table; a model nobody priced is
+    still refused (the spend cap can't hold without a price)."""
+    path = tmp_path / "prices.yaml"
+    path.write_text("claude-haiku-5-5: [0.2, 1.0, 0.25, 0.02]\nmy-model: [1, 2, 0, 0]\n")
+    monkeypatch.setattr(get_settings(), "lore_prices_file", path)
+    assert llm.cost_usd("claude-haiku-5-5", 1_000_000, 0) == pytest.approx(0.20)
+    assert llm.cost_usd("my-model", 0, 1_000_000) == pytest.approx(2.0)
+    with pytest.raises(llm.LLMError, match="no price"):
+        llm.cost_usd("some-other-model", 1, 1)
+    path.write_text("my-model: 3\n")
+    with pytest.raises(llm.LLMError, match="needs \[input, output"):
+        llm.cost_usd("my-model", 1, 1)

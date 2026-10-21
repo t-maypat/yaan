@@ -90,10 +90,34 @@ class LLMResult:
     request_id: str | None
 
 
+def prices() -> dict[str, tuple[float, float, float, float]]:
+    """PRICES, with LORE_PRICES_FILE's entries on top (D121)."""
+    path = get_settings().lore_prices_file
+    if not path:
+        return PRICES
+    import yaml
+
+    if not path.is_file():
+        raise LLMError(f"LORE_PRICES_FILE {path} doesn't exist")
+    extra = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    out = dict(PRICES)
+    for model, p in extra.items():
+        if not (isinstance(p, list) and len(p) == 4 and all(isinstance(x, int | float) for x in p)):
+            raise LLMError(
+                f"LORE_PRICES_FILE: {model} needs [input, output, cache write, cache read] in USD "
+                "per million tokens"
+            )
+        out[str(model)] = tuple(float(x) for x in p)
+    return out
+
+
 def cost_usd(model: str, inp: int, out: int, cache_write: int = 0, cache_read: int = 0) -> float:
-    if model not in PRICES:
-        raise LLMError(f"no price for model {model!r}: add it to llm.PRICES from the pricing page")
-    p_in, p_out, p_write, p_read = PRICES[model]
+    table = prices()
+    if model not in table:
+        raise LLMError(
+            f"no price for model {model!r}: add it to llm.PRICES, or to LORE_PRICES_FILE"
+        )
+    p_in, p_out, p_write, p_read = table[model]
     return (inp * p_in + out * p_out + cache_write * p_write + cache_read * p_read) / 1e6
 
 

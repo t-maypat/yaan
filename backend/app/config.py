@@ -99,6 +99,9 @@ class Settings(BaseSettings):
     lore_litellm_model_answer: str | None = None
     lore_litellm_model_judge: str | None = None
     lore_daily_spend_cap_usd: float = 2.0  # llm.py refuses a call that could cross it
+    # Optional YAML of {model: [input, output, cache write, cache read] USD per million tokens}
+    # that overrides or extends llm.PRICES (D121): a new model, or a price change, needs no code.
+    lore_prices_file: Path | None = None
     # Public deployment guards (D081). Cache-only: replay cached answers, never call the API.
     lore_llm_cache_only: bool = False
     lore_ask_per_ip_per_day: int = 60  # /ask, per client IP, rolling 24 h
