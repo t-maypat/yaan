@@ -66,6 +66,14 @@ class Maps:
     def source(self, name: str) -> dict[str, Any]:
         return self.sources.get(name) or {}
 
+    def containers(self, source: str, key: str, default: str | None) -> list[str]:
+        """The repos, projects or pages a tool reads (D118): connectors.yaml's list under
+        `key`, else the single one .env names."""
+        listed = self.source(source).get(key)
+        if listed:
+            return [str(x) for x in (listed if isinstance(listed, list) else [listed])]
+        return [default] if default else []
+
     def product_of(self, source: str, channel: str | None = None) -> str:
         """The product an item belongs to (D116): its channel's, else its source's, else the
         top-level `product`."""

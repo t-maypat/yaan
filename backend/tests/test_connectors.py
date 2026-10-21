@@ -370,3 +370,38 @@ def test_estimating_an_extraction_calls_no_model(empty_graph, monkeypatch):
     out = live.estimate_extraction([msg(1), msg(2), pr], empty_graph)
     assert out["items"] == 3 and out["need_the_model"] == 2  # a PR isn't read by the model
     assert 0 < out["expected_usd"] < out["worst_case_usd"]
+
+
+def test_a_tool_reads_several_repos_projects_or_pages_each_with_its_own_cursor(monkeypatch):
+    """D118: connectors.yaml lists them; each is its own connector and cursor. A single one
+    keeps the tool's name as its cursor key, so an existing cursor carries over."""
+    from types import SimpleNamespace
+
+    from app.config import get_settings
+    from app.connectors.jira import JiraConnector
+
+    maps = Maps(
+        product="Widget",
+        default_person="eid_a1",
+        sources={"github": {"repos": ["acme/app", "acme/web"]}, "jira": {"channel": "ch-bug"}},
+    )
+    assert maps.containers("github", "repos", "acme/env") == ["acme/app", "acme/web"]
+    assert maps.containers("jira", "projects", "KAN") == ["KAN"]
+    assert maps.containers("notion", "pages", None) == []
+    monkeypatch.setattr(base, "maps", lambda: maps)
+    st = SimpleNamespace(
+        **{k: None for k in get_settings().model_dump()},
+    )
+    st.github_token, st.jira_base_url, st.jira_email = "t", "https://x.atlassian.net", "e"
+    st.jira_api_token, st.jira_project = "t", "KAN"
+    monkeypatch.setattr("app.config.get_settings", lambda: st)
+    made = runner.configured("lore_demo")
+    keys = [(c.name, getattr(c, "state_key", c.name)) for c in made]
+    assert keys == [
+        ("jira", "jira"),
+        ("github", "github:acme/app"),
+        ("github", "github:acme/web"),
+    ]
+    jira = next(c for c in made if isinstance(c, JiraConnector))
+    assert jira.key_of(base.synthetic_id("msg", "jira", "KAN-7-created")) == "KAN-7"
+    assert jira.key_of(base.synthetic_id("msg", "jira", "OPS-7-created")) is None

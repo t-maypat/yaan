@@ -197,3 +197,27 @@ def test_a_cut_list_says_so_and_a_complete_one_adds_nothing():
     assert t.cut_note(False, 200) == {}  # complete results stay byte-identical (answer cache)
     note = t.cut_note(True, 200)["truncated"]
     assert "at least 200" in note and "never present" in note
+
+
+def test_the_herb_prompt_is_the_evaluated_one_and_org_drops_herbs_conventions():
+    """D118: the demo and the eval run the herb profile byte for byte as before (cached answers
+    and the published scores depend on it); org mode leaves out what HERB taught."""
+    import hashlib
+
+    from app.agent import prompts
+
+    names = [t["name"] for t in tools.TOOL_SPECS]
+
+    def digest(text):
+        return hashlib.sha256(text.encode()).hexdigest()
+
+    assert digest(prompts.system_prompt(names, "herb")) == (
+        "3e45bea0fb684865d7c002533cfc624285fd9a46289fe4a065e9d662f62794a1"
+    )
+    assert digest(prompts.system_prompt(list(tools.SEARCH_ONLY), "herb")) == (
+        "168fb0cb3875647841c2d7ac80b88c1ab4808029d8219a1d37ff074f56552349"
+    )
+    org = prompts.system_prompt(names, "org")
+    for herb_only in ("codenames in the text", "status 'approved'", "competitor"):
+        assert herb_only not in org
+    assert prompts.profile() == "herb"  # the tests run in demo mode

@@ -102,7 +102,8 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
         "unsent": [],
     }
     for c in connectors:
-        mine = state.setdefault(c.name, {"since_ms": 0, "seen": {}})
+        # one cursor per repo, project or page when a tool reads several (D118)
+        mine = state.setdefault(getattr(c, "state_key", c.name), {"since_ms": 0, "seen": {}})
         failures = mine.setdefault("failures", {})  # "<id>@<version>" -> failures so far
         if not mine["since_ms"]:  # the first sync: not the whole history at once (D114)
             mine["since_ms"] = first_cursor(c)
@@ -315,6 +316,7 @@ def configured(graph: str) -> list[Connector]:
     from app.config import get_settings
 
     st = get_settings()
+    maps = base.maps()
     out: list[Connector] = []
     if st.slack_bot_token:
         from slack_sdk import WebClient
@@ -322,24 +324,34 @@ def configured(graph: str) -> list[Connector]:
         from app.connectors.slack import SlackConnector
 
         out.append(SlackConnector(WebClient(token=st.slack_bot_token), graph))
-    if st.jira_base_url and st.jira_email and st.jira_api_token and st.jira_project:
+    # several repos, projects or pages: connectors.yaml lists them (D118), one connector each
+    projects = maps.containers("jira", "projects", st.jira_project)
+    if st.jira_base_url and st.jira_email and st.jira_api_token and projects:
         from app.connectors.jira import JiraConnector
 
-        out.append(
-            JiraConnector(
-                st.jira_base_url, st.jira_email, st.jira_api_token, st.jira_project, graph
-            )
-        )
-    if st.github_token and st.github_repo:
+        for p in projects:
+            c = JiraConnector(st.jira_base_url, st.jira_email, st.jira_api_token, p, graph)
+            out.append(keyed(c, p, projects))
+    repos = maps.containers("github", "repos", st.github_repo)
+    if st.github_token and repos:
         from app.connectors.github import GitHubConnector
 
-        out.append(GitHubConnector(st.github_token, st.github_repo, graph))
-    if st.notion_token and st.notion_page_id:
+        out += [keyed(GitHubConnector(st.github_token, r, graph), r, repos) for r in repos]
+    pages = maps.containers("notion", "pages", st.notion_page_id)
+    if st.notion_token and pages:
         from app.connectors.notion import NotionConnector
 
-        out.append(NotionConnector(st.notion_token, st.notion_page_id, graph))
+        out += [keyed(NotionConnector(st.notion_token, p, graph), p, pages) for p in pages]
     out.extend(experimental(graph, st))
     return out
+
+
+def keyed(c: Connector, container: str, every: list[str]) -> Connector:
+    """A connector's cursor key: its tool's name when it reads one container (so an existing
+    cursor carries over), `<tool>:<container>` when it is one of several."""
+    if len(every) > 1:
+        c.state_key = f"{c.name}:{container}"  # type: ignore[attr-defined]
+    return c
 
 
 def experimental(graph: str, st: Any) -> list[Connector]:

@@ -130,6 +130,8 @@ class JiraConnector:
         if not artifact_id.startswith(prefix):
             return None
         project, number = artifact_id.removeprefix(prefix).split("-")[:2]
+        if project != self.project:  # another project's ticket: its own connector posts (D118)
+            return None
         return f"{project}-{number}"
 
     # --- reading ---------------------------------------------------------------------------

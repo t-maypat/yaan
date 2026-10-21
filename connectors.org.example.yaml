@@ -28,14 +28,17 @@ slack:
 
 github:
   visibility: everyone              # who may read its pull requests in Yaan
+  # repos: [acme/app, acme/web]     # several repositories (else GITHUB_REPO in .env)
   people: {}                        # optional: GitHub login -> person id
 
 jira:
   channel: bug-tickets              # ticket changes are filed as messages in this channel
   visibility: everyone
+  # projects: [KAN, OPS]            # several projects (else JIRA_PROJECT in .env)
   people: {}
 
 notion:
   channel: planning-docs            # where Notion pages are shared for review
   visibility: everyone              # or: members, with members: [Priya Shah, ken@acme.example]
+  # pages: [<page id>, <page id>]   # several pages (else NOTION_PAGE_ID in .env)
   people: {}
