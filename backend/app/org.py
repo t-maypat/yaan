@@ -82,6 +82,7 @@ def parse_roster(path: Path) -> dict[str, dict[str, Any]]:
     entries = raw.get("people") or []
     if not isinstance(entries, list):
         raise OrgError(f"{path.name}: `people` must be a list")
+    rules = authority_rules(path, raw)
     out: dict[str, dict[str, Any]] = {}
     for n, e in enumerate(entries, 1):
         if not isinstance(e, dict) or not e.get("name"):
@@ -100,13 +101,58 @@ def parse_roster(path: Path) -> dict[str, dict[str, Any]]:
             "id": eid,
             "name": e["name"],
             "role": e.get("role"),  # None: unknown, which the policy treats as unverified
-            "authority": authority(path, e),
+            "authority": authority(path, e) or by_title(rules, e.get("role")),
             "email": e.get("email") or "",  # sign-in by proxy header (auth.py); not in the graph
             "location": e.get("location") or "",
             "org": e.get("org") or "",
             "accounts": accounts,
         }
     return out
+
+
+def authority_rules(path: Path, raw: dict[str, Any]) -> list[tuple[str, str]]:
+    """people.yaml's `authority_rules` (D117): {lead | qa | member: [title patterns]}, so a
+    team's own titles map once ("*Lead*", "Head of *"), not person by person. Patterns are
+    globs, case-insensitive; the first authority listed that matches wins."""
+    from app import policy
+
+    rules = raw.get("authority_rules") or {}
+    if not isinstance(rules, dict):
+        raise OrgError(f"{path.name}: `authority_rules` maps lead / qa / member to title patterns")
+    out = []
+    for level, patterns in rules.items():
+        if level not in policy.AUTHORITIES:
+            raise OrgError(f"{path.name}: authority_rules has {level!r}: use {policy.AUTHORITIES}")
+        out += [(level, str(p)) for p in (patterns if isinstance(patterns, list) else [patterns])]
+    return out
+
+
+def by_title(rules: list[tuple[str, str]], role: str | None) -> str | None:
+    """The authority a role's title gets from the rules, or None (then the policy reads the
+    title itself: HERB's titles)."""
+    if not role:
+        return None
+    from fnmatch import fnmatch
+
+    return next((level for level, p in rules if fnmatch(role.casefold(), p.casefold())), None)
+
+
+UNKNOWN = ("unverified", "conflict")
+
+
+@lru_cache
+def unknown_speakers() -> str:
+    """people.yaml's `unknown_speakers` (D117): how a status change by someone with no role or
+    authority counts. `unverified` (the default): it applies, marked unverified. `conflict`:
+    only on their own work (an issue they were assigned, a PR they wrote or reviewed);
+    anything else is refused and raises a conflict alert, as for a member."""
+    if not PEOPLE_FILE.is_file():
+        return "unverified"
+    raw = yaml.safe_load(PEOPLE_FILE.read_text(encoding="utf-8")) or {}
+    value = raw.get("unknown_speakers", "unverified")
+    if value not in UNKNOWN:
+        raise OrgError(f"{PEOPLE_FILE.name}: unknown_speakers must be one of {UNKNOWN}")
+    return value
 
 
 def authority(path: Path, e: dict[str, Any]) -> str | None:

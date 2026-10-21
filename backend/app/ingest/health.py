@@ -37,6 +37,7 @@ def report(graph: str | None = None) -> dict[str, Any]:
         ],
         "speakers": rows("health_spoke_in"),
         "dead_letters": rows("health_dead_letters"),
+        "unverified": rows("health_unverified"),
     }
 
 
@@ -71,4 +72,8 @@ def render(r: dict[str, Any]) -> str:
     dead = r.get("dead_letters") or []
     lines.append(f"dead letters: {sum(row['n'] for row in dead):,} (yaan connectors dead)")
     lines += [f"  {row['source']:<12}{row['reason']:<16}{row['n']:>6,}" for row in dead]
+    unverified = r.get("unverified") or []
+    total = sum(row["n"] for row in unverified)
+    lines.append(f"status changes by speakers of unknown authority: {total:,} (people.yaml)")
+    lines += [f"  {row['product']:<28}{row['n']:>8,}" for row in unverified]
     return "\n".join(lines)

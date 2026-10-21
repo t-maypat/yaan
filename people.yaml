@@ -9,9 +9,19 @@
 #   - authority `member`: the claim is recorded but refused, and Yaan raises a conflict alert;
 #   - no authority and no role (not listed, or listed without either): the claim applies,
 #     marked unverified.
-# Without `authority`, the role decides: Engineering Lead, VP of Engineering, Product Manager
-# and Chief Product Officer are leads, QA Specialist is qa, any other role is a member. Set
-# `authority` when your titles differ ("Tech Lead", "Staff Engineer").
+# Without `authority`, the role decides: `authority_rules` below maps your titles (globs, any
+# case; the first match wins), else Engineering Lead, VP of Engineering, Product Manager and
+# Chief Product Officer are leads, QA Specialist is qa, any other role is a member.
+#
+# authority_rules:
+#   lead: ["*lead*", "head of *", "*manager*"]
+#   qa: ["qa*", "*test*"]
+#
+# Someone with no role and no authority (not listed, or listed without either): by default
+# their status changes apply, marked unverified (Graph health counts them). With
+#   unknown_speakers: conflict
+# they may change only their own work (an issue assigned to them, a PR they wrote or
+# reviewed); anything else is refused and raises a conflict alert.
 #
 # Account ids: Slack member id (Profile > ... > Copy member ID), GitHub login, Jira account id,
 # Notion user id. A list gives one person several accounts in the same tool.

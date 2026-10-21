@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-214 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+215 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -21,7 +21,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`search_vector.cypher`](../backend/queries/search_vector.cypher) | nearest chunks by embedding (score = cosine distance, lower = closer, A3), with filters |
 | [`search_vector_scoped.cypher`](../backend/queries/search_vector_scoped.cypher) | exact nearest chunks within one product (cosine distance, lower = closer, A3), with filters (D042) |
 
-**Graph health** (9)
+**Graph health** (10)
 
 | Query | Purpose |
 |---|---|
@@ -34,6 +34,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`health_mentions.cypher`](../backend/queries/health_mentions.cypher) | MENTIONS edges per target label (S10) |
 | [`health_pr_chains.cypher`](../backend/queries/health_pr_chains.cypher) | PRs with and without a status decision chain, internal vs external |
 | [`health_spoke_in.cypher`](../backend/queries/health_spoke_in.cypher) | resolved meeting speakers per resolution method (S10) |
+| [`health_unverified.cypher`](../backend/queries/health_unverified.cypher) | status changes applied though the speaker's authority is unknown (no role or authority in people.yaml), per product: who to list in people.yaml (D117) |
 
 **Writes: ingestion, linking, the fold, derived layers, the Sentinel** (105)
 

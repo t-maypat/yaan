@@ -98,6 +98,7 @@ class Context:
     active: dict[str, set[str]]  # product -> eids that authored anything there
     prs: dict[str, Artifact]  # pr id -> PR
     authority: dict[str, str | None] = field(default_factory=dict)  # people.yaml's (D102)
+    unknown: str = "unverified"  # how a speaker with no role counts (people.yaml, D117)
     observed_ms: int = field(default_factory=lambda: int(time.time() * 1000))
 
 
@@ -308,7 +309,7 @@ def _verdict(kind, e, speaker, target, ctx: Context, assigned) -> policy.Verdict
             if r.get("reviewer_eid")
         ),
     )
-    return policy.decide(kind, facts)
+    return policy.decide(kind, facts, ctx.unknown)
 
 
 def assignments(res: Resolution, ctx: Context) -> dict[str, list[tuple[int, str]]]:
@@ -551,12 +552,15 @@ def graph_context(product: str, graph: str | None) -> tuple[Context, list[Artifa
             timeout_ms=30_000,
         )
     ]
+    from app import org
+
     ctx = Context(
         roles=roles,
         customers=customers,
         active={product: active},
         prs={p.id: p for p in prs if not p.external},
         authority=authority,
+        unknown=org.unknown_speakers() if org.active() else "unverified",
     )
     return ctx, prs
 

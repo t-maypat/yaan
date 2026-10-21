@@ -34,6 +34,9 @@ MAPS = Maps(
 )
 
 
+CACHES = (get_settings, org.roster, org.accounts, org.source_audiences, org.unknown_speakers)
+
+
 @pytest.fixture
 def org_mode(tmp_path, monkeypatch):
     """LORE_DATA_MODE=org with a people.yaml and a data dir of the test's own."""
@@ -42,11 +45,11 @@ def org_mode(tmp_path, monkeypatch):
     monkeypatch.setenv("LORE_DATA_MODE", "org")
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(org, "PEOPLE_FILE", people)
-    for cached in (get_settings, org.roster, org.accounts, org.source_audiences):
+    for cached in CACHES:
         cached.cache_clear()
     org._hints.clear()
     yield tmp_path
-    for cached in (get_settings, org.roster, org.accounts, org.source_audiences):
+    for cached in CACHES:
         cached.cache_clear()
     org._hints.clear()
 
@@ -727,3 +730,51 @@ def test_prepare_makes_every_product_and_puts_each_channel_in_its_own(org_mode, 
         {"id": "bug-mobile", "product": "Acme Mobile"},
         {"id": "bug-support", "product": "Acme"},
     ]
+
+
+def test_a_teams_titles_map_to_authority_by_rules(tmp_path):
+    """D117: `authority_rules` maps a team's own titles; a person's own `authority` wins."""
+    people = tmp_path / "people.yaml"
+    people.write_text(
+        """
+authority_rules:
+  lead: ["*lead*", "head of *"]
+  qa: ["qa*", "*test*"]
+people:
+  - {name: Ana, role: Tech Lead}
+  - {name: Bo, role: Head of Platform}
+  - {name: Cy, role: Test Engineer}
+  - {name: Di, role: Staff Engineer}
+  - {name: Ed, role: Tech Lead, authority: member}
+  - {name: Fa}
+""",
+        encoding="utf-8",
+    )
+    got = {p["name"]: p["authority"] for p in org.parse_roster(people).values()}
+    assert got == {"Ana": "lead", "Bo": "lead", "Cy": "qa", "Di": None, "Ed": "member", "Fa": None}
+    people.write_text("authority_rules: {boss: ['*']}\npeople: []\n", encoding="utf-8")
+    with pytest.raises(org.OrgError, match="authority_rules has 'boss'"):
+        org.parse_roster(people)
+
+
+def test_unknown_speakers_may_be_held_to_their_own_work(org_mode):
+    """D117: with `unknown_speakers: conflict`, someone with no role or authority changes only
+    their own issue or PR; the default keeps applying their claims, marked unverified."""
+    from app import policy
+
+    stranger = policy.Facts(speaker="eid_000000aa", speaker_in_product=True, assignee="eid_x")
+    assert policy.decide("issue_status", stranger).outcome == "unverified"
+    strict = policy.decide("issue_status", stranger, "conflict")
+    assert (strict.outcome, strict.rule) == ("unauthorized", "unknown_speaker")
+    own = policy.Facts(speaker="eid_000000aa", assignee="eid_000000aa")
+    assert policy.decide("issue_status", own, "conflict").outcome == "authorized"
+    reviewed = policy.Facts(speaker="eid_000000aa", pr_reviewers=frozenset({"eid_000000aa"}))
+    assert policy.decide("pr_action", reviewed, "conflict").rule == "reviewer"
+    assert org.unknown_speakers() == "unverified"
+    org.PEOPLE_FILE.write_text("unknown_speakers: conflict\npeople: []\n", encoding="utf-8")
+    org.unknown_speakers.cache_clear()
+    assert org.unknown_speakers() == "conflict"
+    org.PEOPLE_FILE.write_text("unknown_speakers: maybe\npeople: []\n", encoding="utf-8")
+    org.unknown_speakers.cache_clear()
+    with pytest.raises(org.OrgError, match="unknown_speakers must be one of"):
+        org.unknown_speakers()
