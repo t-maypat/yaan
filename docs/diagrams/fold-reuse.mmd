@@ -1,0 +1,11 @@
+%% How a fold reuses its matches (Phase 21.3, D129): each issue event's match is stored on it; a fold matches afresh only what is new or could have changed.
+flowchart TB
+  N["A batch arrives: new events,<br/>a late edit, a retraction"]:::ext --> R["Read the product's events, each with<br/>its stored match (one JSON string each)"]:::store
+  R --> S["Walk them in time order,<br/>rebuilding the issues as they appear"]:::code
+  S --> Q["Each issue event: is it new? Did its issue<br/>change? Could a changed issue win<br/>any step of its match?"]:::code
+  Q -->|no| K["Keep the stored match:<br/>no scoring at all"]:::store
+  Q -->|yes| M["Match afresh: indexed steps,<br/>the same answers as a full scan"]:::code
+  K --> F["Fold the decision chains; write<br/>only nodes whose hash changed"]:::code
+  M --> F
+  F --> W["Store the new or changed<br/>matches on their events"]:::store
+  X["forget: hands the fold the events'<br/>words from before, in memory only"]:::guard -.-> S
