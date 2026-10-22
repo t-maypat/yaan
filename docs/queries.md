@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-248 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+249 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -17,9 +17,9 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 
 | Query | Purpose |
 |---|---|
-| [`search_fulltext.cypher`](../backend/queries/search_fulltext.cypher) | keyword hits on chunk text (higher score = better), with filters |
-| [`search_vector.cypher`](../backend/queries/search_vector.cypher) | nearest chunks by embedding (score = cosine distance, lower = closer, A3), with filters |
-| [`search_vector_scoped.cypher`](../backend/queries/search_vector_scoped.cypher) | exact nearest chunks within one product (cosine distance, lower = closer, A3), with filters (D042) |
+| [`search_fulltext.cypher`](../backend/queries/search_fulltext.cypher) | keyword hits on chunk text (higher score = better), with filters; for a viewer, only what they may read, before the limit (D131) |
+| [`search_vector.cypher`](../backend/queries/search_vector.cypher) | nearest chunks by embedding (score = cosine distance, lower = closer, A3), with filters; for a viewer, only what they may read, before the limit (D131) |
+| [`search_vector_scoped.cypher`](../backend/queries/search_vector_scoped.cypher) | exact nearest chunks within one product (cosine distance, lower = closer, A3), with filters (D042); for a viewer, only what they may read, before the limit (D131) |
 
 **Graph health** (10)
 
@@ -153,7 +153,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
 | [`upsert_tombstones.cypher`](../backend/queries/upsert_tombstones.cypher) | a content-free record of each forgotten item (id, kind, when, why), so a sync, sweep or backfill doesn't bring it back (F2, D125) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (122)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (123)
 
 | Query | Purpose |
 |---|---|
@@ -165,16 +165,17 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`area_connectors.cypher`](../backend/queries/area_connectors.cypher) | people who collaborate (COLLAB) with anyone who knows the given areas, ranked as bridges first (betweenness), then by PageRank: who to route a question through when no expert is left (10.7, D064) |
 | [`area_evidence.cypher`](../backend/queries/area_evidence.cypher) | the pull requests each person authored in the given areas: the quotable evidence behind an expertise claim (10.7) |
 | [`area_experts.cypher`](../backend/queries/area_experts.cypher) | the people who KNOW the given areas, best score first: degree-of-authorship, author flag, deliveries, discussion, recency score, PageRank rank (10.7) |
-| [`area_issue_people.cypher`](../backend/queries/area_issue_people.cypher) | who worked on each issue and how (10.2): `fix` = authored a PR that FIXES it, `resolved` = stated its resolution, `talk` = any other claim about it |
+| [`area_issue_people.cypher`](../backend/queries/area_issue_people.cypher) | who worked on each issue and how (10.2): `fix` = authored a PR that FIXES it, `resolved` = stated its resolution, `talk` = any other claim about it; `source_id`: the PR or claim it rests on, so org mode can keep only open ones (D131) |
 | [`area_issues.cypher`](../backend/queries/area_issues.cypher) | every canonical issue with its product and component, the input for component areas (10.0, D059) |
 | [`area_owners.cypher`](../backend/queries/area_owners.cypher) | the listed owners of the given areas: who the area's issues are assigned to, with each issue's status and its report message (where the assignment is asked, to cite), to compare with who actually knows it (10.7) |
 | [`area_prs.cypher`](../backend/queries/area_prs.cypher) | the internal pull requests with author, time, the PR each one reverts and the issue it fixes: the input for work-item areas (10.0, D059) |
 | [`area_reviews.cypher`](../backend/queries/area_reviews.cypher) | every review of an internal pull request: who, which PR, when (10.1 COLLAB, 10.2 discussion signal) |
-| [`artifact_access.cypher`](../backend/queries/artifact_access.cypher) | what the permission policy needs per artifact: its kind, its channel and that channel's visibility, for viewer-scoped answers (W7, D109) |
+| [`artifact_access.cypher`](../backend/queries/artifact_access.cypher) | what the permission policy needs per artifact: its kind, its channel and that channel's visibility, for viewer-scoped answers (W7, D109); a PR's repository, for synced GitHub readers (D131) |
 | [`artifact_people.cypher`](../backend/queries/artifact_people.cypher) | author and participant ids of given artifacts (metadata for search results) |
 | [`artifact_people_detail.cypher`](../backend/queries/artifact_people_detail.cypher) | the people around one artifact: authors, attendees, speakers, reviewers (with review state) and people it mentions |
 | [`artifact_texts.cypher`](../backend/queries/artifact_texts.cypher) | every quotable text of the given artifacts (title, url, text, chunk spans), for the citation validator |
 | [`artifacts_present.cypher`](../backend/queries/artifacts_present.cypher) | which of these ids are artifacts in the graph: the live path's "already ingested?" and the demo's injected flags (D101) |
+| [`channel_access.cypher`](../backend/queries/channel_access.cypher) | every channel with its name and visibility: what a viewer may read, computed once, so search filters before its limit (D131) |
 | [`channel_context.cypher`](../backend/queries/channel_context.cypher) | the top-level messages before a new one in its channel (thread replies have their own conversation, D126), newest first: the conversation the live extraction reads it in, as the batch extraction does (D102) |
 | [`channel_members.cypher`](../backend/queries/channel_members.cypher) | the people a channel lists as members (org mode), so a membership sync changes only what changed (H1, D109) |
 | [`claim_alert_response.cypher`](../backend/queries/claim_alert_response.cypher) | the first step of a response: an open alert becomes 'responding' and stores every write the response will make, so a crash midway is finished, not left half-done (H2, D110); matches nothing when the alert isn't open |

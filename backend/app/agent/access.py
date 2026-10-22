@@ -42,11 +42,18 @@ from app.config import REPO_ROOT
 POLICY = REPO_ROOT / "permissions.yaml"
 ARTIFACT_ID = re.compile(r"^(msg|mtg|chat|doc|pr|url):")
 DERIVED_ID = re.compile(r"^(iss|dec|clm|alert):")
-ID_KEYS = ("artifact_id", "id", "issue_id", "decision_id", "report_id")  # a row's own ids
 AGGREGATES = frozenset(
     {"counts_by_status", "counts_by_kind", "count", "total_ranked", "reopen_count", "size"}
 )
 RANKED = frozenset({"n", "rank"})  # in a ranking's rows: computed over everything
+UNSCOPED = {  # search for no viewer: everything (the demo's default, the eval)
+    "scoped": False,
+    "reach_channels": [],
+    "reach_meetings": None,
+    "reach_sources": [],
+    "reach_repos": [],
+    "reach_unchanneled": True,
+}
 HIDDEN_NOTE = "some sources are hidden from you, so counts computed over all of them are left out"
 _DROP = object()
 
@@ -79,6 +86,7 @@ class Access:
     rules: Policy = field(default_factory=policy)
     channel: str | None = None  # an audience's channel: everyone who reads it
     _known: dict[str, bool] = field(default_factory=dict)
+    _reach: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.viewer is None:  # an audience: the channel its readers share, no meetings
@@ -138,6 +146,50 @@ class Access:
         for a in todo:  # not in the graph: nothing proves the viewer may see it
             self._known.setdefault(a, False)
 
+    def reach(self) -> dict[str, Any]:
+        """What this viewer may read, as search parameters (D131): search filters by them
+        inside its queries, before the limit, so a restricted viewer gets k results they can
+        read instead of the top k minus the hidden ones. The rules are `_place`'s; redaction
+        still runs on the results."""
+        if self._reach is None:
+            rows = db.run_all("channel_access", {}, cap=50_000, graph=self.graph)
+            if org.active():
+                channels = [
+                    r["id"]
+                    for r in rows
+                    if r["visibility"] == "public"
+                    or (r["visibility"] == "private" and r["id"] in self.channels)
+                ]
+                audiences = org.source_audiences()
+                sources = sorted(
+                    s
+                    for s, seen in audiences.items()
+                    if seen.visibility == "everyone" or self.viewer in seen.members
+                )
+                repos = sorted(
+                    key.partition(":")[2]
+                    for key in org.synced(self.graph)
+                    if key.partition(":")[0] in audiences
+                    and audiences[key.partition(":")[0]].visibility == "synced"
+                    and org.synced_reads(self.graph, key, self.viewer)
+                )
+                unchanneled = False
+            else:
+                channels = [
+                    r["id"] for r in rows if not self.private(r["name"]) or r["id"] in self.channels
+                ]
+                sources, repos, unchanneled = [], [], True
+            meetings = sorted(self.meetings) if self.rules.meetings == "attendees" else None
+            self._reach = {
+                "scoped": True,
+                "reach_channels": sorted(channels),
+                "reach_meetings": meetings,
+                "reach_sources": sources,
+                "reach_repos": repos,
+                "reach_unchanneled": unchanneled,
+            }
+        return self._reach
+
     def org_visible(self, r: dict[str, Any]) -> bool:
         """Org mode: a channel's synced or declared visibility, else the source's declared
         audience. Unknown is hidden: a Slack channel before its first sync, an undeclared
@@ -146,15 +198,22 @@ class Access:
             if r["visibility"] == "public":
                 return True
             return r["visibility"] == "private" and r["channel_id"] in self.channels
-        seen = org.source_audiences().get(source_of(r["id"]))
+        source = source_of(r["id"])
+        seen = org.source_audiences().get(source)
         if seen is None:
             return False
+        if seen.visibility == "synced":  # the tool's own readers, per repository (D131)
+            return bool(r.get("repo")) and org.synced_reads(
+                self.graph, f"{source}:{r['repo']}", self.viewer
+            )
         return seen.visibility == "everyone" or self.viewer in seen.members
 
     def redact(self, value: Any) -> tuple[Any, set[str]]:
-        """The result without what the viewer can't see, and the ids removed. A row that is
-        (or names, by one of its own ids) a hidden artifact or derived node goes; so does a
-        hidden id in a list. With anything hidden, counts over everything go too."""
+        """The result without what the viewer can't see, and the ids removed. A row that names
+        a hidden artifact or derived node under any key goes (D131: `via`, `subject_id`,
+        `trigger_id`, `thread_id` ... carried rows about hidden items when only five keys were
+        checked); so does a hidden id in a list. With anything hidden, counts over everything
+        go too."""
         found: set[str] = set()
         _ids(value, found)
         hidden = found - self.allowed(found)
@@ -163,8 +222,8 @@ class Access:
 
         def walk(v: Any, in_ranking: bool = False) -> Any:
             if isinstance(v, dict):
-                if any(isinstance(v.get(k), str) and v[k] in hidden for k in ID_KEYS):
-                    return _DROP
+                if any(isinstance(x, str) and x in hidden for x in v.values()):
+                    return _DROP  # fail closed: the row is, or is about, something hidden
                 out = {}
                 for k, x in v.items():
                     if k in AGGREGATES or (in_ranking and k in RANKED):

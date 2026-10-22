@@ -75,7 +75,7 @@ def call_tool(
     if tool.needs_product and not product:
         raise ToolError(f"{name} needs a product: resolve the product's name first")
     try:
-        return tool.run(args, tools.Scope(product, scope.as_of_ms, scope.graph))
+        return tool.run(args, tools.Scope(product, scope.as_of_ms, scope.graph, scope.reach))
     except (tools.ToolInputError, ValueError) as e:  # e.g. rank's unknown metric
         raise ToolError(str(e)) from e
 
@@ -285,7 +285,7 @@ def answer(
     specs = [tools.REGISTRY[n].spec for n in names]
     system = system_prompt(names)
     allowed = frozenset(names)
-    scope = tools.Scope(product_id, as_of_ms, graph)
+    scope = tools.Scope(product_id, as_of_ms, graph, scoped.reach() if scoped else None)
     state: dict[str, Any] = {
         "calls": 0,
         "seen": set(),

@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 
-from app import db
+from app import db, org
 from app.connectors import base, render
 from app.connectors.base import ConnectorError, Item, Maps
 from app.ingest.normalize import Artifact
@@ -75,6 +75,8 @@ class GitHubConnector:
         return base.synthetic_id("pr", "github", f"{self.repo}-{number}")
 
     def fetch(self, since_ms: int) -> list[Item]:
+        if self.synced() and org.sync_due(self.graph, [f"github:{self.repo}"]):
+            self.sync_access()
         items = []
         page = 1
         while True:
@@ -93,6 +95,29 @@ class GitHubConnector:
             if len(fresh) < len(prs) or len(prs) < 50:  # sorted by update: the rest is older
                 return items
             page += 1
+
+    def synced(self) -> bool:
+        return org.active() and self.maps.source("github").get("visibility") == "synced"
+
+    def sync_access(self) -> None:
+        """`visibility: synced` (D131): who may read this repository's pull requests in Yaan.
+        A public or internal repository: everyone signed in. A private one: its collaborators
+        (the token needs write access, and `repo` and `read:org` scopes on a classic token);
+        a login is its person through people.yaml's accounts, as for authors."""
+        key = f"github:{self.repo}"
+        repo = self._get(f"/repos/{self.repo}")
+        seen = repo.get("visibility") or ("private" if repo.get("private") else "public")
+        if seen in ("public", "internal"):
+            org.set_synced(self.graph, key, True, [])
+            return
+        logins, page = [], 1
+        while True:
+            found = self._get(f"/repos/{self.repo}/collaborators", per_page=100, page=page)
+            logins += [c["login"] for c in found]
+            if len(found) < 100:
+                break
+            page += 1
+        org.set_synced(self.graph, key, False, [self.who(login) for login in logins])
 
     def normalize(self, pr: dict[str, Any], reviews: list[dict[str, Any]]) -> Item:
         body = pr.get("body") or ""

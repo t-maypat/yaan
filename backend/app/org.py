@@ -409,15 +409,18 @@ def channel_row(channel: str, product: str, kind: str | None = None) -> dict[str
 
 # --- who may read what (H1, D109) ---------------------------------------------------------------
 # Slack says which of its channels are private and who is in them (connectors/slack.py syncs
-# it). Every other source says nothing we can read cheaply, so connectors.yaml declares its
-# audience; until it does, nothing from that source is shown to anyone.
-VISIBILITY = ("everyone", "members")
+# it). GitHub and Jira can say it too when `visibility: synced` (D131): a repository's privacy
+# and collaborators, a Jira project's "Browse projects" holders, read hourly. Every other
+# source declares its audience in connectors.yaml; until it does, nothing from it is shown.
+VISIBILITY = ("everyone", "members", "synced")
 FROM_THE_TOOL = frozenset({"slack"})
+SYNCABLE = frozenset({"github", "jira"})  # sources that can tell Yaan who may read them
+SYNC_EVERY_MS = 3_600_000
 
 
 @dataclass(frozen=True)
 class Audience:
-    visibility: str  # everyone | members
+    visibility: str  # everyone | members | synced (the tool's own, in access.json)
     members: frozenset[str] = frozenset()  # eids, for `members`
 
 
@@ -439,6 +442,12 @@ def audience(source: str, conf: dict[str, Any]) -> Audience:
             "may read it) or `visibility: members` with `members: [names or emails from "
             "people.yaml]`. Until then nothing from it is shown to anyone."
         )
+    if seen_by == "synced" and source not in SYNCABLE:
+        raise OrgError(
+            f"connectors.yaml: only {sorted(SYNCABLE)} can sync who may read them, not {source}"
+        )
+    if seen_by == "synced" and members:
+        raise OrgError(f"connectors.yaml: {source} syncs its readers: drop `members`")
     if seen_by == "members" and not members:
         raise OrgError(f"connectors.yaml: {source} has `visibility: members` but no `members`")
     if seen_by == "everyone" and members:
@@ -459,6 +468,39 @@ def source_audiences() -> dict[str, Audience]:
     from app.connectors import base
 
     return audiences(base.maps().sources)
+
+
+def access_file(graph: str) -> Path:
+    return get_settings().data_dir / "live" / graph / "access.json"
+
+
+def synced(graph: str | None) -> dict[str, dict[str, Any]]:
+    """What GitHub and Jira said about who may read them (D131): `github:<repo>` and
+    `jira:<project>` -> {everyone, members, synced_ms}. A key not there is hidden."""
+    return filestate.cached(access_file(graph or get_settings().lore_org_graph), {})
+
+
+def set_synced(graph: str, key: str, everyone: bool, members: Iterable[str]) -> None:
+    with filestate.update(access_file(graph), sort_keys=True) as found:
+        found[key] = {
+            "everyone": everyone,
+            "members": sorted(set(members)),
+            "synced_ms": int(time.time() * 1000),
+        }
+
+
+def synced_reads(graph: str | None, key: str, viewer: str | None) -> bool:
+    """May `viewer` (None: anyone at all) read what the tool keeps under `key`?"""
+    found = synced(graph).get(key)
+    if not found:
+        return False
+    return found["everyone"] or (viewer is not None and viewer in found["members"])
+
+
+def sync_due(graph: str, keys: Iterable[str]) -> bool:
+    """Is any of these keys missing or older than an hour?"""
+    found, now = synced(graph), int(time.time() * 1000)
+    return any(now - (found.get(k) or {}).get("synced_ms", 0) > SYNC_EVERY_MS for k in keys)
 
 
 def channel_sources(sources: dict[str, dict[str, Any]]) -> dict[str, set[str]]:
@@ -488,6 +530,14 @@ def channel_access(sources: dict[str, dict[str, Any]]) -> tuple[list[dict], dict
             )
         if "slack" in feeders:
             continue
+        synced = {s for s in feeders if declared[s].visibility == "synced"}
+        if synced and len(feeders) > 1:
+            raise OrgError(
+                f"connectors.yaml: {channel!r} is fed by {sorted(feeders)}; {sorted(synced)[0]} "
+                "syncs who may read it, so give the others a channel of their own"
+            )
+        if synced:
+            continue  # the connector writes the channel's access (until then: hidden)
         found = {declared[s] for s in feeders}
         if len(found) > 1:
             raise OrgError(f"connectors.yaml: {channel!r} is fed by sources with other audiences")

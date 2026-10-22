@@ -40,18 +40,28 @@ def run_stamp() -> int:
 def expertise(graph: str | None = None) -> dict:
     """Phase 10.0-10.3 (D059): rebuild Areas, IN_AREA and KNOWS, and set each product's truck
     factor. Idempotent: the expertise layer is rewritten from the graph, then whatever the
-    rebuild didn't write is removed (D112: readers never see it empty)."""
+    rebuild didn't write is removed (D112: readers never see it empty). In org mode only from
+    what the whole company may read (D131): who knows an area is shown to everyone, so work
+    seen only in a private channel or repository must not make someone its expert."""
+    from app import org
     from app.ingest import expertise as ex
 
     run = run_stamp()
 
-    def read(name: str) -> list[dict]:
-        return db.run_all(name, {}, cap=READ_LIMIT, graph=graph, timeout_ms=READ_TIMEOUT_MS)
+    def read(name: str, key: str) -> list[dict]:
+        rows = db.run_all(name, {}, cap=READ_LIMIT, graph=graph, timeout_ms=READ_TIMEOUT_MS)
+        return open_to_everyone(rows, key, graph) if org.active() else rows
 
     areas = ex.build_areas(
-        read("area_issues"), read("area_issue_people"), read("area_prs"), read("area_reviews")
+        read("area_issues", "id"),
+        read("area_issue_people", "source_id"),
+        read("area_prs", "id"),
+        read("area_reviews", "pr_id"),
     )
-    clock = {r["product_id"]: r["last_ms"] for r in read("product_clock")}
+    found = db.run_all(
+        "product_clock", {}, cap=READ_LIMIT, graph=graph, timeout_ms=READ_TIMEOUT_MS
+    )
+    clock = {r["product_id"]: r["last_ms"] for r in found}
     rows: dict[str, list[dict]] = {name: [] for name in EXPERTISE_ORDER}
     authors: dict[str, dict[str, set[str]]] = {}
     for a in areas.values():

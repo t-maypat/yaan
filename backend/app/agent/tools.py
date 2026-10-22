@@ -62,16 +62,21 @@ def search_artifacts(
     full_text: bool = False,
     people: bool = False,
     graph: str | None = None,
+    reach: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Tool 1: hybrid search over chunks, fused with RRF, one result per artifact.
 
     `mode` is for evaluation and ablations: full-text only, vector only, or both fused.
     `full_text` adds each best chunk's whole text (the baseline RAG reads it; agents quote
     from get_artifact instead). `people` adds each artifact's author and participant ids,
-    the metadata HERB's own RAG documents carry (D036).
+    the metadata HERB's own RAG documents carry (D036). `reach`: a viewer's (Access.reach):
+    only what they may read is ranked (D131).
     """
+    from app.agent.access import UNSCOPED
+
     fetch = min(MAX_FETCH, k * DEPTH_FACTOR)
     filters = {"kinds": kinds, "product_id": product_id, "since_ms": since_ms, "until_ms": until_ms}
+    reach = reach or UNSCOPED
     lists: dict[str, list[dict[str, Any]]] = {}
     timings: dict[str, float] = {}
     used: list[str] = []
@@ -79,7 +84,7 @@ def search_artifacts(
     if mode in ("hybrid", "fulltext") and q:
         started = time.perf_counter()
         lists["fulltext"] = db.run(
-            "search_fulltext", {"q": q, "k": fetch, **filters}, graph=graph
+            "search_fulltext", {"q": q, "k": fetch, **filters, **reach}, graph=graph
         ).rows
         timings["fulltext_ms"] = ms_since(started)
         used.append("search_fulltext.cypher")
@@ -93,7 +98,9 @@ def search_artifacts(
         # nearest chunks graph-wide, and filtering those by product loses most of them once
         # several products share the graph (D042). Unscoped searches keep the index.
         name = "search_vector" if product_id is None else "search_vector_scoped"
-        params = {"qvec": vector, "fetch": min(MAX_FETCH, k * INDEX_FACTOR), "k": fetch, **filters}
+        # a viewer's search filters the index's nearest: ask the index for as many as allowed
+        index_k = MAX_FETCH if reach["scoped"] else min(MAX_FETCH, k * INDEX_FACTOR)
+        params = {"qvec": vector, "fetch": index_k, "k": fetch, **filters, **reach}
         lists["vector"] = db.run(name, params, graph=graph).rows
         timings["vector_ms"] = ms_since(started)
         used.append(f"{name}.cypher")
@@ -1060,10 +1067,17 @@ def agent_search(
     product_id: str | None = None,
     k: int | None = None,
     graph: str | None = None,
+    reach: dict[str, Any] | None = None,
 ) -> dict:
     """Tool 1 as the agent sees it: hybrid search with authors and participants."""
     out = search_artifacts(
-        query, kinds=kinds, product_id=product_id, k=min(k or 10, 20), people=True, graph=graph
+        query,
+        kinds=kinds,
+        product_id=product_id,
+        k=min(k or 10, 20),
+        people=True,
+        graph=graph,
+        reach=reach,
     )
     return {key: out[key] for key in ("query", "keywords", "filters", "results", "cypher")}
 
@@ -1379,6 +1393,7 @@ class Scope:
     product_id: str | None = None
     as_of_ms: int | None = None
     graph: str | None = None
+    reach: dict[str, Any] | None = None  # a viewer's: search reads only what they may (D131)
 
 
 @dataclass(frozen=True)
@@ -1406,7 +1421,9 @@ def _graph_query(args: dict[str, Any], scope: Scope) -> dict:
 
 _HANDLERS: dict[str, tuple[Callable[[dict[str, Any], Scope], dict], bool]] = {
     "search_artifacts": (
-        lambda a, s: agent_search(a["query"], a.get("kinds"), s.product_id, a.get("k"), s.graph),
+        lambda a, s: agent_search(
+            a["query"], a.get("kinds"), s.product_id, a.get("k"), s.graph, s.reach
+        ),
         False,
     ),
     "resolve_entity": (lambda a, s: resolve_entity(a["text"], s.product_id, s.graph), False),

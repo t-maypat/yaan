@@ -186,12 +186,13 @@ def run(
             args = {**args, "viewer_id": viewer}
         return ask(args, graph_name, viewer)
     allowed = frozenset(tools.REGISTRY) - EXCLUDED
-    out = loop.call_tool(name, args, tools.Scope(None, None, graph_name), allowed)
-    if viewer:
-        from app.agent import access
+    if not viewer:
+        return loop.call_tool(name, args, tools.Scope(None, None, graph_name), allowed)
+    from app.agent import access
 
-        out = access.Access(viewer, graph_name).redact(out)[0]
-    return out
+    seen = access.Access(viewer, graph_name)
+    out = loop.call_tool(name, args, tools.Scope(None, None, graph_name, seen.reach()), allowed)
+    return seen.redact(out)[0]
 
 
 def viewer_of(ctx: Any) -> str | None:

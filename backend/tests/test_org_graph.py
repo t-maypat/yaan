@@ -181,3 +181,45 @@ def test_the_demo_never_runs_the_org_job(monkeypatch):
     called = []
     monkeypatch.setattr(db, "run", lambda *a, **k: called.append(a))
     assert live.algorithms_if_due("lore_demo") is None and called == []
+
+
+def test_org_mode_expertise_comes_from_what_everyone_may_read(team):
+    """D131 (F10): who knows an area is shown to everyone, so a fix seen only in a private
+    channel must not make its author an expert there (collaboration already works so, D127)."""
+    from app.ingest import derive
+
+    g, ids, people = team
+
+    def said(n, who, text, channel, kind, issue, component=None):
+        a = Artifact(
+            id=base.synthetic_id("msg", "slack", f"C1-18045865{n:02d}.0001"),
+            kind="message",
+            product_hint="Acme",
+            channel_id=channel,
+            ts_ms=1804586400000 + n * 60_000,
+            ts_iso="2027-03-09T10:00:00Z",
+            author_eid=who,
+            text=text,
+            raw_ref=f"slack:C1:{n}",
+            meta={"channel_name": channel, "sender": who, "synthetic": False, "source": "slack"},
+        )
+        quote = text.rstrip(".")
+        event = base.structured_event(kind, a, quote, who, issue=issue, component=component)
+        live.ingest_artifact(a, g, events=[event])
+
+    said(10, ids["priya"], "Export times out on big files.", "bug-support", "issue_reported",
+         "Export times out", "Export")  # fmt: skip
+    said(11, ids["ken"], "Export times out is fixed.", "bug-support", "issue_resolved",
+         "Export times out")  # fmt: skip
+    said(12, ids["priya"], "Cache stampede on deploy.", "bug-leads", "issue_reported",
+         "Cache stampede", "Cache")  # fmt: skip
+    said(13, ids["sam"], "Cache stampede is fixed.", "bug-leads", "issue_resolved",
+         "Cache stampede")  # fmt: skip
+    derive.expertise(g)
+    knows = db.run_text(
+        "MATCH (p:Person)-[:KNOWS]->(a:Area) RETURN p.id AS who, a.name AS area LIMIT 50",
+        label="test",
+        graph=g,
+    ).rows
+    assert ("Export" in {r["area"] for r in knows if r["who"] == ids["ken"]})
+    assert not [r for r in knows if r["area"] == "Cache" or r["who"] == ids["sam"]]

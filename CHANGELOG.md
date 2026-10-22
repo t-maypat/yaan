@@ -9,9 +9,13 @@ What changed between versions, newest first. Yaan is 0.x: settings and the graph
 #### Added
 - `yaan people` prints the people Yaan met in your tools who aren't in `people.yaml`, as entries to paste.
 - `scripts/load_fold.py`: a load test of the decision fold on synthetic events (no model calls).
+- `visibility: synced` for GitHub and Jira in `connectors.yaml`: who may read a repository or a Jira project comes from the tool itself, every hour.
 
 #### Changed
 - The decision fold no longer slows down as history grows: each event's issue match is kept and only new events, or ones a change could affect, are matched again. A year of 2.5M messages (one product holding 62,000 events) folds in about 13 s per batch; before, matching was quadratic and took minutes.
+- Search ranks only what the asker may read, so someone who can't see a private channel still gets a full page of results instead of the top results minus the hidden ones.
+- An answer's sources are hidden whenever a result row names a hidden item under any field, not only under five known ones.
+- Org mode builds who-knows-what only from what everyone may read: work seen only in a private channel no longer makes someone an area's expert.
 - People met in a tool get 64-bit ids (`eid_` + 16 hex digits), so two accounts no longer collide; a second account landing on a taken id is refused loudly. Slack and Jira emails at your domains merge a person across tools.
 
 #### Upgrading

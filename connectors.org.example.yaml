@@ -31,13 +31,16 @@ slack:
   # sweep_days: 14
 
 github:
-  visibility: everyone              # who may read its pull requests in Yaan
+  visibility: everyone              # who may read its pull requests in Yaan; `synced`: each
+                                    # repository's own readers (public: everyone; private: its
+                                    # collaborators; the token needs write access + read:org)
   # repos: [acme/app, acme/web]     # several repositories (else GITHUB_REPO in .env)
   people: {}                        # optional: GitHub login -> person id
 
 jira:
   channel: bug-tickets              # ticket changes are filed as messages in this channel
-  visibility: everyone
+  visibility: everyone              # `synced`: who may browse every project (needs Administer
+                                    # Projects; read hourly)
   # projects: [KAN, OPS]            # several projects (else JIRA_PROJECT in .env)
   people: {}
 

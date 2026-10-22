@@ -87,3 +87,54 @@ def test_rankings_lose_their_counts_when_something_is_hidden():
     assert hidden == {"msg:2"}
     assert out["ranking"] == [{"id": "eid_aaaaaaaa", "items": ["msg:1"]}]
     assert "total_ranked" not in out and out["counts_hidden"]
+
+
+def test_a_row_that_names_a_hidden_item_under_any_key_goes():
+    """D131 (F10): queries return ids as `via`, `subject_id`, `trigger_id`, `thread_id` ...;
+    only five keys were checked, so a row about a hidden item kept its other fields."""
+    a = access.Access.__new__(access.Access)
+    a._known = {"msg:open": True, "msg:private": False, "iss:W:1": True}
+    a.allowed = lambda ids: {i for i in ids if a._known.get(i)}
+    out, hidden = a.redact(
+        {
+            "experts": [
+                {"person": "eid_aaaaaaaa", "via": "msg:private", "summary": "fixed the leak"},
+                {"person": "eid_bbbbbbbb", "via": "msg:open", "summary": "shipped it"},
+            ],
+            "alerts": [{"trigger_id": "msg:private", "subject_id": "iss:W:1", "why": "reopened"}],
+            "sources": ["msg:open", "msg:private"],  # a list of references: just the item goes
+        }
+    )
+    assert hidden == {"msg:private"}
+    assert [e["person"] for e in out["experts"]] == ["eid_bbbbbbbb"]
+    assert out["alerts"] == [] and out["sources"] == ["msg:open"]
+    top, _ = a.redact({"subject_id": "msg:private", "chain": []})  # the whole result is about it
+    assert top == {"hidden_by_permissions": True}
+
+
+def test_search_ranks_only_what_the_viewer_may_read_before_its_limit(company):
+    """D131 (F10): search took its top k and redaction emptied it for a restricted viewer. With
+    the viewer's reach in the query, the k results are ones they may read."""
+    chunk = "(:Chunk {{id: 'chk:{0}', artifact_id: '{0}', idx: 0, field: 'text', text: 'zebra'}})"
+    for aid in ("msg:m1", "msg:r1", "msg:r2", "msg:r3"):  # m1 open, r1-r2 private, r3 open
+        db.run_text(
+            f"MATCH (a:Artifact {{id: '{aid}'}}) CREATE (a)-[:HAS_CHUNK]->{chunk.format(aid)}",
+            label="chunk",
+            graph=company,
+            readonly=False,
+        )
+
+    def top(reach=None, k=1):
+        out = tools.search_artifacts("zebra", mode="fulltext", k=k, graph=company, reach=reach)
+        return out["evidence_ids"]
+
+    ann = access.Access("eid_a1", company, RULES)  # never posted in bug-Widget
+    everything = top(k=4)
+    readable = [a for a in everything if a in ann.allowed(set(everything))]
+    assert sorted(everything) == ["msg:m1", "msg:r1", "msg:r2", "msg:r3"]
+    assert sorted(readable) == ["msg:m1", "msg:r3"]
+    # filtered before the limit: k readable results, whatever ranks above them
+    one = top(ann.reach(), 1)
+    assert len(one) == 1 and set(one) <= set(readable)
+    assert sorted(top(ann.reach(), 2)) == sorted(readable)
+    assert sorted(top(access.Access("eid_b2", company, RULES).reach(), 4)) == sorted(everything)

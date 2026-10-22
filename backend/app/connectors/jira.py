@@ -24,7 +24,7 @@ from typing import Any
 
 import httpx
 
-from app import db
+from app import db, org
 from app.connectors import base, render
 from app.connectors.base import ConnectorError, Item, Maps
 from app.ingest.normalize import Artifact
@@ -131,6 +131,35 @@ class JiraConnector:
             raise ConnectorError(f"Jira {method} {path}: {r.status_code} {detail}")
         return r.json()
 
+    def synced(self) -> bool:
+        return org.active() and self.maps.source("jira").get("visibility") == "synced"
+
+    def sync_access(self) -> None:
+        """`visibility: synced` (D131): who may browse this project, then the channel's
+        readers: the people who may browse every project that feeds it. Needs Administer
+        Projects on the project. Jira looks at its first 1,000 users only, so a bigger site is
+        read short: fewer readers, never more."""
+        readers: dict[str, str] = {}
+        for start in range(0, 1000, 100):  # each page filters a range of users: read them all
+            found = self._req(
+                "GET",
+                "/rest/api/3/user/permission/search",
+                params={"projectKey": self.project, "permissions": "BROWSE_PROJECTS",
+                        "startAt": start, "maxResults": 100},
+            )  # fmt: skip
+            for u in found:
+                if u.get("accountType", "atlassian") == "atlassian" and u.get("active", True):
+                    readers[u["accountId"]] = self.who(
+                        u["accountId"], name=u.get("displayName"), email=u.get("emailAddress")
+                    )
+        org.set_synced(self.graph, f"jira:{self.project}", False, readers.values())
+        projects = [str(p) for p in self.maps.source("jira").get("projects") or [self.project]]
+        known = org.synced(self.graph)
+        if all(f"jira:{p}" in known for p in projects):  # until every project is read: hidden
+            members = set.intersection(*(set(known[f"jira:{p}"]["members"]) for p in projects))
+            visibility = [{"id": self.channel, "visibility": "private"}]
+            org.set_channel_access(self.graph, visibility, {self.channel: members})
+
     def who(
         self, account: str | None, text: str = "", name: str | None = None, email: str | None = None
     ) -> str:
@@ -162,6 +191,8 @@ class JiraConnector:
         if not rows:
             raise ConnectorError(f"jira.channel {self.channel!r} isn't in the graph")
         channel_name = rows[0]["name"]
+        if self.synced() and org.sync_due(self.graph, [f"jira:{self.project}"]):
+            self.sync_access()
         jql = f"project = {self.project}"
         if since_ms:  # relative minutes: no dependence on the account's time zone
             minutes = int((time.time() * 1000 - since_ms) / 60000) + 60

@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from app.agent import tools
+from app.agent.access import UNSCOPED
 from app.ingest import chunk_embed, structural
 from app.ingest.chunk_embed import MAX_CHARS, chunk_artifact, line_groups, spans
 from app.ingest.herb_loader import load_product
@@ -253,7 +254,7 @@ def test_the_index_path_loses_a_product_crowded_out_by_others(two_products):
     from app import db
 
     params = {"qvec": QUERY, "fetch": 10, "k": 10, "product_id": "A"}
-    params |= {"kinds": None, "since_ms": None, "until_ms": None}
+    params |= {"kinds": None, "since_ms": None, "until_ms": None, **UNSCOPED}
     assert db.run("search_vector", params, graph=two_products).rows == []
     assert len(db.run("search_vector_scoped", params, graph=two_products).rows) == 5
 
@@ -270,7 +271,7 @@ def test_scoped_vector_search_starts_from_the_product_index(empty_graph):
     from app import db
 
     params = {"qvec": QUERY, "k": 10, "product_id": "A"}
-    params |= {"kinds": None, "since_ms": None, "until_ms": None}
+    params |= {"kinds": None, "since_ms": None, "until_ms": None, **UNSCOPED}
     plan = " / ".join(db.explain("search_vector_scoped", params, graph=empty_graph))
     assert "Node By Index Scan" in plan and "Label Scan" not in plan
 
