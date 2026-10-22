@@ -241,6 +241,41 @@ def test_a_retraction_ends_where_never_having_the_event_does(base, second):
     assert layer(base) == layer(second)
 
 
+def test_a_fold_reuses_the_last_passs_matches_and_ends_where_a_full_fold_does(base, second):
+    """D129: each issue event's match is stored on it; the next fold matches only what is new
+    or could have changed, and a retraction still ends where a full fold does."""
+    event_store.load(EVENTS[:3], base, observed_ms=1)
+    assert fold.fold_product("W", base)["matched"] == 1  # the fix (reports make their issue)
+    assert fold.fold_product("W", base)["matched"] == 0  # nothing new: nothing matched again
+    stored = {e["id"]: e["res_how"] for e in event_store.read("W", base)}
+    assert sorted(h for h in stored.values() if h) == ["exact", "reported", "reported"]
+    event_store.load(EVENTS[3:], base, observed_ms=2)
+    later = fold.fold_product("W", base)["matched"]
+    assert later == sum(1 for e in EVENTS[3:] if e["type"] not in ("issue_reported",) and
+                        e["type"].startswith("issue_") and e.get("issue"))  # fmt: skip
+    event_store.retract("msg:m1", [], base, now_ms=3)  # the report that made the issue
+    fold.fold_product("W", base)
+    assert not [e for e in event_store.retracted_resolved("W", base)]  # cleared once folded
+    event_store.load([e for e in EVENTS if e["artifact_id"] != "msg:m1"], second, observed_ms=1)
+    fold.fold_product("W", second)
+    assert layer(base) == layer(second)
+
+
+def test_forgetting_a_report_refolds_without_matching_everything_again(base, second):
+    from app import forget
+
+    event_store.load(EVENTS, base, observed_ms=1)
+    fold.fold_product("W", base)
+    before = fold.fold_product("W", base)["matched"]
+    forget.forget(["msg:m1"], base, now_ms=5)  # its words go; the fold still knew what it made
+    assert before == 0 and not [e for e in event_store.read("W", base) if not e.get("res_v")
+                                and e["type"].startswith("issue_") and e.get("issue")]  # fmt: skip
+    event_store.load([e for e in EVENTS if e["artifact_id"] != "msg:m1"], second, observed_ms=1)
+    fold.fold_product("W", second)
+    mine, theirs = layer(base), layer(second)
+    assert mine[0].keys() == theirs[0].keys() and mine[2] == theirs[2]
+
+
 def test_an_interrupted_write_is_finished_by_the_next_fold(base, monkeypatch):
     event_store.load(EVENTS, base, observed_ms=1)
     real = db.run

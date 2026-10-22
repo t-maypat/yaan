@@ -29,6 +29,7 @@ from typing import Any
 
 from app import db, filestate, org
 from app.config import get_settings
+from app.ingest import events as event_store
 
 BATCH = 500  # ids per write statement: each must finish inside FalkorDB's 10 s write budget
 READ_CAP = 200_000
@@ -105,6 +106,11 @@ def forget(
     events = actions = 0
     alerts: list[str] = []
     with db.writer_lock(graph):
+        # what the refold needs to know which issues these events made, read before their
+        # words go and kept in memory for this call only (D129)
+        recall = [
+            event_store.event(r["event"]) for r in _read_all("events_of_artifacts", ids, graph)
+        ]
         for chunk in batches(ids):
             row = _write("forget_events", {"ids": chunk, "now_ms": now_ms}, graph).rows[0]
             events += row["events"]
@@ -124,7 +130,7 @@ def forget(
         ]
         for chunk in batches(rows):
             _write("upsert_tombstones", {"rows": chunk}, graph)
-        refolded = refold(products, graph, now_ms)
+        refolded = refold(products, graph, now_ms, recall=recall)
     return {
         "graph": graph,
         "asked": len(ids),
@@ -196,18 +202,23 @@ def erase_person(person: str, graph: str | None = None, now_ms: int | None = Non
     }
 
 
-def refold(products: Iterable[str], graph: str, now_ms: int) -> int:
+def refold(
+    products: Iterable[str], graph: str, now_ms: int, recall: list[dict] | None = None
+) -> int:
     """Fold each product again from its remaining events (the caller holds the writer lock),
     judge the chains that changed, and mark the derived layer due. Returns how many topics
-    changed."""
-    from app.ingest import events as event_store
+    changed. `recall`: the forgotten events as they were, so the fold reuses what it can
+    (D129); without it (erasure rewrote live events) every product resolves afresh."""
     from app.ingest import fold
     from app.sentinel import engine
 
     have = set(event_store.products(graph))
     topics: set[str] = set()
     for product in sorted(set(products) & have):
-        topics |= set(fold.fold_product(product, graph)["write"]["topics"])
+        if recall is None:
+            fold.forget_resolutions(product, graph)
+        mine = [e for e in recall or [] if e["product"] == product]
+        topics |= set(fold.fold_product(product, graph, recall=mine)["write"]["topics"])
     if topics:
         engine.run(graph, topics=sorted(topics))
     from app.sentinel import live

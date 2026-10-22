@@ -5,6 +5,7 @@ actually does. They double as upgrade guards: rerun them whenever FALKORDB_TAG c
 any behavior the code relies on that moved will fail here first, by row number.
 """
 
+import json
 import time
 from pathlib import Path
 
@@ -452,3 +453,17 @@ def test_a22_a_node_id_filter_below_zero_matches_no_node(empty_graph):
     assert read(empty_graph, "MATCH (n) WHERE id(n) > -1 RETURN id(n) LIMIT 5") == []
     assert len(read(empty_graph, "MATCH (n) WHERE id(n) >= 0 RETURN id(n) LIMIT 5")) == 2
     assert len(read(empty_graph, "MATCH ()-[e]->() WHERE id(e) > -1 RETURN id(e) LIMIT 5")) == 1
+
+
+def test_a23_tojson_round_trips_a_nodes_properties(empty_graph):
+    """Verified 23 Oct (D129). `toJSON(properties(n))` returns one JSON string whose parse
+    equals `properties(n)`: escapes, quotes, control characters, emoji, 16-digit integers,
+    floats, booleans and lists. The fold reads its events this way: the Python client decodes
+    a map value by value, about 5x slower than json.loads of the string."""
+    tricky = "He said \"fix it\" \ now\nnext\ttab — ünïcødé 🐛 \u0001 'single'"
+    writer(empty_graph).query(
+        "CREATE (:A {s: $s, big: 1767229542000123, f: 0.1, neg: -3, b: true, l: ['a', 1, 2.5]})",
+        {"s": tricky},
+    )
+    (j, p) = read(empty_graph, "MATCH (n:A) RETURN toJSON(properties(n)), properties(n) LIMIT 1")[0]
+    assert json.loads(j) == dict(p) and json.loads(j)["s"] == tricky

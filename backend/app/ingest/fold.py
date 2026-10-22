@@ -134,10 +134,14 @@ def rebuild(res: Resolution, ctx: Context) -> tuple[dict[str, list[dict]], dict[
     for c in rows["upsert_claims"]:
         if c["value"] == "reopened":
             reopens[c["topic"]] += 1
+    reports: dict[str, dict[str, Any]] = {}  # each issue's first report, found once (D129)
+    for e in res.events:
+        if e["type"] == "issue_reported" and e.get("issue_id"):
+            reports.setdefault(e["issue_id"], e)
     for issue in res.issues.values():
         current = assigned.get(issue.id, [(0, None)])[-1][1]
         rows["upsert_issues"].append(
-            _issue_row(issue, res, finals, current, reopens[f"{issue.id}/status"])
+            _issue_row(issue, reports.get(issue.id), finals, current, reopens[f"{issue.id}/status"])
         )
         steps = assigned.get(issue.id, [])
         for (start, who), nxt in zip(steps, [*steps[1:], (None, None)], strict=False):
@@ -350,12 +354,8 @@ def _statement(topic: str, value: str, e: dict[str, Any], ctx: Context) -> str:
 
 
 def _issue_row(
-    issue: Issue, res: Resolution, finals, assignee: str | None, reopen_count: int
+    issue: Issue, report: dict[str, Any] | None, finals, assignee: str | None, reopen_count: int
 ) -> dict[str, Any]:
-    report = next(
-        (e for e in res.events if e.get("issue_id") == issue.id and e["type"] == "issue_reported"),
-        None,
-    )
     final = finals.get(f"{issue.id}/status")
     return {
         "id": issue.id,
@@ -414,6 +414,7 @@ CLEAR = {
 DELETE = {"Claim": "delete_claims", "Issue": "delete_issues", "Decision": "delete_decisions"}
 STAMP = {"Claim": "set_claim_hash", "Issue": "set_issue_hash", "Decision": "set_decision_hash"}
 STATE_CAP = 500_000
+WRITE_BATCH = 500  # rows per write statement
 
 
 def desired(rows: dict[str, list[dict[str, Any]]]) -> dict[tuple[str, str], dict[str, Any]]:
@@ -441,8 +442,9 @@ def write(rows: dict[str, list[dict[str, Any]]], product: str, graph: str | None
     state = db.run_all(
         "derived_state", {"product_id": product}, cap=STATE_CAP, graph=graph, timeout_ms=30_000
     )
-    have = {(r["label"], r["id"]): r["hash"] for r in state}
-    topic_was = {(r["label"], r["id"]): r["topic"] for r in state}
+    state = [json.loads(r["row"]) for r in state]  # [id, label, hash, topic] (A23)
+    have = {(label, i): h for i, label, h, _ in state}
+    topic_was = {(label, i): topic for i, label, _, topic in state}
     changed = {k for k, v in want.items() if have.get(k) != v["hash"]}
     stale = sorted(k for k in have if k not in want)
     # the decision chains this write moved: the live Sentinel judges only these (D112)
@@ -566,18 +568,91 @@ def graph_context(product: str, graph: str | None) -> tuple[Context, list[Artifa
 
 
 def fold_product(
-    product: str, graph: str | None, *, known_at_ms: int | None = None, apply: bool = True
+    product: str,
+    graph: str | None,
+    *,
+    known_at_ms: int | None = None,
+    apply: bool = True,
+    recall: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Fold one product's events from the graph and (`apply`) write the result. With
     `known_at_ms`, only the events Lore knew then: the belief at that moment (never written)."""
+    ms: dict[str, float] = {}  # each stage's time: the load test and slow-fold warnings read it
+    t = time.perf_counter()
+
+    def lap(stage: str) -> None:
+        nonlocal t
+        now = time.perf_counter()
+        ms[stage], t = round((now - t) * 1000, 1), now
+
     found = event_store.read(product, graph, known_at_ms)
+    lap("read")
     ctx, prs = graph_context(product, graph)
-    res = resolve.resolve(found, {product: prs})
+    lap("context")
+    prior, retracted = last_pass(product, graph, found, known_at_ms, recall)
+    res = resolve.resolve(found, {product: prs}, prior)
+    lap("resolve")
     rows, stats = rebuild(res, ctx)
+    lap("rebuild")
     out: dict[str, Any] = {"rows": rows, "stats": stats, "unresolved": len(res.unresolved)}
+    out["matched"] = res.matched  # issue events matched afresh; the rest reused (D129)
     if apply and known_at_ms is None:
         out["write"] = write(rows, product, graph)
+        remember(res, retracted, graph)  # after the layer: an interrupted fold redoes the work
+        lap("write")
+    out["ms"] = ms
     return out
+
+
+def last_pass(
+    product: str,
+    graph: str | None,
+    found: list[dict[str, Any]],
+    known_at_ms: int | None,
+    recall: list[dict[str, Any]] | None = None,
+) -> tuple[resolve.Prior, list[str]]:
+    """The last pass's stored resolutions (D129): every event that carries one of this version,
+    live or retracted since, and the ones not in this pass (`gone`). Also the retracted events
+    still carrying one, whose results are cleared once this pass is written. `recall`: events
+    `forget` just blanked, as they were (in memory only), so the pass knows what they made."""
+    retracted = event_store.retracted_resolved(product, graph)
+    live = found if known_at_ms is None else event_store.read(product, graph)
+    pool = {e["id"]: e for e in [*live, *retracted]}
+    pool |= {e["id"]: e for e in recall or [] if e["id"] in pool}
+    results = {
+        i: (e["res_issue"], e["res_how"])
+        for i, e in pool.items()
+        if e.get("res_v") == resolve.VERSION and e.get("res_how")
+    }
+    here = {e["id"] for e in found}
+    gone = [e for i, e in pool.items() if i in results and i not in here]
+    return resolve.Prior(results, gone), [e["id"] for e in retracted]
+
+
+def remember(res: resolve.Resolution, retracted: list[str], graph: str | None) -> None:
+    """Store this pass's new or changed resolutions on their events, and clear the retracted
+    ones', in batches a write finishes inside its time budget (A17)."""
+    rows = [r | {"v": resolve.VERSION} for r in res.store]
+    for lo in range(0, len(rows), WRITE_BATCH):
+        db.run("set_event_resolutions", {"rows": rows[lo : lo + WRITE_BATCH]}, graph=graph,
+               readonly=False)  # fmt: skip
+    for lo in range(0, len(retracted), WRITE_BATCH):
+        db.run("clear_event_resolutions", {"ids": retracted[lo : lo + WRITE_BATCH]}, graph=graph,
+               readonly=False)  # fmt: skip
+
+
+def forget_resolutions(product: str, graph: str | None) -> int:
+    """Forget or erase rewrote the product's events: drop every stored resolution, so the
+    next fold resolves the product afresh. Returns how many were dropped."""
+    total = 0
+    while n := db.run(
+        "clear_product_resolutions",
+        {"product_id": product, "limit": WRITE_BATCH * 10},
+        graph=graph,
+        readonly=False,
+    ).rows[0]["cleared"]:
+        total += n
+    return total
 
 
 def belief(

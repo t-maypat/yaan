@@ -13,6 +13,7 @@ nothing.
 """
 
 import hashlib
+import json
 import time
 from typing import Any
 
@@ -42,6 +43,7 @@ FIELDS = (
     "end",
 )
 READ_CAP = 200_000  # events in one product
+RESOLVED = ("res_issue", "res_how", "res_v")  # the last pass's resolution, stored on it (D129)
 
 
 def event_id(e: dict[str, Any]) -> str:
@@ -81,14 +83,27 @@ def read(product: str, graph: str | None, known_at_ms: int | None = None) -> lis
     """The product's events as the fold takes them: the live ones, or the ones Lore knew at
     `known_at_ms`. Fields the graph didn't store (nulls) come back as None."""
     params = {"product_id": product, "known_at_ms": known_at_ms}
-    out = []
-    for r in db.run_all("product_events", params, cap=READ_CAP, graph=graph, timeout_ms=30_000):
-        e = dict(r["event"])
-        event = {k: e.get(k) for k in FIELDS}
-        event["product"] = e.get("product_id")
-        event["observed_ms"] = e.get("observed_ms")
-        out.append(event)
-    return out
+    rows = db.run_all("product_events", params, cap=READ_CAP, graph=graph, timeout_ms=30_000)
+    return [event(r["event"]) for r in rows]
+
+
+def retracted_resolved(product: str, graph: str | None) -> list[dict[str, Any]]:
+    """The product's retracted events that still carry the last pass's resolution (D129)."""
+    rows = db.run_all(
+        "retracted_resolved", {"product_id": product}, cap=READ_CAP, graph=graph, timeout_ms=30_000
+    )
+    return [event(r["event"]) for r in rows]
+
+
+def event(props: dict[str, Any] | str) -> dict[str, Any]:
+    """An event as the fold takes it, from its properties (or their JSON, A23)."""
+    e = json.loads(props) if isinstance(props, str) else dict(props)
+    event = {k: e.get(k) for k in FIELDS}
+    event["product"] = e.get("product_id")
+    event["observed_ms"] = e.get("observed_ms")
+    event["id"] = e.get("id")
+    event.update({k: e.get(k) for k in RESOLVED})
+    return event
 
 
 def products(graph: str | None) -> list[str]:
