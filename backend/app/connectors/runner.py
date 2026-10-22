@@ -27,7 +27,7 @@ from typing import Any
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
-from app import db, filestate, llm, org
+from app import db, filestate, forget, llm, org
 from app.connectors import base, render
 from app.connectors.base import Connector, ConnectorError, Item, labeled
 from app.ingest.normalize import Artifact
@@ -108,11 +108,19 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
             continue
         items.sort(key=lambda i: (i.artifact.ts_ms or 0, i.artifact.id))
         present = live.present_ids(graph, [i.artifact.id for i in items])
+        # forgotten, or by an erased person: skipped before the live path, so no dead letter
+        # ever keeps their words (D125)
+        stop = forget.blocked([i.artifact for i in items], graph) if items else {}
         hold: int | None = None  # the cursor may not pass a version that will be retried
         latest: dict[str, Item] = {}  # the newest version of each item: one batch (D112)
         for item in items:
             a = item.artifact
             if mine["seen"].get(a.id, -1) >= item.updated_ms:  # done in an earlier round
+                mine["since_ms"] = max(mine["since_ms"], item.updated_ms)
+                continue
+            if a.id in stop:
+                report["refused"].append({"id": a.id, "why": stop[a.id]})
+                mine["seen"][a.id] = item.updated_ms
                 mine["since_ms"] = max(mine["since_ms"], item.updated_ms)
                 continue
             if base.is_demo() and not labeled(a.text):  # rule 5: labeled synthetic items only

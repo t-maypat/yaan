@@ -4,7 +4,7 @@ queries run on the real server (marked db)."""
 
 import pytest
 
-from app import db
+from app import db, forget
 from app.connectors import base, runner
 from app.connectors.base import Item, Maps
 from app.ingest.normalize import Artifact
@@ -83,6 +83,7 @@ def offline(tmp_path, monkeypatch):
     nothing to deliver, dead letters collected in a list."""
     monkeypatch.setattr(live, "live_dir", lambda graph: tmp_path / graph)
     monkeypatch.setattr(live, "present_ids", lambda graph, ids: set())
+    monkeypatch.setattr(forget, "blocked", lambda artifacts, graph: {})  # nothing forgotten
     monkeypatch.setattr(runner, "deliver", lambda connectors, graph: ([], []))
     monkeypatch.setattr(live, "derive_if_due", lambda graph: None)
     monkeypatch.setattr(live, "ingest_batch", one_by_one)

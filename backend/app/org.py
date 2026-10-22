@@ -224,10 +224,14 @@ def ensure_people(graph: str, eids: Iterable[str | None]) -> list[str]:
     """Register the people a connector met who aren't in the graph yet: a Person node each,
     and a row in data/live/<graph>/people.json. Returns the new ids. An id with no hint (never
     met by a connector) is left alone: the live path then refuses it as an unknown author."""
+    from app import forget
+
     known = directory(graph)
+    wanted = [e for e in dict.fromkeys(e for e in eids if e) if e not in known and e in _hints]
+    erased = forget.suppressed(wanted, graph) if wanted else set()  # never again (D125)
     new = []
-    for eid in dict.fromkeys(e for e in eids if e):
-        if eid in known or eid not in _hints:
+    for eid in wanted:
+        if eid in erased:
             continue
         hint = _hints[eid]
         new.append({"id": eid, "name": hint["name"], "role": None, "location": "", "org": ""})

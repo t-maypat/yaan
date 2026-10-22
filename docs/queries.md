@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-215 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+238 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -36,7 +36,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`health_spoke_in.cypher`](../backend/queries/health_spoke_in.cypher) | resolved meeting speakers per resolution method (S10) |
 | [`health_unverified.cypher`](../backend/queries/health_unverified.cypher) | status changes applied though the speaker's authority is unknown (no role or authority in people.yaml), per product: who to list in people.yaml (D117) |
 
-**Writes: ingestion, linking, the fold, derived layers, the Sentinel** (105)
+**Writes: ingestion, linking, the fold, derived layers, the Sentinel** (108)
 
 | Query | Purpose |
 |---|---|
@@ -55,6 +55,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`delete_dead_letters.cypher`](../backend/queries/delete_dead_letters.cypher) | drop dead letters whose item has now been ingested (H1, D107) |
 | [`delete_decisions.cypher`](../backend/queries/delete_decisions.cypher) | decisions the fold no longer derives (their events were retracted or re-resolved), removed with their edges (D101) |
 | [`delete_issues.cypher`](../backend/queries/delete_issues.cypher) | issues the fold no longer derives (their events were retracted or re-resolved), removed with their edges (D101) |
+| [`delete_person.cypher`](../backend/queries/delete_person.cypher) | an erased person's node and every edge it had (KNOWS, COLLAB, MEMBER_OF, ...) (F2, D125) |
 | [`derive_uses.cypher`](../backend/queries/derive_uses.cypher) | (Company)-[:USES {issues, customers, first_ms, last_ms}]->(Product): a company uses a product when its customers report issues in it (S9, 10.6, D066) |
 | [`derive_works_on.cypher`](../backend/queries/derive_works_on.cypher) | (Team)-[:WORKS_ON {stage, from_ms, to_ms, artifacts}]->(Product): when each team authored the product's artifacts per stage (channel stage, else artifact kind) (S9, 8.0 / R1-2) |
 | [`link_action_for.cypher`](../backend/queries/link_action_for.cypher) | (Action)-[:FOR]->(Alert): the alert a draft answers |
@@ -144,9 +145,11 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_people.cypher`](../backend/queries/upsert_people.cypher) | person nodes from metadata/employee.json or people.yaml, with an explicit authority when people.yaml gives one (D102) |
 | [`upsert_products.cypher`](../backend/queries/upsert_products.cypher) | product nodes from channel names, with codenames found in artifacts (D029) |
 | [`upsert_prs.cypher`](../backend/queries/upsert_prs.cypher) | pull request artifacts, with current_status from their decision chain |
+| [`upsert_suppressed.cypher`](../backend/queries/upsert_suppressed.cypher) | a hash of an erased person's id, so a sync, sweep or backfill doesn't ingest their items again while a source still holds them (F2, D125) |
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
+| [`upsert_tombstones.cypher`](../backend/queries/upsert_tombstones.cypher) | a content-free record of each forgotten item (id, kind, when, why), so a sync, sweep or backfill doesn't bring it back (F2, D125) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (96)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (116)
 
 | Query | Purpose |
 |---|---|
@@ -184,6 +187,12 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`doc_discussion.cypher`](../backend/queries/doc_discussion.cypher) | the Slack discussion of a document: messages in the channel where it was first shared, until a newer version is shared there (or $window_ms) |
 | [`doc_meetings.cypher`](../backend/queries/doc_meetings.cypher) | the product's meetings whose transcript names the document's type, with who spoke in each |
 | [`entity_card.cypher`](../backend/queries/entity_card.cypher) | one person, customer, company, product, issue or area by id: its labels, properties and relationship types (counted in the API), for the UI's entity panel |
+| [`erase_dead_letters.cypher`](../backend/queries/erase_dead_letters.cypher) | dead letters whose stored item names an erased person (as author or by @-mention): deleted, never retried (F2, D125) |
+| [`erase_event_mentions.cypher`](../backend/queries/erase_event_mentions.cypher) | an erased person's @-mention in others' events becomes the placeholder (same length, so quote offsets still hold) (F2, D125) |
+| [`erase_event_people.cypher`](../backend/queries/erase_event_people.cypher) | events that name an erased person as speaker or subject drop the id (F2, D125) |
+| [`erase_mentions.cypher`](../backend/queries/erase_mentions.cypher) | replace an erased person's @-mention in what others wrote (artifact, chunks, events) with a placeholder of the same length, so quote offsets still hold (F2, D125) |
+| [`erase_person_actions.cypher`](../backend/queries/erase_person_actions.cypher) | drafted actions that name an erased person: their name and @-mention become placeholders (F2, D125) |
+| [`erase_person_alerts.cypher`](../backend/queries/erase_person_alerts.cypher) | alerts and drafts that name an erased person: their id goes, and their name and @-mention become placeholders (F2, D125) |
 | [`event_products.cypher`](../backend/queries/event_products.cypher) | the products that have events: the batch fold folds each of them (D101) |
 | [`evidence_subgraph.cypher`](../backend/queries/evidence_subgraph.cypher) | the evidence around cited artifacts for the UI: authors, product, customers mentioned, the claims quoting them, what those claims are about (issue -> customer -> company) and the decisions they support |
 | [`find_docs.cypher`](../backend/queries/find_docs.cypher) | a product's documents matching an id, a type ("Market Research Report") or words of the title, with their authors |
@@ -192,6 +201,15 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`fold_people.cypher`](../backend/queries/fold_people.cypher) | every person's role, for the authority policy (the fold's context, read from the graph, D101) |
 | [`fold_product_active.cypher`](../backend/queries/fold_product_active.cypher) | the people who authored or reviewed anything in a product: "works on the product" for the policy (the fold's context, D101) |
 | [`fold_product_prs.cypher`](../backend/queries/fold_product_prs.cypher) | a product's pull requests with author and reviewers: PR references resolve to them and the policy reads them (the fold's context, D101) |
+| [`forget_actions.cypher`](../backend/queries/forget_actions.cypher) | drafted actions that quote, target or answer a forgotten item lose their text; one not yet sent is withdrawn, so nothing quoting it leaves Yaan (F2, D125) |
+| [`forget_alerts.cypher`](../backend/queries/forget_alerts.cypher) | alerts a forgotten artifact raised lose its words, and an open one is withdrawn; their ids come back so their drafted actions follow (F2, D125) |
+| [`forget_artifacts.cypher`](../backend/queries/forget_artifacts.cypher) | delete forgotten artifacts with every edge they had; upsert_tombstones keeps a content-free record of each (F2, D125) |
+| [`forget_chunk_texts.cypher`](../backend/queries/forget_chunk_texts.cypher) | the search-chunk texts of the artifacts `forget` removes: the embedding cache is keyed by text, so their vectors leave it too (F2, D125) |
+| [`forget_chunks.cypher`](../backend/queries/forget_chunks.cypher) | delete the search chunks (text and vector) of forgotten artifacts (F2, D125) |
+| [`forget_dead_letters.cypher`](../backend/queries/forget_dead_letters.cypher) | dead letters keep a whole item for a retry: delete those of forgotten artifacts (F2, D125) |
+| [`forget_events.cypher`](../backend/queries/forget_events.cypher) | close the events extracted from forgotten artifacts and blank their words: the log keeps that they were believed and when, never what they said (F2, D125) |
+| [`forget_targets.cypher`](../backend/queries/forget_targets.cypher) | the artifacts `forget` removes: each one's kind and the products its fold must be rebuilt for (F2, D125) |
+| [`forgotten_ids.cypher`](../backend/queries/forgotten_ids.cypher) | which of these item ids were forgotten (have a Tombstone): a connector must not bring them back (F2, D125) |
 | [`get_alert.cypher`](../backend/queries/get_alert.cypher) | one alert with its facts, and the person who would respond to it (approver), before an approve or dismiss (11.4) |
 | [`get_artifact.cypher`](../backend/queries/get_artifact.cypher) | one artifact's full text, its channel, and its other quotable fields (PR reviews, doc feedback) from its chunks |
 | [`get_channel.cypher`](../backend/queries/get_channel.cypher) | one channel by id and its kind: the live path checks that a new message's channel exists before writing it (11.6), and reads what to extract from it (D116) |
@@ -208,13 +226,17 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`list_dead_letters.cypher`](../backend/queries/list_dead_letters.cypher) | the items connectors couldn't ingest, newest failure first, for status, retry and Graph health (H1, D107) |
 | [`list_indexes.cypher`](../backend/queries/list_indexes.cypher) | every index in the graph with its kind, options and build status (lore schema checks these against 00_schema.cypher) |
 | [`list_products.cypher`](../backend/queries/list_products.cypher) | every product with its codenames and how many artifacts it holds, for the UI's product picker |
+| [`name_mentions.cypher`](../backend/queries/name_mentions.cypher) | artifacts whose text still names a person (after erasure: listed for a human to review, never rewritten, since a name can be a namesake's) (F2, D125) |
 | [`outside_decisions.cypher`](../backend/queries/outside_decisions.cypher) | active dismissals decided by someone whose working group (CDLP community) is not among the groups of the people who did the work in the issue's area (11.5, D064); rows shaped like sentinel_changes |
 | [`outside_decisions_for.cypher`](../backend/queries/outside_decisions_for.cypher) | outside_decisions for the decision chains a fold just changed (the live path, D112): a dismissal decided outside the area's working group, found from the topic index |
 | [`people_by_role.cypher`](../backend/queries/people_by_role.cypher) | people with a role (from the org chart) who authored, spoke in or attended the product's artifacts, most active first |
 | [`person_activity.cypher`](../backend/queries/person_activity.cypher) | what one person did per product: artifacts authored, reviewed, attended or spoken in, by kind (tool 4 person_profile, R2) |
+| [`person_authored.cypher`](../backend/queries/person_authored.cypher) | every artifact a person wrote: what erasing them forgets (F2, D125) |
 | [`person_betweenness.cypher`](../backend/queries/person_betweenness.cypher) | FalkorDB's native betweenness centrality over COLLAB: the people who bridge otherwise separate groups (10.4, D064) |
 | [`person_communities.cypher`](../backend/queries/person_communities.cypher) | FalkorDB's native label propagation (CDLP) over COLLAB: the working groups people actually form, to compare with the org chart (10.4, D064) |
 | [`person_links.cypher`](../backend/queries/person_links.cypher) | around one person, one row per item: areas they know (KNOWS, best first), closest collaborators (COLLAB weight), open issues assigned to them, and their latest artifacts in the product as evidence (tool 4 person_profile, R2) |
+| [`person_mentions.cypher`](../backend/queries/person_mentions.cypher) | the artifacts that @-mention a person (the linker's MENTIONS edges), whose words erasing them rewrites (F2, D125) |
+| [`person_name.cypher`](../backend/queries/person_name.cypher) | one person's display name by id (erasure looks it up before deleting the node, to find plain-text mentions) (F2, D125) |
 | [`person_pagerank.cypher`](../backend/queries/person_pagerank.cypher) | FalkorDB's native PageRank over the COLLAB projection: well-connected people, the "connectors" who can route a question when an area has no expert left (10.4) |
 | [`person_profile.cypher`](../backend/queries/person_profile.cypher) | one person: role, location, org-chart team and manager, working-group community, and their PageRank / betweenness ranks over COLLAB (tool 4 person_profile, R2) |
 | [`person_radius.cypher`](../backend/queries/person_radius.cypher) | what depends on one person (11.5, D062): the areas they are the only author of, the people who also know those areas (backups) and their manager; one row per item in impact_of's shape |
@@ -240,6 +262,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`states_at.cypher`](../backend/queries/states_at.cypher) | the decisions in force at one moment for a product's issues and own PRs (valid_from_ms <= t < valid_to_ms, or still open): the as-of view of list_issues, list_prs and decision_lineage (R2) |
 | [`stuck_responses.cypher`](../backend/queries/stuck_responses.cypher) | responses claimed but never closed (the process stopped midway), with the writes they still owe (H2, D110) |
 | [`subject_product.cypher`](../backend/queries/subject_product.cypher) | the product an issue or pull request belongs to, for the API's lineage endpoint |
+| [`suppressed_ids.cypher`](../backend/queries/suppressed_ids.cypher) | which of these hashed person ids were erased: their items stay out (F2, D125) |
 | [`unlink_channel_members.cypher`](../backend/queries/unlink_channel_members.cypher) | a person left a private channel (or was removed): they stop seeing it (H1, D109) |
 | [`viewer_channels.cypher`](../backend/queries/viewer_channels.cypher) | the channels a person belongs to (they posted there), for viewer-scoped answers (W7) |
 | [`viewer_meetings.cypher`](../backend/queries/viewer_meetings.cypher) | the meetings a person attended or spoke in, for viewer-scoped answers (W7) |

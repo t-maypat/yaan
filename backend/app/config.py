@@ -109,6 +109,10 @@ class Settings(BaseSettings):
     lore_prices_file: Path | None = None
     # Public deployment guards (D081). Cache-only: replay cached answers, never call the API.
     lore_llm_cache_only: bool = False
+    # Org mode: LLM and embedding cache entries expire after this many days (D125), a bound on
+    # how long a copy of deleted words can outlive its source; `forget` clears the LLM cache at
+    # once. The demo's cache never expires: the eval replays its runs from it.
+    lore_cache_days: int = 30
     lore_ask_per_ip_per_day: int = 60  # /ask, per client IP when nobody is signed in, 24 h
     lore_ask_global_per_minute: int = 30  # /ask, all clients together: a swarm of many IPs
     lore_ask_concurrency: int = 4  # answers in flight at once; more get 503

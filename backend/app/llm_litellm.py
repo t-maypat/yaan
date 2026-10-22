@@ -237,7 +237,8 @@ def complete(
         request_id=getattr(response, "id", None),
     )
     if cache is not None:
-        cache.set(key, {k: v for k, v in result.__dict__.items() if k != "cached"})
+        entry = {k: v for k, v in result.__dict__.items() if k != "cached"}
+        cache.set(key, entry, expire=llm.cache_expiry())
     llm.log_call(purpose, result, elapsed_ms)
     return result
 
@@ -400,6 +401,7 @@ def converse(
         request_id=getattr(response, "id", None),
     )
     if cache is not None:
-        cache.set(key, {k: v for k, v in turn.__dict__.items() if k != "cached"})
+        entry = {k: v for k, v in turn.__dict__.items() if k != "cached"}
+        cache.set(key, entry, expire=llm.cache_expiry())
     llm.log_call(purpose, turn, elapsed_ms)
     return turn

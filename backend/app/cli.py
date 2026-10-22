@@ -707,11 +707,87 @@ def cmd_connectors(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_forget(args: argparse.Namespace) -> int:
+    """Remove items from Yaan for good (F2, D125): every copy of their words goes (text,
+    chunks, vectors, the words of their events, quotes in alerts and drafts, dead letters, the
+    LLM cache in org mode), the decisions are rebuilt without them, and a content-free
+    tombstone keeps each id so no sync brings it back. A dry run unless --yes."""
+    from app import db, forget
+    from app.sentinel import live
+
+    try:
+        graph = live.demo_graph(args.graph)
+        if not args.yes:
+            present = live.present_ids(graph, args.ids)
+            print(
+                f"dry run: {len(present)} of {len(args.ids)} items are in {graph!r}. With --yes "
+                "every copy of their words goes, their events are closed (not deleted), the "
+                "decisions are rebuilt without them, and a tombstone keeps each id so no sync "
+                "brings it back. This can't be undone.",
+                file=sys.stderr,
+            )
+            return 0
+        print(json.dumps(forget.forget(args.ids, graph, reason=args.reason), indent=1))
+        return 0
+    except (live.LiveError, db.LockBusy) as e:
+        print(f"yaan forget: {e}", file=sys.stderr)
+        return 1
+
+
+def cmd_erase(args: argparse.Namespace) -> int:
+    """Erase one person from Yaan (F2, D125): everything they wrote is forgotten, their node,
+    tokens and directory entry deleted, their @-mentions in others' words replaced, and a hash
+    of their id kept so their items stay out. Plain-text mentions of their name are listed for
+    review. A dry run unless --yes."""
+    from app import db, forget, org
+    from app.sentinel import live
+
+    try:
+        graph = live.demo_graph(args.graph)
+        want = args.person.strip().casefold()
+        found = sorted(
+            eid
+            for eid, p in org.directory(graph).items()
+            if want in (eid.casefold(), (p.get("name") or "").casefold(),
+                        (p.get("email") or "").casefold())
+        )
+        if len(found) != 1:
+            what = "nobody" if not found else f"{len(found)} people ({', '.join(found)})"
+            print(f"yaan erase: {what} in {graph!r} matches {args.person!r}", file=sys.stderr)
+            return 1
+        person = found[0]
+        if person in org.roster():
+            print(
+                f"yaan erase: {args.person!r} is listed in {org.PEOPLE_FILE.name}: remove the "
+                "entry first, or Yaan registers them again from it",
+                file=sys.stderr,
+            )
+            return 1
+        if not args.yes:
+            wrote = db.run_all("person_authored", {"id": person}, cap=200_000, graph=graph)
+            named = db.run_all("person_mentions", {"id": person}, cap=200_000, graph=graph)
+            print(
+                f"dry run: {person} wrote {len(wrote)} items and is @-mentioned in "
+                f"{len(named)}. With --yes the items are forgotten (yaan forget), the mentions "
+                "replaced, the person, their tokens and directory entry deleted, and their "
+                "items kept out from now on. This can't be undone.",
+                file=sys.stderr,
+            )
+            return 0
+        print(json.dumps(forget.erase_person(person, graph), indent=1))
+        return 0
+    except (live.LiveError, org.OrgError, db.LockBusy) as e:
+        print(f"yaan erase: {e}", file=sys.stderr)
+        return 1
+
+
 # command -> (help text, handler)
 COMMANDS = {
     "schema": ("create and verify the indexes for a graph (queries/00_schema.cypher)", cmd_schema),
     "init": ("org mode: create your graph, its product, channels and people (D097)", cmd_init),
     "token": ("org mode: issue or revoke a person's sign-in token (D100)", cmd_token),
+    "forget": ("remove items for good: every copy of their words, no re-sync (D125)", cmd_forget),
+    "erase": ("erase a person: what they wrote, their mentions, their account (D125)", cmd_erase),
     "belief": ("what Lore believed about an issue or PR at a moment (D101)", cmd_belief),
     "fetch-herb": ("download the HERB dataset (pinned revision) into data/herb", cmd_fetch_herb),
     "rank-dev": ("rank products by change signals to pick the dev products (D017)", cmd_rank_dev),
@@ -750,6 +826,17 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("subject", {"help": "an issue (iss:...) or PR (pr:...) id"}),
         ("--at", {"help": "ISO date or datetime (UTC): what Lore knew then; default now"}),
         ("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"}),
+    ],
+    "forget": [
+        ("ids", {"nargs": "+", "help": "item ids, e.g. msg:slack-C123-1730000000.000100"}),
+        ("--reason", {"default": "removed by an admin", "help": "kept on each tombstone"}),
+        ("--yes", {"action": "store_true", "help": "do it (default: a dry run)"}),
+        ("--graph", {"help": "default: LORE_ORG_GRAPH in org mode, else LORE_DEMO_GRAPH"}),
+    ],
+    "erase": [
+        ("person", {"help": "an eid_ id, a name or an email (quote a full name)"}),
+        ("--yes", {"action": "store_true", "help": "do it (default: a dry run)"}),
+        ("--graph", {"help": "default: LORE_ORG_GRAPH in org mode, else LORE_DEMO_GRAPH"}),
     ],
     "token": [
         ("action", {"choices": ("issue", "revoke", "list")}),

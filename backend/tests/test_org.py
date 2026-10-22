@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from app import db, org
+from app import db, forget, org
 from app.config import get_settings
 from app.connectors import base, runner
 from app.connectors.base import Item, Maps
@@ -222,6 +222,7 @@ def test_an_org_sync_prepares_the_graph_and_takes_unlabeled_items(org_mode, monk
     monkeypatch.setattr(runner, "prepare", lambda graph, connectors=None: prepared.append(graph))
     monkeypatch.setattr(runner, "deliver", lambda connectors, graph: ([], []))
     monkeypatch.setattr(live, "present_ids", lambda graph, ids: set())
+    monkeypatch.setattr(forget, "blocked", lambda artifacts, graph: {})
     monkeypatch.setattr(live, "derive_if_due", lambda graph: None)
     monkeypatch.setattr(
         live,
@@ -786,6 +787,7 @@ def test_people_met_at_once_by_two_writers_are_all_kept(org_mode, monkeypatch):
     import threading
 
     monkeypatch.setattr(db, "run", lambda *a, **k: None)
+    monkeypatch.setattr(forget, "suppressed", lambda people, graph: set())
     ids = [org.person_id("slack", f"U{n:03d}", f"Person {n}") for n in range(40)]
     threads = [threading.Thread(target=org.ensure_people, args=("g", ids[n::4])) for n in range(4)]
     for t in threads:

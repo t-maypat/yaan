@@ -376,6 +376,14 @@ def _cache():
     return Cache(str(get_settings().cache_dir / "llm"))
 
 
+def cache_expiry() -> float | None:
+    """Seconds a disk-cache entry lives: LORE_CACHE_DAYS in org mode, a bound on how long a copy
+    of a team's words can outlive its source (D125; `forget` also clears the cache at once);
+    forever in the demo, where the eval replays its runs from the cache for free."""
+    s = get_settings()
+    return s.lore_cache_days * 86_400 if s.lore_data_mode == "org" else None
+
+
 def request_key(model: str, payload: dict[str, Any]) -> str:
     blob = json.dumps({"v": SCHEMA_VERSION, "model": model, **payload}, sort_keys=True)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
@@ -467,7 +475,8 @@ def complete(
         request_id=getattr(response, "_request_id", None),
     )
     if cache is not None:
-        cache.set(key, {k: v for k, v in result.__dict__.items() if k != "cached"})
+        entry = {k: v for k, v in result.__dict__.items() if k != "cached"}
+        cache.set(key, entry, expire=cache_expiry())
     log_call(purpose, result, elapsed_ms)
     return result
 
@@ -608,7 +617,8 @@ def converse(
         request_id=getattr(response, "_request_id", None),
     )
     if cache is not None:
-        cache.set(key, {k: v for k, v in turn.__dict__.items() if k != "cached"})
+        entry = {k: v for k, v in turn.__dict__.items() if k != "cached"}
+        cache.set(key, entry, expire=cache_expiry())
     log_call(purpose, turn, elapsed_ms)
     return turn
 

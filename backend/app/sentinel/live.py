@@ -37,7 +37,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from app import db, llm, org
+from app import db, forget, llm, org
 from app.config import get_settings
 from app.ingest import chunk_embed, extract, fold, linker, structural
 from app.ingest import events as event_store
@@ -202,6 +202,9 @@ def _prepare(
     received_ms = int(time.time() * 1000)
     t0 = time.perf_counter()
     stages: dict[str, float] = {}
+    # forgotten, or by an erased person: never in again, and nobody registered for it (D125)
+    if why := forget.blocked([a], graph).get(a.id):
+        raise LiveError(f"{a.id!r} is not taken: {why}")
     if org.active():  # a team's own item: register the people it involves, then read the org
         org.ensure_people(graph, org.people_in(a))
         meta = org.metadata(graph)

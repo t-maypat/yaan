@@ -199,7 +199,10 @@ def _embed(texts: list[str], kind: str) -> list[list[float]]:
     # cut the CPU time a lot (mixed 20-800 char chunks embedded at ~6/s unsorted).
     todo = sorted((i for i, v in enumerate(vectors) if v is None), key=lambda i: len(texts[i]))
     if todo:
+        from app.llm import cache_expiry
+
         model = _model()
+        expire = cache_expiry()  # org mode: vectors of a team's words don't outlive them (D125)
         fresh_texts = [texts[i] for i in todo]
         if kind == "query":
             fresh = model.query_embed(fresh_texts)
@@ -207,7 +210,7 @@ def _embed(texts: list[str], kind: str) -> list[list[float]]:
             fresh = model.passage_embed(fresh_texts, batch_size=EMBED_BATCH)
         for i, vec in zip(todo, fresh, strict=True):
             vectors[i] = [float(x) for x in vec]
-            cache.set(keys[i], vectors[i])
+            cache.set(keys[i], vectors[i], expire=expire)
     dim = get_settings().lore_embed_dim
     if any(len(v) != dim for v in vectors):
         raise ValueError(f"embedding size differs from LORE_EMBED_DIM={dim}")
