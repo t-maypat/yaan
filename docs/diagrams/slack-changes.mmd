@@ -1,0 +1,11 @@
+%% How a Slack change reaches Yaan (Phase 20, D125-D126): replies, edits and deletions over the socket, a sweep for what was missed, deletions forgotten everywhere.
+flowchart TB
+  S["Slack: a new message, a thread reply,<br/>an edit or a deletion"]:::ext --> B["The bot hears it<br/>and queues it"]:::code
+  W["Yaan was down:<br/>the socket missed it"]:::human -.-> SW["The sweep, at start-up and daily:<br/>the last 14 days of Slack<br/>against the graph"]:::code
+  B --> R{"The next round<br/>(woken at once)"}:::code
+  SW --> R
+  R -->|new message or reply| IN["Ingested; a reply is read<br/>with its thread's root"]:::store
+  R -->|edited words| ED["Replaced: events the new<br/>words don't state are closed"]:::store
+  R -->|deleted| FG["forget: text, chunks, vectors,<br/>event words, quotes in alerts<br/>and drafts, dead letters"]:::guard
+  FG --> T["A tombstone: id, kind, when, why<br/>no sync brings it back"]:::guard
+  FG --> F["Fold again: decisions<br/>rebuilt without it"]:::code
