@@ -30,6 +30,8 @@ def ms(iso: str | None) -> int | None:
 
 class GitHubConnector:
     name = "github"
+    reads = ("pull requests", "reviews")  # not issues, comments or commits (README, D128)
+    writes = ("comments on the PR",)
 
     def __init__(
         self,

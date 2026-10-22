@@ -85,6 +85,9 @@ def iso(ms: int) -> str:
 
 class SlackConnector:
     name = "slack"
+    # what it brings in and sends out: the README's connector table must say exactly this (D128)
+    reads = ("messages", "thread replies", "edits and deletions", "`@yaan` questions")
+    writes = ("cited answers", "alerts", "Approve / Dismiss")
 
     def __init__(self, client: WebClient, graph: str, maps: Maps | None = None):
         self.client, self.graph = client, graph

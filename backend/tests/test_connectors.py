@@ -84,6 +84,7 @@ def offline(tmp_path, monkeypatch):
     monkeypatch.setattr(live, "live_dir", lambda graph: tmp_path / graph)
     monkeypatch.setattr(live, "present_ids", lambda graph, ids: set())
     monkeypatch.setattr(forget, "blocked", lambda artifacts, graph: {})  # nothing forgotten
+    monkeypatch.setattr(runner, "fold_times", lambda products, graph: {})
     monkeypatch.setattr(runner, "deliver", lambda connectors, graph: ([], []))
     monkeypatch.setattr(live, "derive_if_due", lambda graph: None)
     monkeypatch.setattr(live, "algorithms_if_due", lambda graph: None)
@@ -410,3 +411,17 @@ def test_a_tool_reads_several_repos_projects_or_pages_each_with_its_own_cursor(m
     jira = next(c for c in made if isinstance(c, JiraConnector))
     assert jira.key_of(base.synthetic_id("msg", "jira", "KAN-7-created")) == "KAN-7"
     assert jira.key_of(base.synthetic_id("msg", "jira", "OPS-7-created")) is None
+
+
+def test_a_slow_fold_is_said_out_loud_and_on_the_heartbeat(offline):
+    """Review F3: the fold re-reads a product's whole history every round. Until the
+    incremental fold (the review's Phase 1), a fold over FOLD_WARN_MS is a warning on the
+    heartbeat and /health, before the writer lock starves (D128)."""
+    quick = {"ingested": [{"product": "Widget", "fold_ms": 900}]}
+    slow = {"ingested": [*quick["ingested"], {"product": "Acme", "fold_ms": 31_000}]}
+    assert runner.slow_fold(quick) is None and runner.slow_fold({"ingested": []}) is None
+    said = runner.slow_fold(slow)
+    assert "Acme took 31 s" in said and "F3" in said
+    runner.beat("lore_demo", healthy=True, pause_s=30, warning=said)
+    beat = runner.worker_health("lore_demo")
+    assert beat["status"] == "ok" and beat["warning"] == said

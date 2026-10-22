@@ -48,6 +48,8 @@ def rich(parts: list[dict[str, Any]] | None) -> str:
 
 class NotionConnector:
     name = "notion"
+    reads = ("child pages of the pages you name", "page comments")  # README (D128)
+    writes = ("comments on the page",)
 
     def __init__(
         self,

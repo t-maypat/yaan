@@ -215,3 +215,64 @@ def test_comments_go_on_the_ticket(conn, monkeypatch):
 def test_adf_round_trip():
     assert jira.adf_text(doc("one", "two")) == "one\ntwo\n"
     assert jira.adf_text(jira.adf("a\n\nb")) == "a\nb\n"
+
+
+# --- any workflow, any language; the org's own conventions (F14, D128) ------------------------
+def test_jiras_done_category_decides_in_any_workflow_or_language():
+    # categories known: the names don't matter
+    assert jira.change_kind("En cours", "Erledigt", False, True) == "issue_resolved"
+    assert jira.change_kind("Review", "Shipped", False, True) == "issue_resolved"
+    assert jira.change_kind("Review", "Closed", False, True, "Won't Do") == "issue_dismissed"
+    assert jira.change_kind("Shipped", "Triage", True, False) == "issue_reopened"
+    assert jira.change_kind("Backlog", "Shipped-ish", False, False) is None
+    # unknown categories: the English names, as before
+    assert jira.change_kind("In Progress", "Done") == "issue_resolved"
+    assert jira.change_kind("Done", "Duplicate") == "issue_dismissed"
+
+
+def test_a_custom_done_status_is_read_from_its_category(conn, monkeypatch):
+    statuses = [
+        {"id": "3", "name": "Doing", "statusCategory": {"key": "indeterminate"}},
+        {"id": "77", "name": "Shipped", "statusCategory": {"key": "done"}},
+    ]
+    shipped = {
+        "id": "102",
+        "author": {"accountId": "acc-hannah"},
+        "created": "2027-03-13T00:55:20.000+0000",
+        "items": [
+            {"field": "status", "from": "3", "fromString": "Doing", "to": "77",
+             "toString": "Shipped"},
+        ],
+    }  # fmt: skip
+    transport = conn.http._transport
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/rest/api/3/status":
+            return httpx.Response(200, json=statuses)
+        if request.url.path.endswith("/changelog"):
+            return httpx.Response(200, json={"total": 1, "values": [shipped]})
+        return transport.handle_request(request)
+
+    conn.http._transport = httpx.MockTransport(handle)
+    items = conn.fetch(0)
+    kinds = [e["type"] for i in items for e in i.events or []]
+    assert kinds == ["issue_reported", "issue_resolved"]  # "Shipped" is in the done category
+
+
+def test_org_mode_names_customers_only_by_its_own_pattern_and_tracks_chosen_types(
+    conn, monkeypatch
+):
+    monkeypatch.setattr(jira.base, "is_demo", lambda: False)
+    (reported,) = conn.normalize(ISSUE, "bug-x")[0].events
+    assert reported["customer"] is None  # CUST-dddd is HERB's convention, not a team's
+    conn.maps.sources["jira"]["customer_pattern"] = r"\bCUST-\d{4}\b"
+    try:
+        (reported,) = conn.normalize(ISSUE, "bug-x")[0].events
+        assert reported["customer"] == "CUST-0003"
+        conn.maps.sources["jira"]["issue_types"] = ["Bug"]
+        story = {**ISSUE, "fields": {**ISSUE["fields"], "issuetype": {"name": "Story"}}}
+        items = conn.normalize(story, "bug-x")
+        assert all(not i.events for i in items)  # read, but no status events for a story
+    finally:
+        conn.maps.sources["jira"].pop("customer_pattern", None)
+        conn.maps.sources["jira"].pop("issue_types", None)

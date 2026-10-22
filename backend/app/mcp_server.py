@@ -32,9 +32,19 @@ EXCLUDED = frozenset({"graph_query"})  # raw Cypher stays behind the agent's gua
 ASK_PER_MINUTE = 10  # stdio and anonymous clients together; signed-in people: their own
 PRODUCT = {
     "type": "string",
-    "description": "a product id such as VizForce; resolve_entity maps product names and "
+    "description": "a product id (the demo's include VizForce); resolve_entity maps names and "
     "codenames to ids",
 }
+# What a client is told the graph holds (D128): the demo's synthetic company, or a team's own
+# tools in org mode, which hold no HERB data and must never be described as if they did.
+ORG_INSTRUCTIONS = (
+    "Yaan is a time-aware graph of your team's own tools (Slack, GitHub, Jira, Notion and the "
+    "others connected): messages, pull requests, tickets and pages, linked to people, issues "
+    "and decisions with validity windows. Every tool is read-only and returns artifact ids "
+    "with their text: cite those ids for any claim. Results are limited to what the signed-in "
+    "person may read. Most tools need a product_id (resolve_entity finds it). `ask` returns a "
+    "complete answer whose quotes Yaan has already checked word for word against the sources."
+)
 INSTRUCTIONS = (
     "Lore is a time-aware graph of a software company's Slack messages, meetings, documents "
     "and pull requests, linked to people, customers, issues and decisions with validity "
@@ -43,6 +53,10 @@ INSTRUCTIONS = (
     "Most tools need a product_id (resolve_entity finds it). `ask` returns a complete answer "
     "whose quotes Lore has already checked word for word against the sources."
 )
+def instructions() -> str:
+    return ORG_INSTRUCTIONS if get_settings().lore_data_mode == "org" else INSTRUCTIONS
+
+
 ASK = types.Tool(
     name="ask",
     description=(
@@ -58,7 +72,7 @@ ASK = types.Tool(
             "question": {"type": "string", "description": "the question, 3-500 characters"},
             "product_id": {
                 "type": "string",
-                "description": "the product the question is about (recommended), e.g. VizForce",
+                "description": "the product the question is about (recommended)",
             },
             "as_of": {
                 "type": "string",
@@ -212,7 +226,7 @@ def build(graph_name: str | None = None) -> Server:
         version=__version__,
         title="Lore",
         description="A time-aware company brain on FalkorDB: answers with verbatim sources.",
-        instructions=INSTRUCTIONS,
+        instructions=instructions(),
         on_list_tools=list_tools,
         on_call_tool=call_tool,
     )

@@ -26,12 +26,13 @@ Ask what's true now, what was true then, why, and who knows, with a word-for-wor
 
 Search finds the message that said "fixed". It doesn't know the bug came back. Yaan keeps every fact with the time it was true, who decided it and the quote that proves it, in a [FalkorDB](https://github.com/FalkorDB/FalkorDB) graph.
 
-- **True now, and true then.** Each status is a decision with a start and an end. "Is it fixed?" and "was it fixed on 7 January?" are one lookup. Nothing is deleted: a new fact closes the old one's window.
+- **True now, and true then.** Each status is a decision with a start and an end. "Is it fixed?" and "was it fixed on 7 January?" are one lookup. A new fact closes the old one's window instead of deleting it.
 - **Answers that live in the links.** "Which company has the most unresolved bugs?" is a count over customers, companies and issues, not a guess from ten text chunks.
 - **Who really knows.** Authorship, PageRank, betweenness and communities, computed natively in FalkorDB, find the real expert behind the listed owner.
 - **A quote or nothing.** Every sentence cites a word-for-word quote from its source, checked in code before you see it. With no quote, Yaan says "not found". The check proves the words are in the source and on topic; it does not prove the sentence follows from them.
 - **What it tracks today.** The decisions Yaan folds are engineering ones: the status of each issue (reported, resolved, dismissed, reopened) and what the team said to do with each pull request (merge, close, hold, revert), plus who knows what. Other kinds of decisions are on the roadmap.
-- **Runs on your servers.** Your data stays in your network; the only outside call is to the AI model you choose, with your own key and a hard daily spend cap.
+- **Runs on your servers.** Your data stays in your network. The outside calls are to the AI model, with your own key and hard daily spend caps (Anthropic is tested; other providers through LiteLLM are experimental), and a one-time download of the local embedding model.
+- **Forgets on request.** A message deleted in Slack leaves Yaan too, and `yaan forget` and `yaan erase` remove an item or a person everywhere Yaan copied their words, keeping only a record that something was removed.
 
 ## Quickstart
 
@@ -79,10 +80,10 @@ docker compose --profile app exec api yaan token revoke "Priya Shah"
 
 | Tool | In | Out, once you approve |
 |---|---|---|
-| Slack | messages, `@yaan` questions | cited answers, alerts, Approve / Dismiss |
-| GitHub | pull requests, reviews, issues | comments on the PR or issue |
+| Slack | messages, thread replies, edits and deletions, `@yaan` questions | cited answers, alerts, Approve / Dismiss |
+| GitHub | pull requests, reviews | comments on the PR |
 | Jira | tickets, status changes, comments | comments on the ticket |
-| Notion | pages, page comments | comments on the page |
+| Notion | child pages of the pages you name, page comments | comments on the page |
 
 Linear, GitLab, Confluence, Google Drive, Gmail, Google Meet, Zoom and Discord have experimental connectors. Step-by-step setup: [connectors guide](backend/app/connectors/README.md).
 
@@ -167,8 +168,8 @@ Built for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB): **Tra
 - **Data quality:** no LLM output enters the graph unverified (487/488 extracted quotes matched on held-out); a policy decides who may change a status; a health report counts isolated nodes, duplicate ids and unresolved mentions.
 - **Scale and latency:** product-scoped, index-first queries; bounded paths, `LIMIT` on every read, 2 s timeouts; 5–27 ms p50 per tool on 38.5k nodes and 96k edges.
 - **Explainability:** a verbatim, code-checked quote per sentence; the UI shows the tool walk, each step's `.cypher`, the evidence subgraph and the decision timeline.
-- **Privacy and multi-tenancy:** viewer-scoped answers redact sources before the model reads them, and derived facts (an issue, a decision) are visible only if one of their sources is; with your own data every request answers as a signed-in person; generated Cypher runs as a read-only ACL user.
-- **Freshness:** a new message, PR, ticket or page is in the graph and judged by the Sentinel in 1.5–12 s.
+- **Privacy:** viewer-scoped answers redact sources after retrieval and before the model reads them, and derived facts (an issue, a decision) are visible only if one of their sources is; with your own data every request answers as a signed-in person; generated Cypher runs as a read-only ACL user. Slack private channels follow Slack's membership; every other tool declares one audience for all its items. One organisation per deployment.
+- **Freshness:** Slack messages arrive over its socket; the other tools are polled every 30 s. Once an item arrives, it is in the graph and judged by the Sentinel in 1.5–12 s, measured at the demo's size.
 
 **Track 01:** the Sentinel drafts follow-ups from the blast radius and sends them to Jira, GitHub, Notion and Slack once approved; `rank`, `who_knows`, `find_missing`, `impact_of` and `connection_path` are graph algorithms exposed as agent tools, also over MCP.
 

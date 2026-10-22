@@ -155,7 +155,7 @@ cd yaan</code></pre>
             <li>Install the app. Put the bot token in <code>SLACK_BOT_TOKEN</code>.</li>
             <li>Invite the app to your channels.</li>
           </ol>
-          <p class="card-in">In: messages, and questions that mention the app. Out: answers, alerts, Approve.</p>
+          <p class="card-in">In: messages, thread replies, edits and deletions, and questions that mention the app. Out: answers, alerts, Approve.</p>
         </article>
         <article class="card-tool">
           <header><span class="glyph" style="--icon:url(assets/icons/color/github.svg);--icon-d:url(assets/icons/color/github-d.svg)"></span><h3>GitHub</h3><span class="mins">5 min</span></header>
@@ -164,7 +164,7 @@ cd yaan</code></pre>
             <li>Give it read and write access to Contents, Pull requests and Issues.</li>
             <li>Put the token in <code>GITHUB_TOKEN</code>. Put <code>owner/name</code> in <code>GITHUB_REPO</code>.</li>
           </ol>
-          <p class="card-in">In: pull requests, reviews, issues. Out: comments.</p>
+          <p class="card-in">In: pull requests and reviews. Out: comments on the PR.</p>
         </article>
         <article class="card-tool">
           <header><span class="glyph" style="--icon:url(assets/icons/color/jira.svg)"></span><h3>Jira</h3><span class="mins">10 min</span></header>
@@ -182,7 +182,7 @@ cd yaan</code></pre>
             <li>Put its secret in <code>NOTION_TOKEN</code>.</li>
             <li>Connect the integration to your page. Put the page ID in <code>NOTION_PAGE_ID</code>.</li>
           </ol>
-          <p class="card-in">In: pages and comments. Out: comments.</p>
+          <p class="card-in">In: child pages of the pages you name, and their comments. Out: comments.</p>
         </article>
       </div>
       <h3 class="h3-doc">Start the connectors</h3>

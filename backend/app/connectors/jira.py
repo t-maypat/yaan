@@ -4,9 +4,15 @@ HERB has no tracker, so Lore extracts issue states from chat with an LLM. A trac
 them outright: each ticket becomes messages in the bug channel the project maps to, with
 deterministic events, so no LLM reads them (the live path still checks every quote):
 - the ticket's creation -> `issue_reported` (title, component, customer, assignee);
-- a status change -> `issue_resolved` (to Done, Resolved, Closed…), `issue_dismissed` (to
-  Won't Do, Declined…), `issue_reopened` (out of either), decided by whoever changed it;
+- a status change -> `issue_resolved` (into a status of Jira's "done" category),
+  `issue_dismissed` (the same, with a resolution or status like Won't Do, Declined…),
+  `issue_reopened` (out of "done"), decided by whoever changed it. The category holds for any
+  workflow and language (D128); the English status names are the fallback when the categories
+  can't be read;
 - a comment -> a message the extractor reads like any other ("it broke again").
+Org mode (D128): a ticket names a customer only by the `customer_pattern` connectors.yaml gives
+(HERB's CUST-dddd is the demo's), and `issue_types` (e.g. [Bug, Incident]) limits which tickets
+are issues; the others come in as plain messages, with no status events.
 Out: a ticket comment on an issue a Jira ticket reported, or any draft aimed at a ticket's
 message, becomes a comment on the ticket.
 """
@@ -70,20 +76,31 @@ def adf(text: str) -> dict[str, Any]:
     }
 
 
-def change_kind(old: str | None, new: str | None) -> str | None:
-    """The issue event a status change states, if any."""
+def change_kind(
+    old: str | None,
+    new: str | None,
+    old_done: bool | None = None,
+    new_done: bool | None = None,
+    resolution: str | None = None,
+) -> str | None:
+    """The issue event a status change states, if any. `old_done` / `new_done`: whether each
+    status is in Jira's "done" category (None: unknown, so its name decides); `resolution`:
+    the resolution set in the same change, which tells a dismissal from a fix."""
     o, n = (old or "").strip().lower(), (new or "").strip().lower()
-    if n in DONE:
-        return "issue_resolved"
-    if n in DISMISSED:
-        return "issue_dismissed"
-    if o in DONE | DISMISSED:
+    r = (resolution or "").strip().lower()
+    into = new_done if new_done is not None else n in DONE | DISMISSED
+    out_of = old_done if old_done is not None else o in DONE | DISMISSED
+    if into:
+        return "issue_dismissed" if n in DISMISSED or r in DISMISSED else "issue_resolved"
+    if out_of:
         return "issue_reopened"
     return None
 
 
 class JiraConnector:
     name = "jira"
+    reads = ("tickets", "status changes", "comments")  # the README's table says this (D128)
+    writes = ("comments on the ticket",)
 
     def __init__(
         self,
@@ -99,6 +116,7 @@ class JiraConnector:
         self.maps = maps or base.maps()
         self.channel = self.maps.source("jira").get("channel")
         self._own: str | None = None
+        self._done: dict[str, bool] | None = None  # status id -> in the "done" category
         self.http = client or httpx.Client(
             base_url=base_url.rstrip("/"),
             auth=(email, token),
@@ -151,7 +169,8 @@ class JiraConnector:
         while True:
             params = {
                 "jql": jql + " ORDER BY created ASC",
-                "fields": "summary,description,status,assignee,reporter,components,created,updated",
+                "fields": "summary,description,status,assignee,reporter,components,created,"
+                "updated,issuetype",
                 "maxResults": 50,
             }
             if token:
@@ -162,6 +181,38 @@ class JiraConnector:
             token = page.get("nextPageToken")
             if page.get("isLast", True) or not token:
                 return items
+
+    def done_statuses(self) -> dict[str, bool]:
+        """Status id -> whether it is in Jira's "done" category, read once (D128). Empty when
+        Jira won't say: the status names decide then."""
+        if self._done is None:
+            try:
+                found = self._req("GET", "/rest/api/3/status")
+            except ConnectorError:
+                found = []
+            self._done = {
+                str(st["id"]): (st.get("statusCategory") or {}).get("key") == "done"
+                for st in found or []
+                if isinstance(st, dict) and "id" in st
+            }
+        return self._done
+
+    def customer_pattern(self) -> re.Pattern[str] | None:
+        """How a ticket names a customer: connectors.yaml's `customer_pattern`, else HERB's
+        CUST-dddd in the demo and none in org mode (D128)."""
+        given = self.maps.source("jira").get("customer_pattern")
+        if given:
+            return re.compile(str(given))
+        return CUSTOMER if base.is_demo() else None
+
+    def is_issue(self, fields: dict[str, Any]) -> bool:
+        """Whether a ticket is an issue Yaan tracks (connectors.yaml `issue_types`; all by
+        default). A story or a task can be just a ticket: read, but no status events."""
+        kinds = self.maps.source("jira").get("issue_types")
+        if not kinds:
+            return True
+        name = ((fields.get("issuetype") or {}).get("name") or "").casefold()
+        return name in {str(k).casefold() for k in kinds}
 
     def _paged(self, path: str) -> list[dict[str, Any]]:
         out, start = [], 0
@@ -207,7 +258,9 @@ class JiraConnector:
             else None
         )
         component = (f.get("components") or [{}])[0].get("name") if f.get("components") else None
-        customers = CUSTOMER.findall(description)
+        pattern = self.customer_pattern()
+        customers = pattern.findall(description) if pattern else []
+        tracked = self.is_issue(f)
         created = ms(f["created"])
         head = f"Jira {key} '{title}'" + (f" (component: {component})" if component else "")
         text = (
@@ -229,17 +282,30 @@ class JiraConnector:
                 person=assignee,
             )
         ]
-        items = [Item(a, updated_ms=created, events=events)]
+        items = [Item(a, updated_ms=created, events=events if tracked else [])]
         comments = self._paged(f"/rest/api/3/issue/{key}/comment")
         # PR links the ticket itself gives, in time order: a resolution names the latest one
         mentions = [(created, u) for u in PR_URL.findall(description)]
         for c in comments:
             mentions += [(ms(c["created"]), u) for u in PR_URL.findall(adf_text(c.get("body")))]
         mentions.sort()
-        for h in self._paged(f"/rest/api/3/issue/{key}/changelog"):
-            for change in h.get("items") or []:
-                kind = change_kind(change.get("fromString"), change.get("toString"))
-                if change.get("field") != "status" or not kind:
+        done = self.done_statuses()
+        for h in self._paged(f"/rest/api/3/issue/{key}/changelog") if tracked else []:
+            changes = h.get("items") or []
+            resolution = next(
+                (c.get("toString") for c in changes if c.get("field") == "resolution"), None
+            )
+            for change in changes:
+                if change.get("field") != "status":
+                    continue
+                kind = change_kind(
+                    change.get("fromString"),
+                    change.get("toString"),
+                    done.get(str(change.get("from"))),
+                    done.get(str(change.get("to"))),
+                    resolution,
+                )
+                if not kind:
                     continue
                 by = h.get("author") or {}
                 who = self.who(by.get("accountId"), name=by.get("displayName"))

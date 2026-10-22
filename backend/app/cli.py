@@ -692,6 +692,14 @@ def cmd_connectors(args: argparse.Namespace) -> int:
                     f"${out['worst_case_usd']:.2f}; add --yes to ingest it",
                     file=sys.stderr,
                 )
+                for product, secs in out.get("fold_s", {}).items():
+                    if secs * 1000 > runner.FOLD_WARN_MS:
+                        print(
+                            f"warning: one fold of {product} already takes {secs:.0f} s, and "
+                            "every round that touches it pays that under the writer lock; a "
+                            "longer history makes it slower (review F3)",
+                            file=sys.stderr,
+                        )
             return 0
         if args.action == "status":
             mode = "demo" if base.is_demo() else "org"

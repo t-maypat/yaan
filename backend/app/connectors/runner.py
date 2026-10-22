@@ -69,6 +69,10 @@ MAX_BATCH = 200  # items per live batch; state is saved after each (D114)
 EXTRACT_WORKERS = 4  # items extracted at once within a batch
 KEEP_SEEN_MS = 86_400_000  # versions remembered a day behind the cursor: more than any re-read
 MAX_PAUSE_S = 900  # the longest wait between failing rounds
+# The fold re-reads a product's whole history and matches events to issues pairwise (review
+# F3: 47 s at 2,000 chat-named issues). The incremental fold is the review's Phase 1; until
+# then a slow fold is said out loud, on the heartbeat and /health, before the lock starves.
+FOLD_WARN_MS = 15_000
 SWEEP_EVERY_MS = 86_400_000  # a connector's reconciliation sweep, besides each process's first
 _swept: set[str] = set()  # the connectors this process has swept (its first round sweeps)
 
@@ -200,6 +204,8 @@ def sync(
                         "source": c.name,
                         "alerts": [x["id"] for x in out["alerts"]],
                         "freshness_lag_ms": out["freshness_lag_ms"],
+                        "fold_ms": (out.get("stages_ms") or {}).get("s7_s8_resolve_fold", 0),
+                        "product": a.product_hint,
                     }
                 )
             mine["seen"][a.id] = item.updated_ms
@@ -247,13 +253,16 @@ def backfill(
     graph = live.demo_graph(graph)
     since = int(time.time() * 1000) - int(days * 86_400_000)
     report: dict[str, Any] = {"graph": graph, "since_ms": since, "sources": {}}
+    products: set[str] = set()
     for c in connectors:
         items = c.fetch(since)
+        products |= {i.artifact.product_hint for i in items}
         arts = sorted((i.artifact for i in items if i.events is None), key=lambda a: a.ts_ms or 0)
         report["sources"][c.name] = {"items": len(items), **live.estimate_extraction(arts, graph)}
     totals = report["sources"].values()
     report["expected_usd"] = round(sum(s["expected_usd"] for s in totals), 4)
     report["worst_case_usd"] = round(sum(s["worst_case_usd"] for s in totals), 4)
+    report["fold_s"] = fold_times(products, graph)  # today's; a backfill only adds to it
     if not spend:
         return report
     state = load_state(graph)
@@ -263,6 +272,31 @@ def backfill(
     save_state(graph, state)
     report["sync"] = sync(connectors, graph)
     return report
+
+
+def fold_times(products: set[str], graph: str) -> dict[str, float]:
+    """How long one fold of each product takes now, without writing (review F3): each round
+    that touches a product pays it under the writer lock, and more history only adds to it."""
+    from app.ingest import events as event_store
+    from app.ingest import fold
+
+    out = {}
+    for product in sorted(products & set(event_store.products(graph))):
+        t0 = time.perf_counter()
+        fold.fold_product(product, graph, apply=False)
+        out[product] = round(time.perf_counter() - t0, 2)
+    return out
+
+
+def slow_fold(report: dict[str, Any]) -> str | None:
+    """A warning when this round's slowest fold passed FOLD_WARN_MS, else None."""
+    slow = max(report["ingested"], key=lambda r: r.get("fold_ms") or 0, default=None)
+    if not slow or (slow.get("fold_ms") or 0) <= FOLD_WARN_MS:
+        return None
+    return (
+        f"the fold of {slow.get('product')} took {slow['fold_ms'] / 1000:.0f} s, over "
+        f"{FOLD_WARN_MS // 1000} s: a long history slows every round (review F3)"
+    )
 
 
 def record_dead(graph: str, source: str, item: Item, error: BaseException, attempts: int) -> None:
@@ -503,23 +537,26 @@ def run_forever(graph: str | None = None, every_s: float = 30, say=print) -> Non
     pause = every_s
     while True:
         try:
-            waiting = one_round(connectors, graph, bot, say)
+            waiting, slow = one_round(connectors, graph, bot, say)
         except Exception as e:  # anything at all: reported and retried, never the end of the loop
             say(f"round failed: {why(e)}")
-            waiting = [f"round failed: {why(e)}"]
+            waiting, slow = [f"round failed: {why(e)}"], None
         healthy = not waiting
         pause = every_s if healthy else min(pause * 2, MAX_PAUSE_S)
-        beat(graph, healthy, pause, waiting[0] if waiting else None)
+        beat(graph, healthy, pause, waiting[0] if waiting else None, slow)
         if not healthy:
             say(f"next round in {pause:g} s")
         wake.wait(pause)
         wake.clear()
 
 
-def one_round(connectors: list[Connector], graph: str, bot: Any, say=print) -> list[str]:
+def one_round(
+    connectors: list[Connector], graph: str, bot: Any, say=print
+) -> tuple[list[str], str | None]:
     """One sync round, said out loud, then the Slack cards of new alerts. Returns why items
     or tools had to wait, empty when nothing did (the pause between rounds grows while rounds
-    keep waiting, and the heartbeat says why: e.g. the spend cap pausing extraction)."""
+    keep waiting, and the heartbeat says why: e.g. the spend cap pausing extraction), and a
+    warning when a fold was slow."""
     from app.sentinel import approve, engine
 
     for alert_id in approve.complete_stuck(graph):  # responses a stopped process left (D110)
@@ -547,14 +584,22 @@ def one_round(connectors: list[Connector], graph: str, bot: Any, say=print) -> l
                 carded[alert["id"]] = bot.post_card(base.public_alert(alert, graph))
                 say(f"card {alert['id']}")
         save_state(graph, state)
-    return sorted({f"{r['source']}: {r['why']}" for r in report["waiting"]})
+    if slow := slow_fold(report):
+        say(f"warning: {slow}")
+    return sorted({f"{r['source']}: {r['why']}" for r in report["waiting"]}), slow
 
 
 HEARTBEAT = "heartbeat.json"
 HEARTBEAT_GRACE_MS = 120_000  # a round may run this long past its announced time
 
 
-def beat(graph: str, healthy: bool, pause_s: float, waiting: str | None = None) -> None:
+def beat(
+    graph: str,
+    healthy: bool,
+    pause_s: float,
+    waiting: str | None = None,
+    warning: str | None = None,
+) -> None:
     """After every round: when it ended, whether it was clean (else why something waited),
     and when the next one is due. `yaan connectors health` (the worker's healthcheck) and the
     API's /health read it."""
@@ -562,6 +607,8 @@ def beat(graph: str, healthy: bool, pause_s: float, waiting: str | None = None) 
     body = {"at_ms": now, "healthy": healthy, "next_by_ms": now + int(pause_s * 1000)}
     if waiting:
         body["waiting"] = waiting[:300]
+    if warning:  # healthy, but heading for trouble (a slow fold)
+        body["warning"] = warning[:300]
     filestate.write(live.live_dir(graph) / HEARTBEAT, body)
 
 
@@ -580,4 +627,6 @@ def worker_health(graph: str, now_ms: int | None = None) -> dict[str, Any]:
     out = {"status": status, "last_round_ms": beat_["at_ms"], "next_by_ms": beat_["next_by_ms"]}
     if status == "waiting" and beat_.get("waiting"):
         out["why"] = beat_["waiting"]  # e.g. "slack: SpendCapReached: ...": extraction paused
+    if status != "stale" and beat_.get("warning"):
+        out["warning"] = beat_["warning"]
     return out

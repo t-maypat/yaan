@@ -4,14 +4,38 @@ What changed between versions, newest first. Yaan is 0.x: settings and the graph
 
 ## Unreleased
 
-Hardening after the post-event review (docs/hardening-plan.md).
+### Running Yaan on a team's own data (22 Oct)
 
-### Changed
+Fixes for what stopped a pilot on an organisation's own tools.
+
+#### Added
+- Slack thread replies, edits and deletions now reach Yaan: replies are read with their thread, an edit closes what the old words said, and a deleted message leaves Yaan. In org mode, a daily sweep (and one at start-up) catches up on what the socket missed while Yaan was down; `yaan connectors reconcile --days N` runs it on demand.
+- `yaan forget <ids>` removes items, and `yaan erase <person>` a person, everywhere Yaan copied their words: text, search chunks and vectors, extracted events, quotes in alerts and drafts, dead letters, caches. A content-free tombstone stops any sync from bringing them back. Both are dry runs without `--yes`.
+- Org mode builds who-works-with-whom, PageRank, communities and team activity every hour, from threads and conversations everyone may read, so a private channel never shows who talks in it. `people.yaml` takes an optional `team:` per person.
+- Per-person budgets in org mode: answers may use at most half the daily cap (`LORE_ANSWER_SPEND_CAP_USD`), so reading new items keeps the rest, and each person's answers at most `LORE_PERSON_SPEND_CAP_USD` ($0.25) a day.
+- Jira: `customer_pattern` and `issue_types` in `connectors.yaml`.
+
+#### Changed
+- Question and request limits count the signed-in person, not the address: a team behind one office address or proxy no longer shares six questions a minute. MCP and Slack questions have the same per-person limits.
+- The request limit no longer counts the web UI's own files.
+- Jira decides "resolved" from a status's category rather than its English name, so custom workflows and other languages work; a Won't Do resolution dismisses.
+- Org mode no longer reads HERB's `CUST-0000` customer ids from tickets, and the MCP server no longer tells clients an org's graph is HERB.
+- `/health` says why the connector worker waits (for example, the spend cap pausing extraction) and warns when a product's fold takes over 15 s.
+- The README and site say what each connector actually reads: GitHub brings in pull requests and reviews, not issues.
+- Sign-in tokens and the people directory are written under a lock: concurrent requests no longer fail or corrupt `tokens.json`, and a revoked token stays revoked.
+
+#### Upgrading
+- Behind a reverse proxy in Docker, set `FORWARDED_ALLOW_IPS=*` in `.env` so anonymous visitors are told apart (the port is published on 127.0.0.1 only).
+- Org mode: cache entries now expire after `LORE_CACHE_DAYS` (30). The demo's cache never expires.
+
+### Hardening after the post-event review (docs/hardening-plan.md)
+
+#### Changed
 - Expertise, precedents, company-use and key-person alerts are rebuilt at most every five minutes after new data, instead of on every message; regressions, reversals and conflicts are still flagged on the message itself.
 - The site and README state counts that a test now checks against the code (queries, agent tools, MCP tools), mark the eight connectors not yet run against the live tools as experimental, and say what the citation check does and doesn't prove. The HERB paper's agent is shown as context, not as a head-to-head.
 - The README says which decisions Yaan tracks today: issue status and pull-request intent.
 
-### Upgrading
+#### Upgrading
 - Connectors now run in their own container: `docker compose --profile app --profile connectors up -d` replaces `docker compose exec -d api yaan connectors run`.
 - Run `yaan schema` once on an existing graph: it adds the index the live linker now uses to find already-loaded pull requests and documents by url.
 - Org mode: every source other than Slack needs `visibility: everyone` or `visibility: members` (with `members:`) in `connectors.yaml`; `yaan init` says which is missing. Slack's private channels and members are now read from Slack, so a private Slack channel needs a Yaan channel of its own.
@@ -20,7 +44,7 @@ Hardening after the post-event review (docs/hardening-plan.md).
 - `yaan seed` checks the snapshot's sha256 against `snapshots/SHA256SUMS`; pass `--unpinned` for a snapshot you made yourself.
 - The containers no longer run as root. On Linux, `./data` must be writable by uid 10001 (`sudo chown -R 10001:10001 data`), or set `LORE_UID` and `LORE_GID` in `.env` to its owner. The container says so at start if it isn't. Docker Desktop needs nothing.
 
-### Added
+#### Added
 - `yaan export` writes a graph to plain JSON lines and `yaan import` loads one into a new graph: the graph leaves Yaan in a format any tool reads.
 - One install reads several GitHub repositories, Jira projects or Notion pages (`repos:`, `projects:`, `pages:` in `connectors.yaml`), each with its own cursor.
 - Org mode answers with a prompt that leaves out the demo dataset's conventions; the demo and the evaluation keep theirs, unchanged.
@@ -37,7 +61,7 @@ Hardening after the post-event review (docs/hardening-plan.md).
 - CI: lint, tests without a database, the full suite on FalkorDB, and the web build.
 - SECURITY.md: how to report a vulnerability privately.
 
-### Fixed
+#### Fixed
 - An answer could state a number none of its sources held (a count, a day). The citation check now drops such a sentence.
 - Rebuilding expertise, precedents and company-use emptied them first, so an answer during a rebuild could find none. They are now replaced in place.
 - An approval interrupted midway left an approved alert with a half-written decision. Responses are now claimed with all their writes and finished on restart; drafts are sent only once their response is complete.

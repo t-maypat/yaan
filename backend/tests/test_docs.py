@@ -105,3 +105,23 @@ def test_the_query_list_is_complete():
     script = Path(__file__).resolve().parents[2] / "scripts" / "query_table.py"
     done = subprocess.run([sys.executable, str(script), "--check"], capture_output=True, text=True)
     assert done.returncode == 0, done.stderr
+
+
+def test_the_readme_says_what_each_connector_reads_and_writes():
+    """The README once said GitHub brought in issues and Slack all messages, while the code read
+    pull requests only and top-level messages only (review F13, D128). Each connector states
+    what it reads and writes in code; its row in the README's table must say exactly that."""
+    from app.connectors.github import GitHubConnector
+    from app.connectors.jira import JiraConnector
+    from app.connectors.notion import NotionConnector
+    from app.connectors.slack import SlackConnector
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    rows = {
+        m["tool"]: (m["into"], m["out"])
+        for m in re.finditer(r"^\| (?P<tool>\w+) \| (?P<into>[^|]+) \| (?P<out>[^|]+) \|$",
+                             readme, re.MULTILINE)
+    }  # fmt: skip
+    for tool, c in (("Slack", SlackConnector), ("GitHub", GitHubConnector),
+                    ("Jira", JiraConnector), ("Notion", NotionConnector)):  # fmt: skip
+        assert rows[tool] == (", ".join(c.reads), ", ".join(c.writes)), tool

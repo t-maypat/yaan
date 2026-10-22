@@ -184,3 +184,17 @@ def test_a_signed_in_clients_questions_count_against_their_person(monkeypatch):
         mcp_server.run("ask", {"question": "Who fixed it?"}, "g", viewer="eid_0000beef")
     mcp_server.run("ask", {"question": "Who fixed it?"}, "g", viewer="eid_12345678")
     assert payers == ["eid_0000beef", "eid_12345678"]
+
+
+def test_an_org_graph_is_never_described_as_herb(monkeypatch):
+    from app.config import get_settings
+
+    assert "HERB" in mcp_server.instructions()  # the demo says what it is
+    monkeypatch.setenv("LORE_DATA_MODE", "org")
+    get_settings.cache_clear()
+    try:
+        said = mcp_server.instructions()
+        assert "HERB" not in said and "synthetic" not in said and "your team's own" in said
+    finally:
+        monkeypatch.delenv("LORE_DATA_MODE")
+        get_settings.cache_clear()

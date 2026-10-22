@@ -668,6 +668,8 @@ def health(response: Response) -> dict[str, str]:
     worker = beat["status"]
     if beat.get("why"):  # say why rounds wait (e.g. the spend cap pausing extraction, D124)
         worker = f"{worker}: {beat['why']}"[:200]
+    elif beat.get("warning"):  # e.g. a slow fold (review F3, D128)
+        worker = f"{worker}, warning: {beat['warning']}"[:200]
     try:
         db.client(readonly=True).connection.ping()
     except Exception as e:  # down, wrong password, users missing: all mean "not serving"
