@@ -211,6 +211,7 @@ def sync(
         save_state(graph, state)
     report["sent"], report["unsent"] = deliver(connectors, graph)
     report["derived"] = live.derive_if_due(graph)  # the derived layer, if a write made it due
+    report["algorithms"] = live.algorithms_if_due(graph)  # org mode, hourly (D127)
     return report
 
 

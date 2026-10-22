@@ -74,7 +74,8 @@ def roster() -> dict[str, dict[str, Any]]:
 
 def parse_roster(path: Path) -> dict[str, dict[str, Any]]:
     """{eid: person} from a people.yaml. Each entry: name (required), email, role, location,
-    org, id (optional, `eid_` + 8 hex digits), accounts ({tool: account id, or a list})."""
+    org, team (D127), id (optional, `eid_` + 8 hex digits), accounts ({tool: account id, or a
+    list})."""
     if not path.is_file():
         return {}
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -104,6 +105,7 @@ def parse_roster(path: Path) -> dict[str, dict[str, Any]]:
             "email": e.get("email") or "",  # sign-in by proxy header (auth.py); not in the graph
             "location": e.get("location") or "",
             "org": e.get("org") or "",
+            "team": str(e.get("team") or "").strip(),  # the org chart, for WORKS_ON (D127)
             "accounts": accounts,
         }
     return out
@@ -480,9 +482,31 @@ def prepare(graph: str, product: str, sources: dict[str, dict[str, Any]]) -> dic
         db.run("upsert_channels", {"rows": channels}, graph=graph, readonly=False)
     if people:
         db.run("upsert_people", {"rows": people}, graph=graph, readonly=False)
+        set_teams(graph, people)
     access_rows, members = channel_access(sources)
     set_channel_access(graph, access_rows, members)
     return {"products": len(products), "channels": len(channels), "people": len(people)}
+
+
+def team_id(name: str) -> str:
+    return "team:" + re.sub(r"[^a-z0-9]+", "-", name.casefold()).strip("-")
+
+
+def set_teams(graph: str, people: list[dict[str, Any]]) -> int:
+    """people.yaml's `team:` as the org chart (D127): a Team node each and MEMBER_OF edges,
+    a person's old team edge removed when they move. Teams are what WORKS_ON, a community's
+    team mix and the outside-group alert compare with. Returns how many teams."""
+    teams = sorted({p["team"] for p in people if p.get("team")})
+    if teams:
+        rows = [{"id": team_id(t), "name": t, "org": "", "lead_id": None} for t in teams]
+        db.run("upsert_teams", {"rows": rows}, graph=graph, readonly=False)
+    member = [{"person_id": p["id"], "team_id": team_id(p["team"]) if p.get("team") else ""}
+              for p in people]  # fmt: skip
+    db.run("clear_member_of", {"rows": member}, graph=graph, readonly=False)
+    links = [r for r in member if r["team_id"]]
+    if links:
+        db.run("link_member_of", {"rows": links}, graph=graph, readonly=False)
+    return len(teams)
 
 
 def people_in(artifact) -> list[str]:

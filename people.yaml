@@ -31,6 +31,7 @@
 #     email: priya@example.com        # optional; with no email the id comes from the name
 #     role: Tech Lead
 #     authority: lead                # optional: lead | qa | member
+#     team: Platform                 # optional: the org chart (who works on what, team mix)
 #     accounts:
 #       slack: U0123ABCDEF
 #       github: priya-s

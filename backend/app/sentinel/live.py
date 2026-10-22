@@ -272,8 +272,7 @@ def _write_batch(ready: list[dict[str, Any]], graph: str) -> None:
         # minutes-old expertise is fine: marked due here, rebuilt by derive_if_due at most
         # every DERIVE_EVERY_S, not on every message (D112). The Sentinel judges the chains
         # these folds changed.
-        due = {"id": "derive", "dirty_ms": int(time.time() * 1000), "done_ms": None}
-        db.run("mark_job", due, graph=graph, readonly=False)  # now, under the lock
+        mark_due(graph)  # now, under the lock
         t = time.perf_counter()
         topics = sorted({x for f in folds.values() for x in f["write"]["topics"]})
         sentinel = engine.run(graph, topics=topics)
@@ -413,6 +412,54 @@ def estimate_extraction(items: list[Artifact], graph: str | None = None) -> dict
 
 
 DERIVE_EVERY_S = 300  # the derived layer is at most this stale after a live write (D112)
+ALGORITHMS_EVERY_S = 3600  # org mode's collaboration graph: who works with whom moves slowly
+JOBS = ("derive", "algorithms")
+
+
+def mark_due(graph: str, now_ms: int | None = None) -> None:
+    """A write changed the graph: the periodic jobs are due at their next turn."""
+    now_ms = now_ms or int(time.time() * 1000)
+    for job in JOBS:
+        due = {"id": job, "dirty_ms": now_ms, "done_ms": None}
+        db.run("mark_job", due, graph=graph, readonly=False)
+
+
+def algorithms_if_due(
+    graph: str | None = None, every_s: float = ALGORITHMS_EVERY_S, force: bool = False
+):
+    """Org mode's graph algorithms (F4, D127), which the live path never ran, so the README's
+    PageRank, communities and teams worked only in the demo: WORKS_ON from people.yaml's teams,
+    COLLAB from real conversations in what everyone may read, PageRank, label-propagation
+    communities and betweenness, then the full Sentinel (outside-group alerts, team impact).
+    Hourly at most, after a write made it due. The demo's come from `yaan ingest`, as before.
+    Returns what ran, or None."""
+    from app.ingest import derive
+
+    graph = demo_graph(graph)
+    if not org.active():
+        return None
+    rows = db.run("job_state", {"id": "algorithms"}, graph=graph).rows
+    dirty = rows[0]["dirty_ms"] if rows else None
+    done = (rows[0]["done_ms"] if rows else None) or 0
+    now = int(time.time() * 1000)
+    if not force and (dirty is None or dirty <= done or now - done < every_s * 1000):
+        return None
+    t0 = time.perf_counter()
+    with db.writer_lock(graph):
+        derive.works_on(graph)
+        collab = derive.collab(graph)
+        groups = derive.communities(graph)
+        sentinel = engine.run(graph)
+        db.run("mark_job", {"id": "algorithms", "dirty_ms": None, "done_ms": now}, graph=graph,
+               readonly=False)  # fmt: skip
+    sentinel.pop("report")
+    return {
+        "graph": graph,
+        "ms": _ms(t0),
+        "pairs": collab["pairs"],
+        "communities": groups["communities"],
+        "sentinel": sentinel,
+    }
 
 
 def derive_if_due(graph: str | None = None, every_s: float = DERIVE_EVERY_S, force: bool = False):

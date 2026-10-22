@@ -102,6 +102,50 @@ def expertise(graph: str | None = None) -> dict:
 
 
 COLLAB_MIN_W = 0.25  # one 55-person meeting adds 1/54 per pair; keep repeated, real collaboration
+SESSION_GAP_MS = 30 * 60_000  # org mode: top-level messages this close are one conversation
+SESSION_MAX_MS = 3 * 3_600_000  # and a conversation lasts at most this long (a busy channel)
+OPEN_BATCH = 5_000  # ids per visibility lookup
+
+
+def conversations(messages: list[dict]) -> list[dict]:
+    """Org mode's conversation of each message (D127), where HERB has a conversation key in its
+    ids: a thread (its root and its replies), else a session, the channel's top-level messages
+    with no gap over SESSION_GAP_MS, at most SESSION_MAX_MS long. Read as one conversation per
+    channel, a team's whole history made everyone in a channel a clique."""
+    from collections import defaultdict
+
+    roots = {m["thread_id"] for m in messages if m.get("thread_id")}
+    flow: dict[str, list[dict]] = defaultdict(list)
+    out = []
+    for m in messages:
+        if m.get("thread_id") or m["message_id"] in roots:
+            out.append(m | {"conversation": ("thread", m.get("thread_id") or m["message_id"])})
+        else:
+            flow[m["channel_id"]].append(m)
+    for channel, said in flow.items():
+        said.sort(key=lambda m: (m["ts_ms"] or 0, m["message_id"]))
+        start = last = None
+        for m in said:
+            ts = m["ts_ms"] or 0
+            if start is None or ts - last > SESSION_GAP_MS or ts - start[0] > SESSION_MAX_MS:
+                start = (ts, m["message_id"])
+            last = ts
+            out.append(m | {"conversation": ("session", channel, start[1])})
+    return out
+
+
+def open_to_everyone(rows: list[dict], key: str, graph: str | None) -> list[dict]:
+    """The rows whose item (`key`) the whole company may read (agent/access.py). Org mode's
+    COLLAB is built from these only: a tie's counts carry no artifact id, so redaction can't
+    hide them, and a tie from a private channel would tell anyone who talks there (D127)."""
+    from app.agent import access
+
+    scope = access.Access.audience(None, graph)
+    ids = sorted({r[key] for r in rows if r.get(key)})
+    seen: set[str] = set()
+    for lo in range(0, len(ids), OPEN_BATCH):
+        seen |= scope.allowed(set(ids[lo : lo + OPEN_BATCH]))
+    return [r for r in rows if r.get(key) in seen]
 
 
 def collab_weights(
@@ -122,16 +166,13 @@ def collab_weights(
             out[key(r)].add(r[member])
         return out
 
+    def conversation(r: dict) -> Any:  # org mode's (D127), else HERB's key in the id
+        herb = (r["channel_id"], r["message_id"].removeprefix("msg:").split("-", 1)[0])
+        return r.get("conversation") or herb
+
     for kind, by in (
         ("meetings", groups(meetings, lambda r: r["meeting_id"], "person_id")),
-        (
-            "chats",
-            groups(
-                messages,
-                lambda r: (r["channel_id"], r["message_id"].removeprefix("msg:").split("-", 1)[0]),
-                "person_id",
-            ),
-        ),
+        ("chats", groups(messages, conversation, "person_id")),
     ):
         for people in by.values():
             ps = sorted(people)
@@ -153,12 +194,22 @@ def collab(graph: str | None = None, min_w: float = COLLAB_MIN_W) -> dict:
     """10.1 + 10.4: rebuild COLLAB (both directions, pairs with weight >= min_w), then run
     FalkorDB's PageRank on it and store each person's score and rank."""
 
+    from app import org
+
     def read(name: str) -> list[dict]:
         return db.run_all(name, {}, cap=READ_LIMIT, graph=graph, timeout_ms=READ_TIMEOUT_MS)
 
-    pairs = collab_weights(
-        read("collab_meetings"), read("collab_messages"), read("area_prs"), read("area_reviews")
-    )
+    if org.active():  # a team's own data: real conversations, open sources only (D127)
+        pairs = collab_weights(
+            open_to_everyone(read("collab_meetings"), "meeting_id", graph),
+            conversations(open_to_everyone(read("collab_messages_org"), "message_id", graph)),
+            read("area_prs"),
+            open_to_everyone(read("area_reviews"), "pr_id", graph),
+        )
+    else:
+        pairs = collab_weights(
+            read("collab_meetings"), read("collab_messages"), read("area_prs"), read("area_reviews")
+        )
     rows = []
     for (a, b), v in sorted(pairs.items()):
         if v["w"] >= min_w:

@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-241 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+243 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -36,7 +36,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`health_spoke_in.cypher`](../backend/queries/health_spoke_in.cypher) | resolved meeting speakers per resolution method (S10) |
 | [`health_unverified.cypher`](../backend/queries/health_unverified.cypher) | status changes applied though the speaker's authority is unknown (no role or authority in people.yaml), per product: who to list in people.yaml (D117) |
 
-**Writes: ingestion, linking, the fold, derived layers, the Sentinel** (108)
+**Writes: ingestion, linking, the fold, derived layers, the Sentinel** (109)
 
 | Query | Purpose |
 |---|---|
@@ -47,6 +47,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`clear_decision_edges.cypher`](../backend/queries/clear_decision_edges.cypher) | the edges a changed extracted decision owns (not CAUSED or PRECEDENT_FOR, which the Sentinel and derive own), removed before the fold links them again (D101) |
 | [`clear_issue_edges.cypher`](../backend/queries/clear_issue_edges.cypher) | the edges a changed issue owns (not IN_AREA, which derive owns), removed before the fold links them again (D101) |
 | [`clear_issue_fixes.cypher`](../backend/queries/clear_issue_fixes.cypher) | the FIXES edges into a changed issue (the fold owns them, though they start at the PR), removed before the fold links them again (D101) |
+| [`clear_member_of.cypher`](../backend/queries/clear_member_of.cypher) | people.yaml moved someone to another team, or out of any: their other MEMBER_OF edges go (team_id '' = none) (F4, D127) |
 | [`clear_pr_actions.cypher`](../backend/queries/clear_pr_actions.cypher) | a product's PRs whose stated action the fold no longer derives lose it (D101) |
 | [`clear_similar_precedents.cypher`](../backend/queries/clear_similar_precedents.cypher) | remove the similarity PRECEDENT_FOR edges an earlier rebuild left (written before run $run), after this one wrote its own: readers never see none (D112); precedents written by approvals (11.4) carry no basis and stay |
 | [`clear_stale_expertise_edges.cypher`](../backend/queries/clear_stale_expertise_edges.cypher) | the IN_AREA and KNOWS edges into a kept Area that this rebuild (run $run) didn't write: a person who no longer knows it, an issue moved to another area (D112) |
@@ -149,7 +150,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
 | [`upsert_tombstones.cypher`](../backend/queries/upsert_tombstones.cypher) | a content-free record of each forgotten item (id, kind, when, why), so a sync, sweep or backfill doesn't bring it back (F2, D125) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (119)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (120)
 
 | Query | Purpose |
 |---|---|
@@ -176,6 +177,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`claim_alert_response.cypher`](../backend/queries/claim_alert_response.cypher) | the first step of a response: an open alert becomes 'responding' and stores every write the response will make, so a crash midway is finished, not left half-done (H2, D110); matches nothing when the alert isn't open |
 | [`collab_meetings.cypher`](../backend/queries/collab_meetings.cypher) | who attended each meeting: the co-attendance part of COLLAB (10.1) |
 | [`collab_messages.cypher`](../backend/queries/collab_messages.cypher) | who wrote each (non-system) Slack message and in which channel: the conversation part of COLLAB (10.1) |
+| [`collab_messages_org.cypher`](../backend/queries/collab_messages_org.cypher) | org mode's conversation part of COLLAB: who wrote each message, where, when and in which thread, to group into conversations (threads, else sessions) (F4, D127) |
 | [`collab_paths.cypher`](../backend/queries/collab_paths.cypher) | the shortest COLLAB path (at most 4 hops) between each given pair of people: how a listed owner reaches the real expert, or how close a backup already is to a key person (10.5, D065) |
 | [`connection_path.cypher`](../backend/queries/connection_path.cypher) | the shortest chain of people who work together (COLLAB, at most 6 hops) between two people, with each hop's tie: weight, shared reviews, meetings and chats (tool 13 connection_path, R2, D065) |
 | [`count_linked_chunks.cypher`](../backend/queries/count_linked_chunks.cypher) | how many of the given chunk ids exist and hang off an artifact |

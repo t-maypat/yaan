@@ -243,6 +243,7 @@ def refresh_derived(target: str) -> None:
 
     try:
         live.derive_if_due(target)
+        live.algorithms_if_due(target)  # org mode's collaboration graph, hourly (D127)
     except Exception as e:
         print(f"yaan: the derived layer wasn't refreshed: {type(e).__name__}: {e}", flush=True)
 

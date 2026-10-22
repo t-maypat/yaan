@@ -210,8 +210,9 @@ def refold(products: Iterable[str], graph: str, now_ms: int) -> int:
         topics |= set(fold.fold_product(product, graph)["write"]["topics"])
     if topics:
         engine.run(graph, topics=sorted(topics))
-    due = {"id": "derive", "dirty_ms": now_ms, "done_ms": None}
-    db.run("mark_job", due, graph=graph, readonly=False)
+    from app.sentinel import live
+
+    live.mark_due(graph, now_ms)  # expertise and collaboration without the forgotten items
     return len(topics)
 
 

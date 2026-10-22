@@ -224,6 +224,7 @@ def test_an_org_sync_prepares_the_graph_and_takes_unlabeled_items(org_mode, monk
     monkeypatch.setattr(live, "present_ids", lambda graph, ids: set())
     monkeypatch.setattr(forget, "blocked", lambda artifacts, graph: {})
     monkeypatch.setattr(live, "derive_if_due", lambda graph: None)
+    monkeypatch.setattr(live, "algorithms_if_due", lambda graph: None)
     monkeypatch.setattr(
         live,
         "ingest_batch",

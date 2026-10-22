@@ -86,6 +86,7 @@ def offline(tmp_path, monkeypatch):
     monkeypatch.setattr(forget, "blocked", lambda artifacts, graph: {})  # nothing forgotten
     monkeypatch.setattr(runner, "deliver", lambda connectors, graph: ([], []))
     monkeypatch.setattr(live, "derive_if_due", lambda graph: None)
+    monkeypatch.setattr(live, "algorithms_if_due", lambda graph: None)
     monkeypatch.setattr(live, "ingest_batch", one_by_one)
     monkeypatch.setattr(runner, "first_cursor", lambda c, now_ms=None: 0)  # tiny test clocks
     dead = []
