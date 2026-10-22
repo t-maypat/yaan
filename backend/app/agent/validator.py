@@ -40,7 +40,7 @@ MIN_QUOTE_WORDS = 3
 MIN_QUOTE_CHARS = 10
 AUTOCITE_EXTRA_WORDS = 2  # words a url line may add beyond the linked artifact's own text
 IDENT = re.compile(
-    r"https?://[^\s)\]>\"'`|]+|\beid_[0-9a-f]{8}\b|\bCUST-\d{3,}\b|\bPR\s*#?\s*\d+\b|(?<![\w/&])#\d+\b",
+    r"https?://[^\s)\]>\"'`|]+|\beid_[0-9a-f]{8}(?:[0-9a-f]{8})?\b|\bCUST-\d{3,}\b|\bPR\s*#?\s*\d+\b|(?<![\w/&])#\d+\b",
     re.I,
 )
 # 7. every number a sentence states (outside its identifiers) is in a quote or in the cited

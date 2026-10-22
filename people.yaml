@@ -1,6 +1,11 @@
 # People (org mode only, LORE_DATA_MODE=org; the demo ignores this file).
 #
 # Yaan registers anyone it meets in a connected tool on its own, under their name in that tool.
+# Slack and Jira vouch for a work email: the same email in both tools is one person, and the
+# email of someone listed below finds them. Only emails at your own domains count: those of the
+# emails listed below, or
+#   email_domains: [example.com, example.co.uk]
+# `yaan people` prints everyone met but not listed, as entries to paste here (keep their id).
 # List people here to give them a role and to merge their accounts across tools into one person.
 # `authority` is what the policy reads when someone says an issue is fixed, dismissed or back:
 #   - the issue's assignee may always change it;

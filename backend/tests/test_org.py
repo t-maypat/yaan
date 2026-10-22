@@ -34,7 +34,15 @@ MAPS = Maps(
 )
 
 
-CACHES = (get_settings, org.roster, org.accounts, org.source_audiences, org.unknown_speakers)
+CACHES = (
+    get_settings,
+    org.roster,
+    org.accounts,
+    org.source_audiences,
+    org.unknown_speakers,
+    org.emails,
+    org.email_domains,
+)
 
 
 @pytest.fixture
@@ -92,7 +100,7 @@ def test_an_account_maps_to_its_person_never_to_a_stand_in(org_mode):
     # a persona label means nothing outside the demo
     assert MAPS.person("slack", "U1", "[synthetic demo · as Ann (eid_0123abcd)] hi") == priya
     sam = MAPS.person("slack", "U2", name="Sam Lee")  # met for the first time
-    assert sam == org.eid_for("slack:U2") and org.EID.match(sam)
+    assert sam == org.eid_for("slack:U2", org.MET_DIGITS) and org.EID.match(sam)
     assert org._hints[sam]["name"] == "Sam Lee"
     nobody = MAPS.person("notion", None)
     assert org._hints[nobody]["name"] == "Unknown Notion user"
@@ -125,9 +133,9 @@ def test_one_account_can_belong_to_one_person(org_mode):
 
 
 def test_an_unlisted_account_never_inherits_a_listed_persons_id(org_mode):
-    """Ids are 32-bit hashes: a stranger whose account hashes to a listed person's id would
-    otherwise take over their name and role, and so their authority (D098)."""
-    taken = org.eid_for("slack:U99")
+    """Ids are hashes: a stranger whose account hashes to a listed person's id would otherwise
+    take over their name and role, and so their authority (D098)."""
+    taken = org.eid_for("slack:U99", org.MET_DIGITS)
     org.PEOPLE_FILE.write_text(
         f"people: [{{name: Lead, id: {taken}, role: Engineering Lead}}]", encoding="utf-8"
     )
@@ -135,6 +143,92 @@ def test_an_unlisted_account_never_inherits_a_listed_persons_id(org_mode):
     org.accounts.cache_clear()
     with pytest.raises(org.OrgError, match="hashes to .* which people.yaml gives to Lead"):
         org.person_id("slack", "U99")
+
+
+def test_people_met_in_the_tools_get_64_bit_ids_and_listed_ones_keep_theirs(org_mode):
+    """D130 (F9): 8-digit ids collide at about 25% across 50,000 accounts; met people get 16."""
+    met = org.person_id("slack", "U12345")
+    assert met == org.eid_for("slack:U12345", 16) and org.EID.match(met) and len(met) == 20
+    assert all(len(eid) == 12 for eid in org.roster())  # people.yaml ids never change
+
+
+def test_an_email_the_tool_vouches_for_finds_the_person_across_tools(org_mode):
+    priya = next(e for e, p in org.roster().items() if p["email"] == "priya@acme.example")
+    assert org.person_id("slack", "U777", email="Priya@Acme.example") == priya  # listed
+    slack = org.person_id("slack", "U888", "Sam", email="sam@acme.example")  # not listed
+    assert org.person_id("jira", "5b10:abc", "Sam S.", email="sam@acme.example") == slack
+    assert org._hints[slack]["key"] == "email:sam@acme.example"
+    # an outside address (a guest, a personal account) merges nobody: the account decides
+    guest = org.person_id("slack", "U999", email="sam@gmail.com")
+    elsewhere = org.person_id("jira", "x9", email="sam@gmail.com")
+    assert guest == org.eid_for("slack:U999", 16) != elsewhere
+
+
+def test_slack_and_jira_vouch_for_emails_and_long_ids_are_mentions(org_mode, monkeypatch):
+    """The emails come from the tools themselves (Slack's profile, Jira's user object), and a
+    16-digit id in a message still links as a mention (the linker's pattern takes both)."""
+    from app.connectors import slack
+    from app.ingest.linker import EID as MENTION
+    from tests.test_connector_slack import FakeClient
+
+    class Team(FakeClient):
+        def users_info(self, user):
+            return {"user": {"real_name": "Sam Lee", "profile": {"email": "sam@acme.example"}}}
+
+    maps = Maps(product="Acme", default_person=None, sources={"slack": {}, "jira": {}})
+    in_slack = slack.SlackConnector(Team([]), "yaan_org", maps).who("U2")
+    assert in_slack == maps.person("jira", "5b10:9", name="Sam", email="sam@acme.example")
+    assert MENTION.findall(f"thanks @{in_slack}, and @eid_0123abcd.") == [in_slack, "eid_0123abcd"]
+
+
+def test_yaan_people_lists_who_was_met_but_not_listed_as_entries_to_paste(org_mode, capsys):
+    from app import cli, filestate
+
+    graph = get_settings().lore_org_graph
+    sam = org.person_id("slack", "U2", "Sam Lee")
+    dee = org.person_id("jira", "x1", "Dee", email="dee@acme.example")
+    met = {k: {"id": k, "name": v["name"], "key": v["key"]} for k, v in org._hints.items()}
+    filestate.write(org.directory_file(graph), met)  # as ensure_people registers them
+    assert org.unlisted(graph) == [
+        {"name": e["name"], "id": e["id"], **extra}
+        for e, extra in sorted(
+            [
+                ({"id": sam, "name": "Sam Lee"}, {"accounts": {"slack": "U2"}}),
+                ({"id": dee, "name": "Dee"}, {"email": "dee@acme.example"}),
+            ],
+            key=lambda x: x[0]["id"],
+        )
+    ]
+    assert cli.main(["people"]) == 0
+    out = capsys.readouterr().out
+    assert "2 met in your tools, not listed" in out and f"id: {sam}" in out
+
+
+def test_email_domains_can_be_listed_and_must_be_a_list(org_mode):
+    org.PEOPLE_FILE.write_text("email_domains: [acme.dev]\npeople: []\n", encoding="utf-8")
+    org.email_domains.cache_clear()
+    assert org.trusted("a@acme.dev") == "a@acme.dev" and org.trusted("a@acme.example") is None
+    org.PEOPLE_FILE.write_text("email_domains: acme.dev\npeople: []\n", encoding="utf-8")
+    org.email_domains.cache_clear()
+    with pytest.raises(org.OrgError, match="must be a list"):
+        org.email_domains()
+
+
+def test_two_accounts_on_one_id_are_refused_and_old_ids_are_kept(org_mode):
+    """D130: a person's row keeps the key that made its id. A second key on the same id is a
+    collision and stops loudly; an account registered with an 8-digit id before keeps it."""
+    from app import filestate
+
+    graph = get_settings().lore_org_graph
+    taken = org.eid_for("slack:U5", 16)
+    old = org.eid_for("slack:U7")
+    filestate.write(org.directory_file(graph), {
+        taken: {"id": taken, "name": "Someone", "key": "slack:U6"},
+        old: {"id": old, "name": "Registered before D130"},
+    })  # fmt: skip
+    with pytest.raises(org.OrgError, match="slack:U5 and slack:U6 both hash to"):
+        org.person_id("slack", "U5")
+    assert org.person_id("slack", "U7") == old
 
 
 def test_the_people_an_artifact_involves(org_mode):
@@ -305,7 +399,7 @@ def test_slack_reads_a_teams_channel_in_org_mode(org_mode, monkeypatch):
     items = conn.fetch(0)
     assert len(items) == 1  # no bot post is read back, persona label or not
     a = items[0].artifact
-    sam, priya = org.eid_for("slack:U2"), org.eid_for("priya@acme.example")
+    sam, priya = org.eid_for("slack:U2", org.MET_DIGITS), org.eid_for("priya@acme.example")
     assert (a.id, a.author_eid, a.text) == (
         "msg:slack-C1-1805000000.000100",
         sam,

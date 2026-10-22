@@ -131,14 +131,16 @@ class JiraConnector:
             raise ConnectorError(f"Jira {method} {path}: {r.status_code} {detail}")
         return r.json()
 
-    def who(self, account: str | None, text: str = "", name: str | None = None) -> str:
+    def who(
+        self, account: str | None, text: str = "", name: str | None = None, email: str | None = None
+    ) -> str:
         """The person a Jira account plays; "self" in the map is the token's own account."""
         own = None
         if "self" in (self.maps.source("jira").get("people") or {}):
             if self._own is None:
                 self._own = self._req("GET", "/rest/api/3/myself")["accountId"]
             own = self._own
-        return self.maps.person("jira", account, text, own, name=name)
+        return self.maps.person("jira", account, text, own, name=name, email=email)
 
     def msg_id(self, key: str, part: str) -> str:
         return base.synthetic_id("msg", "jira", f"{key}-{part}")
@@ -251,9 +253,15 @@ class JiraConnector:
         title = f["summary"]
         description = adf_text(f.get("description")).strip()
         rep = f.get("reporter") or {}
-        reporter = self.who(rep.get("accountId"), description, rep.get("displayName"))
+        reporter = self.who(
+            rep.get("accountId"), description, rep.get("displayName"), rep.get("emailAddress")
+        )
         assignee = (
-            self.who(f["assignee"].get("accountId"), name=f["assignee"].get("displayName"))
+            self.who(
+                f["assignee"].get("accountId"),
+                name=f["assignee"].get("displayName"),
+                email=f["assignee"].get("emailAddress"),
+            )
             if f.get("assignee")
             else None
         )
@@ -308,7 +316,9 @@ class JiraConnector:
                 if not kind:
                     continue
                 by = h.get("author") or {}
-                who = self.who(by.get("accountId"), name=by.get("displayName"))
+                who = self.who(
+                    by.get("accountId"), name=by.get("displayName"), email=by.get("emailAddress")
+                )
                 stamp = ms(h["created"])
                 named = [u for t, u in mentions if t <= stamp]
                 fix = named[-1:] if kind == "issue_resolved" else []
@@ -325,7 +335,7 @@ class JiraConnector:
         for c in comments:
             body = adf_text(c.get("body")).strip()
             by = c.get("author") or {}
-            who = self.who(by.get("accountId"), body, by.get("displayName"))
+            who = self.who(by.get("accountId"), body, by.get("displayName"), by.get("emailAddress"))
             stamp = ms(c["created"])
             text = f"{body}\n(on Jira {key} '{title}')"
             items.append(

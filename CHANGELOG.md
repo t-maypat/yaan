@@ -4,6 +4,20 @@ What changed between versions, newest first. Yaan is 0.x: settings and the graph
 
 ## Unreleased
 
+### Running Yaan at an organisation's scale (23 Oct)
+
+#### Added
+- `yaan people` prints the people Yaan met in your tools who aren't in `people.yaml`, as entries to paste.
+- `scripts/load_fold.py`: a load test of the decision fold on synthetic events (no model calls).
+
+#### Changed
+- The decision fold no longer slows down as history grows: each event's issue match is kept and only new events, or ones a change could affect, are matched again. A year of 2.5M messages (one product holding 62,000 events) folds in about 13 s per batch; before, matching was quadratic and took minutes.
+- People met in a tool get 64-bit ids (`eid_` + 16 hex digits), so two accounts no longer collide; a second account landing on a taken id is refused loudly. Slack and Jira emails at your domains merge a person across tools.
+
+#### Upgrading
+- Accounts already registered keep their 8-digit ids; `people.yaml` ids never change. An unlisted account whose Slack or Jira email matches a listed person now counts as that person: their earlier items stay under the old id.
+- The first fold of each product after upgrading matches everything once (the stored matches don't exist yet); with years of chat-named issues this can take minutes.
+
 ### Running Yaan on a team's own data (22 Oct)
 
 Fixes for what stopped a pilot on an organisation's own tools.

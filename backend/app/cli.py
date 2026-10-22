@@ -65,6 +65,25 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_people(args: argparse.Namespace) -> int:
+    """Org mode (D130): the people Yaan met in your tools who aren't in people.yaml, as entries
+    to paste into it (give each a role, and an email to sign in with)."""
+    import yaml
+
+    from app import org
+    from app.sentinel import live
+
+    if not org.active():
+        print("yaan people: org mode only (LORE_DATA_MODE=org)", file=sys.stderr)
+        return 1
+    graph = live.demo_graph(args.graph)
+    found = org.unlisted(graph)
+    print(f"# {len(org.roster())} in people.yaml; {len(found)} met in your tools, not listed")
+    if found:
+        print(yaml.safe_dump({"people": found}, sort_keys=False, allow_unicode=True), end="")
+    return 0
+
+
 def cmd_token(args: argparse.Namespace) -> int:
     """Sign-in tokens (D100, D111): issue one for a people.yaml person (shown once; only its
     hash is kept; it expires after --days), list them, or revoke one (--id) or all of a
@@ -795,6 +814,7 @@ COMMANDS = {
     "schema": ("create and verify the indexes for a graph (queries/00_schema.cypher)", cmd_schema),
     "init": ("org mode: create your graph, its product, channels and people (D097)", cmd_init),
     "token": ("org mode: issue or revoke a person's sign-in token (D100)", cmd_token),
+    "people": ("org mode: people met in your tools, not yet in people.yaml (D130)", cmd_people),
     "forget": ("remove items for good: every copy of their words, no re-sync (D125)", cmd_forget),
     "erase": ("erase a person: what they wrote, their mentions, their account (D125)", cmd_erase),
     "belief": ("what Lore believed about an issue or PR at a moment (D101)", cmd_belief),
@@ -847,6 +867,7 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--yes", {"action": "store_true", "help": "do it (default: a dry run)"}),
         ("--graph", {"help": "default: LORE_ORG_GRAPH in org mode, else LORE_DEMO_GRAPH"}),
     ],
+    "people": [("--graph", {"help": "default: LORE_ORG_GRAPH"})],
     "token": [
         ("action", {"choices": ("issue", "revoke", "list")}),
         (

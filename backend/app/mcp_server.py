@@ -135,7 +135,7 @@ def ask(args: dict[str, Any], graph_name: str, principal: str | None = None) -> 
     except ValueError as e:
         raise loop.ToolError(str(e)) from e
     viewer = args.get("viewer_id") or None
-    if viewer and not re.fullmatch(r"eid_[0-9a-f]{8}", viewer):
+    if viewer and not re.fullmatch(r"eid_[0-9a-f]{8}(?:[0-9a-f]{8})?", viewer):
         raise loop.ToolError(f"viewer_id must be an employee id like eid_1a2b3c4d, not {viewer!r}")
     product = args.get("product_id") or None
     if product and product not in tools.product_ids(graph_name, refresh=True):

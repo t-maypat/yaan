@@ -31,7 +31,7 @@ from app.ingest.structural import Metadata, channel_rows, slug
 
 URL = re.compile(r"https?://[^\s<>|\"]+")
 URL_TAIL = ".,;:!?)]}'"
-EID = re.compile(r"\beid_[0-9a-f]{8}\b")
+EID = re.compile(r"\beid_[0-9a-f]{8}(?:[0-9a-f]{8})?\b")  # 16 digits: met in tools (D130)
 CUSTOMER_ID = re.compile(r"\bCUST-\d+\b")
 SPEAKER = re.compile(r"^([^:\n]{2,60}): ", re.MULTILINE)
 # "Revert PR# 8: Implement GraphQL Server": the PR that undoes PR 8 of the same repository.

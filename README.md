@@ -60,7 +60,7 @@ Org mode points Yaan at your team's tools instead of the demo. Your data goes in
 
 1. In `.env`, set `LORE_DATA_MODE=org` and each tool's token.
 2. `cp connectors.org.example.yaml connectors.yaml`, then name your product and the channels Yaan reads. A channel's name starts with `bug-`, `develop-` or `planning-`, which tells Yaan what to read from it. Say who may read each non-Slack source (`visibility: everyone`, or `members`); Slack's private channels and their members are read from Slack. A channel that holds both bugs and pull-request talk can say so (`{channel: eng, kind: mixed}`), and a tool or channel can belong to another product (`product:`).
-3. List the people who will use Yaan in [`people.yaml`](people.yaml), with their email, role and account in each tool. Yaan registers everyone else the first time they appear in a tool, but only listed people can sign in.
+3. List the people who will use Yaan in [`people.yaml`](people.yaml), with their email, role and account in each tool. Yaan registers everyone else the first time they appear in a tool (one person across Slack and Jira when the work email matches; `yaan people` lists them), but only listed people can sign in.
 4. Create the graph and start the connectors:
 
 ```sh

@@ -35,7 +35,10 @@ from app.config import REPO_ROOT, get_settings
 PEOPLE_FILE = REPO_ROOT / "people.yaml"
 STAGES = {"planning": "planning", "develop": "dev", "bug": "support"}  # = structural.STAGES
 KINDS = {**STAGES, "mixed": "mixed"}  # a declared kind -> the channel's stage (D116)
-EID = re.compile(r"^eid_[0-9a-f]{8}$")  # the linker's mention pattern (@eid_…) needs this shape
+# 8 hex digits (HERB, people.yaml), or 16 for people met in the tools (D130); the linker's
+# mention pattern (@eid_…) takes both
+EID = re.compile(r"^eid_[0-9a-f]{8}(?:[0-9a-f]{8})?$")
+MET_DIGITS = 16  # 64 bits: two of 50,000 accounts collide about once in 10^10 (8 digits: 25%)
 SOURCE_NAMES = {
     "slack": "Slack",
     "github": "GitHub",
@@ -60,9 +63,10 @@ def active() -> bool:
     return get_settings().lore_data_mode == "org"
 
 
-def eid_for(key: str) -> str:
-    """A stable person id from an email, a name or `source:account`: `eid_` + 8 hex digits."""
-    return "eid_" + hashlib.sha1(key.strip().lower().encode("utf-8")).hexdigest()[:8]
+def eid_for(key: str, digits: int = 8) -> str:
+    """A stable person id from an email, a name or `source:account`: `eid_` + hex digits (8 for
+    a people.yaml entry, so listed ids never change; MET_DIGITS for people met in the tools)."""
+    return "eid_" + hashlib.sha1(key.strip().lower().encode("utf-8")).hexdigest()[:digits]
 
 
 # --- people.yaml: the roster -----------------------------------------------------------------
@@ -182,19 +186,54 @@ def accounts() -> dict[tuple[str, str], str]:
     return out
 
 
+@lru_cache
+def emails() -> dict[str, str]:
+    """people.yaml's emails -> eid, for accounts whose tool vouches for an email (D130)."""
+    return {p["email"].casefold(): eid for eid, p in roster().items() if p["email"]}
+
+
+@lru_cache
+def email_domains() -> frozenset[str]:
+    """The domains whose emails identify a person across tools (D130): people.yaml's
+    `email_domains`, else the domains of the emails it lists. A guest's outside address, or
+    one a person typed themselves, never merges anyone."""
+    raw = {}
+    if PEOPLE_FILE.is_file():
+        raw = yaml.safe_load(PEOPLE_FILE.read_text(encoding="utf-8")) or {}
+    given = raw.get("email_domains")
+    if given is not None:
+        if not isinstance(given, list) or not all(isinstance(d, str) for d in given):
+            raise OrgError(f"{PEOPLE_FILE.name}: email_domains must be a list of domains")
+        return frozenset(d.strip().lstrip("@").casefold() for d in given if d.strip())
+    return frozenset(e.rpartition("@")[2] for e in emails() if "@" in e)
+
+
+def trusted(email: str | None) -> str | None:
+    """An email a tool vouches for, if its domain is one of the org's: lower-cased, else None."""
+    mail = (email or "").strip().casefold()
+    return mail if "@" in mail and mail.rpartition("@")[2] in email_domains() else None
+
+
 # --- people met in the tools ----------------------------------------------------------------
-_hints: dict[str, dict[str, Any]] = {}  # eid -> the name and account a connector saw
+_hints: dict[str, dict[str, Any]] = {}  # eid -> the name, account and key a connector saw
 
 
-def person_id(source: str, account: str | None, name: str | None = None) -> str:
-    """The person behind an account: the people.yaml entry that lists it, else a person
-    registered under an id derived from the account (kept as a hint until ensure_people)."""
+def person_id(
+    source: str, account: str | None, name: str | None = None, email: str | None = None
+) -> str:
+    """The person behind an account (D130): the people.yaml entry that lists the account, else
+    the one with the email the tool vouches for (Slack, Jira), else a person registered under
+    an id derived from that email (so one person met in two tools is one person) or from the
+    account. An account registered before D130 keeps its 8-digit id."""
     account = str(account) if account else None
     if account and (eid := accounts().get((source, account))):
         return eid
-    key = f"{source}:{account or 'unknown'}"
-    eid = eid_for(key)
-    if eid in roster():  # 32-bit ids: an unlisted account must not inherit a listed person
+    mail = trusted(email)
+    if mail and (eid := emails().get(mail)):
+        return eid
+    key = f"email:{mail}" if mail else f"{source}:{account or 'unknown'}"
+    eid = met_id(key)
+    if eid in roster():  # an unlisted account must not inherit a listed person
         raise OrgError(
             f"the {source} account {account!r} hashes to {eid}, which people.yaml gives to "
             f"{roster()[eid]['name']}: list the account under its person in people.yaml"
@@ -204,9 +243,28 @@ def person_id(source: str, account: str | None, name: str | None = None) -> str:
         if account
         else (f"Unknown {SOURCE_NAMES.get(source, source)} user")
     )
-    hint = _hints.setdefault(eid, {"name": label, "source": source, "account": account})
+    hint = _hints.setdefault(
+        eid, {"name": label, "source": source, "account": account, "key": key}
+    )
     if name and hint["name"] == label:
         hint["name"] = name
+    return eid
+
+
+def met_id(key: str) -> str:
+    """The id of the person a key (`email:…` or `source:account`) names: the 8-digit id it was
+    registered under before D130, else a 16-digit one. Two keys on one id are refused loudly:
+    merged, one person would inherit the other's private channels (F9)."""
+    met = filestate.cached(directory_file(get_settings().lore_org_graph), {})
+    legacy = eid_for(key)
+    if not key.startswith("email:") and legacy in met and met[legacy].get("key") in (None, key):
+        return legacy
+    eid = eid_for(key, MET_DIGITS)
+    other = (met.get(eid) or {}).get("key") or (_hints.get(eid) or {}).get("key")
+    if other and other != key:
+        raise OrgError(
+            f"{key} and {other} both hash to {eid}: list one of them in people.yaml with an id"
+        )
     return eid
 
 
@@ -220,6 +278,24 @@ def directory(graph: str) -> dict[str, dict[str, Any]]:
     met = filestate.cached(directory_file(graph), {})
     listed = {eid: {k: v for k, v in p.items() if k != "accounts"} for eid, p in roster().items()}
     return met | listed
+
+
+def unlisted(graph: str) -> list[dict[str, Any]]:
+    """People met in the tools who aren't in people.yaml (`yaan people`, D130), each with the
+    people.yaml entry that would list them: the same id, so their items stay theirs."""
+    listed = roster()
+    out = []
+    for eid, p in sorted(filestate.cached(directory_file(graph), {}).items()):
+        if eid in listed:
+            continue
+        kind, _, value = (p.get("key") or "").partition(":")
+        entry: dict[str, Any] = {"name": p.get("name") or eid, "id": eid}
+        if kind == "email":
+            entry["email"] = value
+        elif kind in SOURCE_NAMES and value and value != "unknown":
+            entry["accounts"] = {kind: value}
+        out.append(entry)
+    return out
 
 
 def ensure_people(graph: str, eids: Iterable[str | None]) -> list[str]:
@@ -236,7 +312,10 @@ def ensure_people(graph: str, eids: Iterable[str | None]) -> list[str]:
         if eid in erased:
             continue
         hint = _hints[eid]
-        new.append({"id": eid, "name": hint["name"], "role": None, "location": "", "org": ""})
+        new.append(
+            {"id": eid, "name": hint["name"], "role": None, "location": "", "org": "",
+             "key": hint.get("key")}  # fmt: skip; the key guards the id against collisions (D130)
+        )
     if not new:
         return []
     # the API and the worker both register people: a locked read-modify-write, so neither

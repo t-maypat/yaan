@@ -274,7 +274,7 @@ class AskRequest(BaseModel):
     # the Timeline's as-of slider (12.4): answer for the state at this moment (UTC epoch ms)
     as_of_ms: int | None = Field(default=None, ge=0, le=MAX_MS)
     # W7: answer as this person (an employee id); sources they can't see are hidden
-    viewer_id: str | None = Field(default=None, pattern=r"^eid_[0-9a-f]{8}$")
+    viewer_id: str | None = Field(default=None, pattern=r"^eid_[0-9a-f]{8}(?:[0-9a-f]{8})?$")
 
 
 def sse(name: str, data: Any) -> str:

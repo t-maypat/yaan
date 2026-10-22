@@ -97,6 +97,7 @@ class SlackConnector:
         self._private: set[str] = set()  # names of the private channels among _channels
         self._team_url: str | None = None
         self._names: dict[str, str | None] = {}  # org mode: Slack user id -> display name
+        self._emails: dict[str, str | None] = {}  # and the email on its profile (D130)
         self._bots: set[str] = set()  # accounts users.info says are bots
 
     # --- reading ---------------------------------------------------------------------------
@@ -202,13 +203,15 @@ class SlackConnector:
         """The person a Slack account is; in org mode with its profile name (one users.info
         call per account, cached), so a person met here is registered under a real name."""
         name = self.user_name(user) if user and not base.is_demo() else None
-        return self.maps.person("slack", user, text, name=name)
+        email = self._emails.get(user or "")  # verified by Slack: finds them across tools (D130)
+        return self.maps.person("slack", user, text, name=name, email=email)
 
     def user_name(self, user: str) -> str | None:
         if user not in self._names:
             try:
                 profile = self._call("users_info", user=user)["user"]
                 self._names[user] = profile.get("real_name") or profile.get("name")
+                self._emails[user] = (profile.get("profile") or {}).get("email")
                 if profile.get("is_bot") or profile.get("is_app_user"):
                     self._bots.add(user)
             except ConnectorError:  # no users:read scope, or a deleted user: keep the id

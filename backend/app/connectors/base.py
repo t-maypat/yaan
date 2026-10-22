@@ -89,18 +89,20 @@ class Maps:
         text: str = "",
         own: str | None = None,
         name: str | None = None,
+        email: str | None = None,
     ) -> str:
         """Who an item is by: the persona its label names, else the account's mapping (the
         key "self" means the connector's own account, `own`), else the default person. In org
         mode there is no persona and no stand-in: an unmapped account is its people.yaml entry
-        or a person registered under it (`name` is the tool's display name, if it gave one)."""
+        or a person registered under it (`name` is the tool's display name, if it gave one;
+        `email` one the tool vouches for, D130)."""
         people = self.source(source).get("people") or {}
         if org.active():
             if own and account == own and "self" in people:
                 return people["self"]
             if account and account in people:
                 return people[account]
-            return org.person_id(source, account, name)
+            return org.person_id(source, account, name, email)
         if m := PERSONA.search(text or ""):
             return m.group(1)
         if own and account == own and "self" in people:
