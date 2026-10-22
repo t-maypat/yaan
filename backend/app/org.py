@@ -19,7 +19,6 @@ Nothing here runs in demo mode, so the demo and the evaluation behave exactly as
 """
 
 import hashlib
-import json
 import re
 import time
 from collections.abc import Iterable
@@ -30,7 +29,7 @@ from typing import Any
 
 import yaml
 
-from app import db
+from app import db, filestate
 from app.config import REPO_ROOT, get_settings
 
 PEOPLE_FILE = REPO_ROOT / "people.yaml"
@@ -216,8 +215,7 @@ def directory_file(graph: str) -> Path:
 def directory(graph: str) -> dict[str, dict[str, Any]]:
     """Everyone org mode knows in `graph`: people registered from the tools, then people.yaml
     (which wins for anyone in both)."""
-    path = directory_file(graph)
-    met = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    met = filestate.cached(directory_file(graph), {})
     listed = {eid: {k: v for k, v in p.items() if k != "accounts"} for eid, p in roster().items()}
     return met | listed
 
@@ -235,11 +233,10 @@ def ensure_people(graph: str, eids: Iterable[str | None]) -> list[str]:
         new.append({"id": eid, "name": hint["name"], "role": None, "location": "", "org": ""})
     if not new:
         return []
-    path = directory_file(graph)
-    met = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
-    met.update({r["id"]: r for r in new})
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(met, indent=1, sort_keys=True), encoding="utf-8", newline="\n")
+    # the API and the worker both register people: a locked read-modify-write, so neither
+    # loses the other's (a lost entry made that person's next items dead letters, D123)
+    with filestate.update(directory_file(graph), sort_keys=True) as met:
+        met.update({r["id"]: r for r in new if r["id"] not in met})
     db.run("upsert_people", {"rows": new}, graph=graph, readonly=False)
     return [r["id"] for r in new]
 

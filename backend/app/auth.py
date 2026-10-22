@@ -18,6 +18,10 @@ session too. A request the cookie authenticates must also carry `X-Yaan-CSRF` wh
 anything: a page on another site can't add that header without a CORS preflight Yaan refuses.
 API and MCP clients keep sending the bearer token. Tokens expire (90 days by default) and
 remember when they were last used.
+
+tokens.json is read on every request, so it is cached until the file changes, and every change
+is a locked read-modify-write (app/filestate.py, D123): concurrent requests can't collide on a
+temp file or corrupt it, and a `last_used` stamp can't put back a token revoked meanwhile.
 """
 
 import base64
@@ -31,6 +35,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from app import filestate
 from app.config import get_settings
 
 TOKEN_BYTES = 32
@@ -39,6 +44,7 @@ SESSION_DAYS = 30  # a browser session's longest life; never past its token's ex
 SESSION_COOKIE = "yaan_session"
 CSRF_HEADER = "x-yaan-csrf"
 LAST_USED_EVERY_S = 3600  # last_used is written at most this often per token
+STAMP_WAIT_S = 0.5  # how long a request waits for the file to stamp last_used, then skips it
 _touched: dict[str, float] = {}  # token digest -> when last_used was last written
 
 
@@ -62,16 +68,13 @@ def _digest(token: str) -> str:
 
 
 def _read() -> dict[str, dict[str, Any]]:
-    path = tokens_path()
-    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    """The token table, read-only (cached until the file changes): change it through
+    `filestate.update`, never by editing this dict."""
+    return filestate.cached(tokens_path(), {})
 
 
-def _write(tokens: dict[str, dict[str, Any]]) -> None:
-    path = tokens_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(tokens, indent=1, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+def _update(timeout: float = filestate.LOCK_TIMEOUT_S):
+    return filestate.update(tokens_path(), timeout=timeout, sort_keys=True)
 
 
 def now() -> datetime:
@@ -87,14 +90,13 @@ def issue(person_id: str, label: str = "", days: int = TOKEN_DAYS) -> str:
     if days < 1:
         raise ValueError(f"a token lives at least a day, not {days}")
     token = "yaan_" + secrets.token_urlsafe(TOKEN_BYTES)
-    tokens = _read()
-    tokens[_digest(token)] = {
-        "person": person_id,
-        "label": label,
-        "created": stamp(now()),
-        "expires": stamp(now() + timedelta(days=days)),
-    }
-    _write(tokens)
+    with _update() as tokens:
+        tokens[_digest(token)] = {
+            "person": person_id,
+            "label": label,
+            "created": stamp(now()),
+            "expires": stamp(now() + timedelta(days=days)),
+        }
     return token
 
 
@@ -109,20 +111,22 @@ def listing() -> list[dict[str, Any]]:
 
 def revoke(person_id: str) -> int:
     """Remove every token of `person_id`; returns how many."""
-    tokens = _read()
-    keep = {h: t for h, t in tokens.items() if t["person"] != person_id}
-    _write(keep)
-    return len(tokens) - len(keep)
+    with _update() as tokens:
+        gone = [h for h, t in tokens.items() if t["person"] == person_id]
+        for h in gone:
+            del tokens[h]
+    return len(gone)
 
 
 def revoke_id(short: str) -> int:
     """Remove the one token whose id (from `listing`) starts with `short`."""
-    tokens = _read()
-    hits = [h for h in tokens if h.startswith(short)] if len(short) >= 6 else []
-    if len(hits) != 1:
-        raise AuthError(f"{short!r} names {len(hits)} tokens: give at least 6 characters of one id")
-    del tokens[hits[0]]
-    _write(tokens)
+    with _update() as tokens:
+        hits = [h for h in tokens if h.startswith(short)] if len(short) >= 6 else []
+        if len(hits) != 1:
+            raise AuthError(
+                f"{short!r} names {len(hits)} tokens: give at least 6 characters of one id"
+            )
+        del tokens[hits[0]]
     return 1
 
 
@@ -143,26 +147,36 @@ def check_token(token: str) -> tuple[str, dict[str, Any]]:
         raise AuthError("this token has expired: ask for a new one (lore token issue)")
     if time.monotonic() - _touched.get(digest, -LAST_USED_EVERY_S) >= LAST_USED_EVERY_S:
         _touched[digest] = time.monotonic()
-        tokens = _read()
-        if digest in tokens:
-            tokens[digest]["last_used"] = stamp(now())
-            _write(tokens)
+        stamp_used(digest)
     return digest, entry
 
 
+def stamp_used(digest: str, timeout: float = STAMP_WAIT_S) -> None:
+    """Record a token's use. Bookkeeping, so it never fails the request: a busy file skips it
+    (the next request tries again), and a token revoked meanwhile stays revoked."""
+    try:
+        with _update(timeout) as tokens:
+            if digest in tokens:
+                tokens[digest]["last_used"] = stamp(now())
+    except filestate.Busy:
+        _touched.pop(digest, None)
+
+
 # --- browser sessions --------------------------------------------------------------------------
+_keys: dict[str, bytes] = {}
+
+
 def _key() -> bytes:
-    """The session-signing key, made once per install (data/session.key)."""
+    """The session-signing key, made once per install (data/session.key), read once."""
     path = get_settings().data_dir / "session.key"
-    if not path.is_file():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-        tmp.write_bytes(secrets.token_bytes(32))
-        if not path.is_file():  # two processes racing: the first one's key stays
-            os.replace(tmp, path)
-        else:
-            tmp.unlink(missing_ok=True)
-    return path.read_bytes()
+    if str(path) not in _keys:
+        with filestate.locked(path):  # two processes or threads making it: the first one's stays
+            if not path.is_file():
+                tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+                tmp.write_bytes(secrets.token_bytes(32))
+                filestate.replace(tmp, path)
+        _keys[str(path)] = path.read_bytes()
+    return _keys[str(path)]
 
 
 def _b64(data: bytes) -> str:

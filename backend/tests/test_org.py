@@ -778,3 +778,19 @@ def test_unknown_speakers_may_be_held_to_their_own_work(org_mode):
     org.unknown_speakers.cache_clear()
     with pytest.raises(org.OrgError, match="unknown_speakers must be one of"):
         org.unknown_speakers()
+
+
+def test_people_met_at_once_by_two_writers_are_all_kept(org_mode, monkeypatch):
+    """The API and the worker both register people (F18, D123): a locked read-modify-write,
+    so neither loses the other's entries."""
+    import threading
+
+    monkeypatch.setattr(db, "run", lambda *a, **k: None)
+    ids = [org.person_id("slack", f"U{n:03d}", f"Person {n}") for n in range(40)]
+    threads = [threading.Thread(target=org.ensure_people, args=("g", ids[n::4])) for n in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    met = json.loads(org.directory_file("g").read_text(encoding="utf-8"))
+    assert set(ids) <= set(met)

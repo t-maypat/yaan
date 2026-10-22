@@ -237,3 +237,58 @@ def test_approvals_are_rate_limited_per_person_not_per_address(signed, monkeypat
     assert ken.post("/alerts/approve", json={"alert_id": "b"}).status_code == 429
     # the same address (the test client's), another person: her own budget
     assert pri.post("/alerts/approve", json={"alert_id": "c"}).status_code == 200
+
+
+# --- the token file under concurrency (F6, D123) -----------------------------------------------
+def test_concurrent_first_uses_never_fail_and_never_corrupt_the_file(signed):
+    """The review's reproduction: at the top of an hour every token's first use stamps
+    last_used. Before D123 the threads shared one temp file: 500s, then a corrupt file."""
+    import json
+    import threading
+
+    tokens = [auth.issue(f"eid_{i:08x}") for i in range(24)]
+    errors: list[Exception] = []
+
+    def use(token: str) -> None:
+        try:
+            auth.check_token(token)
+        except Exception as e:  # any failure at all is the bug
+            errors.append(e)
+
+    for _ in range(4):
+        auth._touched.clear()  # a new hour
+        threads = [threading.Thread(target=use, args=(t,)) for t in tokens]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    assert errors == []
+    assert len(json.loads(auth.tokens_path().read_text(encoding="utf-8"))) == len(tokens)
+    assert all(t["last_used"] for t in auth.listing())
+
+
+def test_a_last_used_stamp_never_brings_back_a_revoked_token(signed):
+    token = auth.issue("eid_0000beef")
+    digest, _ = auth.check_token(token)  # a request read the entry...
+    auth.revoke("eid_0000beef")  # ...the admin revoked it...
+    auth.stamp_used(digest)  # ...then the request stamped its use
+    assert auth.listing() == []
+    with pytest.raises(auth.AuthError, match="unknown or revoked"):
+        auth.check_token(token)
+
+
+def test_a_busy_token_file_skips_the_stamp_and_never_fails_the_request(signed, monkeypatch):
+    from app import filestate
+
+    token = auth.issue("eid_0000beef")
+    auth._touched.clear()
+    with filestate.locked(auth.tokens_path()):  # the CLI holds the file
+        monkeypatch.setattr(auth, "STAMP_WAIT_S", 0.05)
+        import threading
+
+        out: list[str] = []
+        t = threading.Thread(target=lambda: out.append(auth.check_token(token)[1]["person"]))
+        t.start()
+        t.join()
+    assert out == ["eid_0000beef"]
+    assert auth._digest(token) not in auth._touched  # the next request tries the stamp again

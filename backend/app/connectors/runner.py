@@ -21,14 +21,13 @@ whole is reported and retried after a growing pause: the loop doesn't die.
 """
 
 import json
-import os
 import time
 from typing import Any
 
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
-from app import db, llm, org
+from app import db, filestate, llm, org
 from app.connectors import base, render
 from app.connectors.base import Connector, ConnectorError, Item, labeled
 from app.ingest.normalize import Artifact
@@ -74,12 +73,7 @@ def load_state(graph: str) -> dict[str, Any]:
 
 def save_state(graph: str, state: dict[str, Any]) -> None:
     """Atomic: a crash mid-write leaves the previous state, never a torn file."""
-    folder = live.live_dir(graph)
-    folder.mkdir(parents=True, exist_ok=True)
-    path = folder / STATE
-    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(state, indent=1), encoding="utf-8", newline="\n")
-    os.replace(tmp, path)
+    filestate.write(live.live_dir(graph) / STATE, state)
 
 
 def why(e: BaseException) -> str:
@@ -499,13 +493,8 @@ def beat(graph: str, healthy: bool, pause_s: float) -> None:
     """After every round: when it ended, whether it was clean, and when the next one is due.
     `yaan connectors health` (the worker's healthcheck) and the API's /health read it."""
     now = int(time.time() * 1000)
-    folder = live.live_dir(graph)
-    folder.mkdir(parents=True, exist_ok=True)
-    path = folder / HEARTBEAT
-    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     body = {"at_ms": now, "healthy": healthy, "next_by_ms": now + int(pause_s * 1000)}
-    tmp.write_text(json.dumps(body), encoding="utf-8")
-    os.replace(tmp, path)
+    filestate.write(live.live_dir(graph) / HEARTBEAT, body)
 
 
 def worker_health(graph: str, now_ms: int | None = None) -> dict[str, Any]:
