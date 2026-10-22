@@ -74,7 +74,7 @@ def test_null_values_and_a_left_out_product_pass_the_schema_check():
 
 
 def test_ask_returns_the_checked_answer_compact(monkeypatch):
-    def answer(question, product_id=None, graph=None, as_of_ms=None, viewer_id=None):
+    def answer(question, product_id=None, graph=None, as_of_ms=None, viewer_id=None, payer=None):
         assert (question, product_id, graph, viewer_id) == ("Who fixed it?", None, "g", None)
         assert tools.iso(as_of_ms) == "2027-01-15T23:59:59Z"
         return {
@@ -162,3 +162,25 @@ def test_a_signed_in_mcp_client_sees_only_what_its_person_may(company, tmp_path,
     finally:
         get_settings.cache_clear()
         access.policy.cache_clear()
+
+
+def test_a_signed_in_clients_questions_count_against_their_person(monkeypatch):
+    """D124: MCP asks over HTTP are limited and charged per signed-in person, not shared by
+    every client of the process."""
+    from app import limits
+
+    payers = []
+    empty = {"answer_markdown": "", "abstain": True, "citations": [], "trace": []}
+
+    def answer(*a, payer=None, **k):
+        payers.append(payer)
+        return {**empty, "hidden_sources": 0}
+
+    monkeypatch.setattr(loop, "answer", answer)
+    monkeypatch.setattr(mcp_server, "ask_person_limiter", limits.RateLimiter(1))
+    monkeypatch.setattr(mcp_server, "ask_limiter", limits.RateLimiter(0))  # anonymous: none left
+    mcp_server.run("ask", {"question": "Who fixed it?"}, "g", viewer="eid_0000beef")
+    with pytest.raises(loop.ToolError, match="a minute"):
+        mcp_server.run("ask", {"question": "Who fixed it?"}, "g", viewer="eid_0000beef")
+    mcp_server.run("ask", {"question": "Who fixed it?"}, "g", viewer="eid_12345678")
+    assert payers == ["eid_0000beef", "eid_12345678"]

@@ -161,8 +161,11 @@ def test_a_channel_the_bot_cant_see_is_never_guessed_public(org_mode, written):
 
 def bot(conn) -> slack.SlackBot:
     """A SlackBot without slack_bolt's App (which would call Slack at construction)."""
+    from app import limits
+
     b = slack.SlackBot.__new__(slack.SlackBot)
     b.connector, b.graph, b.on_message = conn, "yaan_org", lambda: None
+    b.per_minute, b.per_day = limits.person_limits()
     return b
 
 
@@ -199,8 +202,8 @@ def test_a_direct_message_is_answered_from_what_the_asker_may_read(org_mode, mon
 
     seen = {}
 
-    def answer(question, product, graph=None, audience=None, viewer_id=None, **kw):
-        seen.update(audience=audience, viewer_id=viewer_id)
+    def answer(question, product, graph=None, audience=None, viewer_id=None, payer=None, **kw):
+        seen.update(audience=audience, viewer_id=viewer_id, payer=payer)
         return {"answer_markdown": "Fixed.", "abstain": False, "citations": []}
 
     monkeypatch.setattr(loop, "answer", answer)
@@ -210,7 +213,37 @@ def test_a_direct_message_is_answered_from_what_the_asker_may_read(org_mode, mon
         {"text": "is export fixed?", "channel_type": "im", "user": "U1", "ts": "1.0"},
         lambda **kw: said.append(kw),
     )
-    assert seen == {"audience": None, "viewer_id": PRIYA} and said[0]["text"] == "Fixed."
+    assert seen == {"audience": None, "viewer_id": PRIYA, "payer": PRIYA}
+    assert said[0]["text"] == "Fixed."
+
+
+def test_slack_questions_are_limited_per_asker_and_charged_to_them(org_mode, monkeypatch):
+    """D124: an @mention counts against its asker's own limits and daily budget, so one heavy
+    user can't use up everyone's questions."""
+    from app import limits
+    from app.agent import loop
+
+    payers = []
+
+    def answer(question, product, graph=None, audience=None, payer=None, **kw):
+        payers.append(payer)
+        return {"answer_markdown": "Fixed.", "abstain": False, "citations": [], "hidden_sources": 0}
+
+    monkeypatch.setattr(loop, "answer", answer)
+    fake = FakeSlack([{"name": "support", "id": "C1", "is_private": False}], {})
+    b = bot(slack.SlackConnector(fake, "yaan_org", slack_maps({"support": "bug-support"})))
+    b.per_minute = limits.RateLimiter(1)
+    said = []
+
+    def ask(user: str, ts: str) -> None:
+        event = {"text": "<@UBOT> is export fixed?", "ts": ts, "channel": "C1", "user": user}
+        b._mention(event, lambda **kw: said.append(kw["text"]))
+
+    ask("U1", "1.0")
+    ask("U1", "2.0")  # the same person again within the minute
+    ask("U2", "3.0")  # someone else: their own limit
+    assert payers == [PRIYA, b.connector.who("U2")]
+    assert "questions in a minute" in said[1] and said[2] == "Fixed."
 
 
 # --- on the real server ------------------------------------------------------------------------

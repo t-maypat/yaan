@@ -8,7 +8,9 @@ Spec: docs/CONTEXT.md §8; facts in docs/decisions.md (API facts).
 How a call goes (D033):
 1. The request is hashed; a cached answer is returned at no cost.
 2. The spend ledger checks the worst case (every input token plus `max_tokens` of output at
-   list price) against LORE_DAILY_SPEND_CAP_USD and refuses the call if it could cross it.
+   list price) against LORE_DAILY_SPEND_CAP_USD and refuses the call if it could cross it. In
+   org mode answers also have a share of that cap, so questions can't use up what reading new
+   items needs, and each person a daily budget of their own (D124).
 3. The call runs (`messages.parse` when a Pydantic `output` is given: the API constrains the
    response to its schema). Refusals and truncated answers raise; nothing is silently empty.
 4. The real cost, from the response's usage, goes into the ledger, a JSONL call log and the
@@ -22,6 +24,7 @@ import re
 import threading
 import time
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -57,6 +60,10 @@ class MissingCredentials(LLMError):
 
 class SpendCapReached(LLMError):
     pass
+
+
+class PersonCapReached(SpendCapReached):
+    """One person's answers reached their daily budget; everyone else can still ask."""
 
 
 class Refused(LLMError):
@@ -122,13 +129,30 @@ def cost_usd(model: str, inp: int, out: int, cache_write: int = 0, cache_read: i
 
 
 # --- spend ledger --------------------------------------------------------------------------
-# The ledger is {day: usd spent, ..., "_held": {hold id: {"day", "usd", "until"}}}. A call holds
-# its worst case before it runs and settles to the real cost after, all under one file lock
-# shared by every process (the API, an eval, the connector loop), so concurrent calls can't
-# each pass the cap check and overshoot it together (D098). A hold left by a crashed process
-# lapses after HOLD_S.
+# The ledger is {day: usd spent, ..., "_held": {hold id: {"day", "usd", "until", "role",
+# "payer"}}, "_answers": {day: usd}, "_payers": {today: {person: usd}}}. A call holds its worst
+# case before it runs and settles to the real cost after, all under one file lock shared by
+# every process (the API, an eval, the connector loop), so concurrent calls can't each pass the
+# cap check and overshoot it together (D098). A hold left by a crashed process lapses after
+# HOLD_S. Three budgets (D124): the daily cap over everything; in org mode, answers' share of it
+# (the rest is kept for extraction, so the graph doesn't go stale because people asked a lot);
+# and each person's answers, charged to whoever `paying` names.
 HOLD_S = 600  # longer than one call with its retries (120 s timeout, 3 retries)
 HELD = "_held"
+ANSWERS = "_answers"
+PAYERS = "_payers"
+_payer: ContextVar[str | None] = ContextVar("llm_payer", default=None)
+
+
+@contextmanager
+def paying(person: str | None):
+    """Charge the calls made inside the block to `person` as well (their daily budget,
+    LORE_PERSON_SPEND_CAP_USD, org mode). None: nobody's budget but the shared ones."""
+    token = _payer.set(person)
+    try:
+        yield
+    finally:
+        _payer.reset(token)
 
 
 def ledger_path() -> Path:
@@ -189,12 +213,14 @@ def worst_case(model: str, prompt_chars: int, max_tokens: int) -> float:
     return cost_usd(model, est_input, max_tokens)
 
 
-def check_budget(model: str, prompt_chars: int, max_tokens: int) -> float:
-    """Worst-case cost of a call; raises if it could take today's spend over the cap. Only a
+def check_budget(
+    model: str, prompt_chars: int, max_tokens: int, role: Role | None = None
+) -> float:
+    """Worst-case cost of a call; raises if it could take today's spend over a cap. Only a
     check: `spend` is what holds the amount while the call runs."""
     worst = worst_case(model, prompt_chars, max_tokens)
     with _FILES_LOCK, _lock(ledger_path()):
-        _refuse_over_cap(_read_ledger(ledger_path()), worst)
+        _refuse_over_cap(_read_ledger(ledger_path()), worst, role, _payer.get())
     return worst
 
 
@@ -202,10 +228,28 @@ def _live_holds(days: dict[str, Any], now: float) -> dict[str, dict[str, Any]]:
     return {k: h for k, h in (days.get(HELD) or {}).items() if h["until"] > now}
 
 
-def _refuse_over_cap(days: dict[str, Any], worst: float) -> None:
+def answer_cap() -> float | None:
+    """Answers' share of the daily cap: LORE_ANSWER_SPEND_CAP_USD, else half the cap in org
+    mode. None in the demo and the eval: there answers and extraction share one cap, as ever."""
+    s = get_settings()
+    if s.lore_answer_spend_cap_usd is not None:
+        return s.lore_answer_spend_cap_usd
+    return s.lore_daily_spend_cap_usd / 2 if s.lore_data_mode == "org" else None
+
+
+def person_cap() -> float | None:
+    """What one person's answers may cost a day (org mode); None in the demo."""
+    s = get_settings()
+    return s.lore_person_spend_cap_usd if s.lore_data_mode == "org" else None
+
+
+def _refuse_over_cap(
+    days: dict[str, Any], worst: float, role: str | None = None, payer: str | None = None
+) -> None:
     cap = get_settings().lore_daily_spend_cap_usd
+    holds = [h for h in _live_holds(days, time.time()).values() if h["day"] == today()]
     spent = float(days.get(today(), 0.0))
-    held = sum(h["usd"] for h in _live_holds(days, time.time()).values() if h["day"] == today())
+    held = sum(h["usd"] for h in holds)
     if spent + held + worst > cap:
         in_flight = f" plus ${held:.4f} held by calls in flight" if held else ""
         raise SpendCapReached(
@@ -213,45 +257,90 @@ def _refuse_over_cap(days: dict[str, Any], worst: float) -> None:
             f"over the ${cap:.2f} cap (LORE_DAILY_SPEND_CAP_USD in .env). Raise the cap or wait "
             "until 00:00 UTC."
         )
+    share = answer_cap() if role == "answer" else None
+    if share is not None:
+        used = float((days.get(ANSWERS) or {}).get(today(), 0.0))
+        used += sum(h["usd"] for h in holds if h.get("role") == "answer")
+        if used + worst > share:
+            raise SpendCapReached(
+                f"answers have used ${used:.4f} of today's ${share:.2f} share of the "
+                f"${cap:.2f} cap (LORE_ANSWER_SPEND_CAP_USD); the rest is kept for reading new "
+                "items. Raise it or wait until 00:00 UTC."
+            )
+    mine = person_cap() if payer else None
+    if mine is not None:
+        used = float(((days.get(PAYERS) or {}).get(today()) or {}).get(payer, 0.0))
+        used += sum(h["usd"] for h in holds if h.get("payer") == payer)
+        if used + worst > mine:
+            raise PersonCapReached(
+                f"your questions today have cost ${used:.4f}, and the next could add "
+                f"${worst:.4f}: over your ${mine:.2f} a day (LORE_PERSON_SPEND_CAP_USD). Try "
+                "again after 00:00 UTC, or ask an admin to raise it."
+            )
 
 
 @contextmanager
-def spend(worst: float, path: Path | None = None):
-    """Hold `worst` against today's cap for the length of one call; yields `pay(amount)`, which
-    settles the hold at the real cost. A call that fails before `pay` costs nothing (no
-    response, nothing billed) and its hold is released."""
+def spend(worst: float, path: Path | None = None, role: Role | None = None):
+    """Hold `worst` against today's caps for the length of one call; yields `pay(amount)`,
+    which settles the hold at the real cost. A call that fails before `pay` costs nothing (no
+    response, nothing billed) and its hold is released. `role` and the `paying` person decide
+    which budgets besides the daily cap the call counts against."""
     path = path or ledger_path()
     hold = f"{os.getpid()}-{threading.get_ident()}-{time.time_ns()}"
+    payer = _payer.get()
     with _FILES_LOCK, _lock(path):
         days = _read_ledger(path)
-        _refuse_over_cap(days, worst)
+        _refuse_over_cap(days, worst, role, payer)
         days[HELD] = _live_holds(days, time.time()) | {
-            hold: {"day": today(), "usd": worst, "until": time.time() + HOLD_S}
+            hold: {
+                "day": today(),
+                "usd": worst,
+                "until": time.time() + HOLD_S,
+                "role": role,
+                "payer": payer,
+            }
         }
         _write_ledger(path, days)
     paid = False
 
     def pay(amount: float) -> None:
         nonlocal paid
-        _settle(path, hold, amount)
+        _settle(path, hold, amount, role, payer)
         paid = True
 
     try:
         yield pay
     finally:
         if not paid:
-            _settle(path, hold, 0.0)
+            _settle(path, hold, 0.0, role, payer)
 
 
-def _settle(path: Path, hold: str, amount: float) -> None:
+def _settle(
+    path: Path, hold: str, amount: float, role: str | None = None, payer: str | None = None
+) -> None:
     with _FILES_LOCK, _lock(path):
         days = _read_ledger(path)
         held = _live_holds(days, time.time())
         held.pop(hold, None)
         days[HELD] = held
         if amount:
-            days[today()] = round(days.get(today(), 0.0) + amount, 6)
+            day = today()
+            days[day] = round(days.get(day, 0.0) + amount, 6)
+            if role == "answer":
+                answers = days.setdefault(ANSWERS, {})
+                answers[day] = round(answers.get(day, 0.0) + amount, 6)
+            if payer:  # only today's: a person's budget starts fresh each day
+                people = (days.get(PAYERS) or {}).get(day) or {}
+                people[payer] = round(people.get(payer, 0.0) + amount, 6)
+                days[PAYERS] = {day: people}
         _write_ledger(path, days)
+
+
+def spent_by(person: str, path: Path | None = None) -> float:
+    """What `person`'s answers have cost today."""
+    path = path or ledger_path()
+    with _FILES_LOCK, _lock(path):
+        return float(((_read_ledger(path).get(PAYERS) or {}).get(today()) or {}).get(person, 0.0))
 
 
 # --- quotes --------------------------------------------------------------------------------
@@ -340,7 +429,7 @@ def complete(
         "messages": [{"role": "user", "content": user}],
         "output_config": {"effort": effort},
     }
-    with spend(worst_case(model, len(system) + len(user), max_tokens)) as pay:
+    with spend(worst_case(model, len(system) + len(user), max_tokens), role=role) as pay:
         started = time.perf_counter()
         if output is not None:
             response = client().messages.parse(output_format=output, **kwargs)
@@ -483,7 +572,7 @@ def converse(
     output_config: dict[str, Any] = {"effort": effort}
     if output_schema is not None:
         output_config["format"] = {"type": "json_schema", "schema": output_schema}
-    with spend(worst_case(model, prompt_chars, max_tokens)) as pay:
+    with spend(worst_case(model, prompt_chars, max_tokens), role=role) as pay:
         started = time.perf_counter()
         response = client().messages.create(
             model=model,

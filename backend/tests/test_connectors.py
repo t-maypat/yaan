@@ -215,6 +215,9 @@ def test_the_heartbeat_says_whether_the_loop_is_alive(offline):
     assert beat["status"] == "waiting"
     late = beat["next_by_ms"] + runner.HEARTBEAT_GRACE_MS + 1
     assert runner.worker_health("lore_demo", now_ms=late)["status"] == "stale"
+    # why it waits is part of the beat, so a paused extraction isn't silent (D124)
+    runner.beat("lore_demo", healthy=False, pause_s=60, waiting="slack: SpendCapReached: cap")
+    assert runner.worker_health("lore_demo")["why"] == "slack: SpendCapReached: cap"
 
 
 def test_deliver_hands_each_action_to_the_tool_that_holds_its_target(monkeypatch):

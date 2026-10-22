@@ -33,6 +33,7 @@ def fake_answer(
     as_of_ms=None,
     viewer_id=None,
     cancel=None,
+    payer=None,
 ):
     ASKED.append(as_of_ms)
     VIEWERS.append(viewer_id)
@@ -90,6 +91,7 @@ def fresh_limits(monkeypatch):
     monkeypatch.setattr(main, "ask_global_limiter", main.RateLimiter(1000))
     monkeypatch.setattr(main, "ask_slots", threading.BoundedSemaphore(4))
     monkeypatch.setattr(main, "request_limiter", main.RateLimiter(1000))
+    monkeypatch.setattr(main, "person_request_limiter", main.RateLimiter(1000))
 
 
 def test_ask_has_a_daily_cap_per_ip(monkeypatch):
@@ -203,7 +205,7 @@ def test_the_loop_stops_before_its_next_turn_once_cancelled(monkeypatch):
     assert calls == []
 
 
-def test_every_route_but_health_has_a_per_ip_budget(monkeypatch):
+def test_every_api_route_has_a_per_ip_budget_when_nobody_signs_in(monkeypatch):
     monkeypatch.setattr(main, "request_limiter", main.RateLimiter(2))
     client = TestClient(main.app)
     codes = [client.get("/query/product_issues.cypher").status_code for _ in range(3)]

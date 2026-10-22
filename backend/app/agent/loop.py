@@ -258,6 +258,7 @@ def answer(
     viewer_id: str | None = None,
     cancel: threading.Event | None = None,
     audience: access.Access | None = None,
+    payer: str | None = None,
 ) -> dict:
     """Answer one question with the tools, validated citations, or an abstention.
 
@@ -273,6 +274,9 @@ def answer(
     `as_of_ms` answers for the state at that moment (the Timeline's slider, 12.4): the
     status tools use it unless the model names another date. `toolset` limits the tools,
     for the Lore − graph tools ablation (`tools.SEARCH_ONLY`, 9.8); the prompt follows it.
+
+    `payer` is the person the model calls are charged to (their daily budget in org mode,
+    D124): the signed-in asker, whoever they answer as.
     """
     names = list(toolset) if toolset else [t["name"] for t in tools.TOOL_SPECS]
     scoped = audience or (access.Access(viewer_id, graph) if viewer_id else None)
@@ -302,14 +306,15 @@ def answer(
     def ask() -> llm.Turn:
         if cancel is not None and cancel.is_set():
             raise Cancelled(f"stopped after {len(turns)} turns: the caller went away")
-        turn = llm.converse(
-            role="answer",
-            system=system,
-            messages=messages,
-            tools=specs,
-            output_schema=SCHEMA,
-            purpose="lore" if toolset is None else "lore-search",
-        )
+        with llm.paying(payer):
+            turn = llm.converse(
+                role="answer",
+                system=system,
+                messages=messages,
+                tools=specs,
+                output_schema=SCHEMA,
+                purpose="lore" if toolset is None else "lore-search",
+            )
         turns.append(turn)
         messages.append({"role": "assistant", "content": turn.content})
         return turn

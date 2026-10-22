@@ -13,9 +13,6 @@ started in the API's lifespan). Everything reads `LORE_API_GRAPH`, like the API.
 
 import json
 import re
-import threading
-import time
-from collections import deque
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -29,9 +26,10 @@ from mcp.server.transport_security import TransportSecuritySettings
 from app import __version__, db, llm
 from app.agent import loop, tools
 from app.config import get_settings
+from app.limits import RateLimiter, person_limits
 
 EXCLUDED = frozenset({"graph_query"})  # raw Cypher stays behind the agent's guard (§9.8)
-ASK_PER_MINUTE = 10  # all MCP clients together; the daily spend cap is the second guard
+ASK_PER_MINUTE = 10  # stdio and anonymous clients together; signed-in people: their own
 PRODUCT = {
     "type": "string",
     "description": "a product id such as VizForce; resolve_entity maps product names and "
@@ -106,28 +104,15 @@ def tool_list() -> list[types.Tool]:
     return out
 
 
-class Limiter:
-    """A sliding one-minute window shared by every MCP client of this process."""
-
-    def __init__(self, per_minute: int):
-        self.per_minute, self.hits, self.lock = per_minute, deque(), threading.Lock()
-
-    def allow(self) -> bool:
-        now = time.monotonic()
-        with self.lock:
-            while self.hits and now - self.hits[0] > 60:
-                self.hits.popleft()
-            if len(self.hits) >= self.per_minute:
-                return False
-            self.hits.append(now)
-            return True
+Limiter = RateLimiter
+ask_limiter = Limiter(ASK_PER_MINUTE)  # one budget for stdio and anonymous HTTP clients
+# a signed-in HTTP client's person: the same per-person limits as /ask and Slack (D124)
+ask_person_limiter, ask_person_daily_limiter = person_limits()
 
 
-ask_limiter = Limiter(ASK_PER_MINUTE)
-
-
-def ask(args: dict[str, Any], graph_name: str) -> dict:
-    """The full agent for one question: the answer and its checked citations, compact."""
+def ask(args: dict[str, Any], graph_name: str, principal: str | None = None) -> dict:
+    """The full agent for one question: the answer and its checked citations, compact.
+    `principal`: the signed-in person, whose limits and daily budget it counts against."""
     question = str(args.get("question") or "").strip()
     if not 3 <= len(question) <= 500:
         raise loop.ToolError("question must be 3-500 characters")
@@ -141,9 +126,24 @@ def ask(args: dict[str, Any], graph_name: str) -> dict:
     product = args.get("product_id") or None
     if product and product not in tools.product_ids(graph_name, refresh=True):
         raise loop.ToolError(f"unknown product_id {product!r}: resolve_entity finds the id")
-    if not ask_limiter.allow():  # last: a malformed request doesn't use up a slot
+    # last: a malformed request doesn't use up a slot
+    if principal:
+        if not ask_person_limiter.allow(principal):
+            raise loop.ToolError(
+                f"at most {ask_person_limiter.per_minute} questions a minute: try again shortly"
+            )
+        if not ask_person_daily_limiter.allow(principal):
+            raise loop.ToolError(f"you have asked {ask_person_daily_limiter.per_minute} today")
+    elif not ask_limiter.allow():
         raise loop.ToolError(f"at most {ASK_PER_MINUTE} questions a minute: try again shortly")
-    out = loop.answer(question, product, graph=graph_name, as_of_ms=as_of_ms, viewer_id=viewer)
+    out = loop.answer(
+        question,
+        product,
+        graph=graph_name,
+        as_of_ms=as_of_ms,
+        viewer_id=viewer,
+        payer=principal,
+    )
     return {
         "answer_markdown": out["answer_markdown"],
         "abstain": out["abstain"],
@@ -170,7 +170,7 @@ def run(
             if args.get("viewer_id") not in (None, "", viewer):
                 raise loop.ToolError(f"signed in as {viewer}: answers are for you")
             args = {**args, "viewer_id": viewer}
-        return ask(args, graph_name)
+        return ask(args, graph_name, viewer)
     allowed = frozenset(tools.REGISTRY) - EXCLUDED
     out = loop.call_tool(name, args, tools.Scope(None, None, graph_name), allowed)
     if viewer:

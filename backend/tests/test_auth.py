@@ -30,6 +30,11 @@ def signed(tmp_path, monkeypatch):
     monkeypatch.setattr(org, "PEOPLE_FILE", people)
     for cached in (get_settings, org.roster, org.accounts):
         cached.cache_clear()
+    # every test starts with empty per-person windows (module-wide in main, D124)
+    minute, day = main.person_limits()
+    monkeypatch.setattr(main, "ask_person_limiter", minute)
+    monkeypatch.setattr(main, "ask_person_daily_limiter", day)
+    monkeypatch.setattr(main, "person_request_limiter", main.RateLimiter(600))
     yield tmp_path
     for cached in (get_settings, org.roster, org.accounts):
         cached.cache_clear()
@@ -292,3 +297,38 @@ def test_a_busy_token_file_skips_the_stamp_and_never_fails_the_request(signed, m
         t.join()
     assert out == ["eid_0000beef"]
     assert auth._digest(token) not in auth._touched  # the next request tries the stamp again
+
+
+# --- limits per person, not per address (F5, D124) ------------------------------------------
+def test_two_people_behind_one_address_each_have_their_own_question_limit(signed, monkeypatch):
+    """The review's reproduction: two signed-in people behind one office address (or one TLS
+    proxy) shared 6 questions a minute, so the 7th between them got 429."""
+    monkeypatch.setattr(loop, "answer", lambda *a, **k: {})
+    monkeypatch.setattr(main, "ask_person_limiter", main.RateLimiter(2))
+    priya = next(e for e, p in org.roster().items() if p["name"] == "Priya Shah")
+    ken = TestClient(main.app, headers={"Authorization": f"Bearer {auth.issue('eid_0000beef')}"})
+    pri = TestClient(main.app, headers={"Authorization": f"Bearer {auth.issue(priya)}"})
+    ask = {"question": "Which bugs?"}
+    assert [ken.post("/ask", json=ask).status_code for _ in range(3)] == [200, 200, 429]
+    assert pri.post("/ask", json=ask).status_code == 200  # the same address, her own limit
+    assert "2 questions per minute" in ken.post("/ask", json=ask).json()["detail"]
+
+
+def test_answers_are_charged_to_the_signed_in_person(signed, monkeypatch):
+    payers = []
+    monkeypatch.setattr(loop, "answer", lambda *a, payer=None, **k: payers.append(payer) or {})
+    ken = TestClient(main.app, headers={"Authorization": f"Bearer {auth.issue('eid_0000beef')}"})
+    assert ken.post("/ask", json={"question": "Which bugs?"}).status_code == 200
+    assert payers == ["eid_0000beef"]
+
+
+def test_the_request_budget_is_per_person_and_skips_the_web_ui_files(signed, monkeypatch):
+    monkeypatch.setattr(main, "person_request_limiter", main.RateLimiter(2))
+    monkeypatch.setattr(main, "request_limiter", main.RateLimiter(1))
+    ken = TestClient(main.app, headers={"Authorization": f"Bearer {auth.issue('eid_0000beef')}"})
+    codes = [ken.get("/query/product_issues.cypher").status_code for _ in range(3)]
+    assert codes == [200, 200, 429]  # his own two, not the address's one
+    anon = TestClient(main.app)
+    assert anon.get("/query/product_issues.cypher").status_code == 401  # counted: the address's one
+    assert anon.get("/query/product_issues.cypher").status_code == 429  # guessing is limited
+    assert anon.get("/no-such-ui-file.js").status_code != 429  # UI files aren't counted

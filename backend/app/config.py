@@ -99,15 +99,25 @@ class Settings(BaseSettings):
     lore_litellm_model_answer: str | None = None
     lore_litellm_model_judge: str | None = None
     lore_daily_spend_cap_usd: float = 2.0  # llm.py refuses a call that could cross it
+    # Org mode (D124): answers may use this much of the daily cap (default: half), so reading
+    # new items keeps the rest; and each signed-in person's answers this much a day (~70
+    # questions at Haiku 5.5's measured ~$0.0035 each). The demo and the eval share one cap.
+    lore_answer_spend_cap_usd: float | None = None
+    lore_person_spend_cap_usd: float = 0.25
     # Optional YAML of {model: [input, output, cache write, cache read] USD per million tokens}
     # that overrides or extends llm.PRICES (D121): a new model, or a price change, needs no code.
     lore_prices_file: Path | None = None
     # Public deployment guards (D081). Cache-only: replay cached answers, never call the API.
     lore_llm_cache_only: bool = False
-    lore_ask_per_ip_per_day: int = 60  # /ask, per client IP, rolling 24 h
+    lore_ask_per_ip_per_day: int = 60  # /ask, per client IP when nobody is signed in, 24 h
     lore_ask_global_per_minute: int = 30  # /ask, all clients together: a swarm of many IPs
     lore_ask_concurrency: int = 4  # answers in flight at once; more get 503
-    lore_requests_per_ip_per_minute: int = 300  # every route but /health
+    lore_requests_per_ip_per_minute: int = 300  # API routes, per IP when nobody is signed in
+    # A signed-in person has budgets of their own (D124), so a team behind one office address
+    # or one TLS proxy doesn't share an IP's: /ask, MCP `ask` and Slack questions per person
+    lore_ask_per_person_per_minute: int = 6
+    lore_ask_per_person_per_day: int = 200
+    lore_requests_per_person_per_minute: int = 600
 
     # Embeddings
     lore_embed_model: str = "BAAI/bge-small-en-v1.5"

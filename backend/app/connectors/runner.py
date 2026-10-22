@@ -442,21 +442,23 @@ def run_forever(graph: str | None = None, every_s: float = 30, say=print) -> Non
     pause = every_s
     while True:
         try:
-            healthy = one_round(connectors, graph, bot, say)
+            waiting = one_round(connectors, graph, bot, say)
         except Exception as e:  # anything at all: reported and retried, never the end of the loop
             say(f"round failed: {why(e)}")
-            healthy = False
+            waiting = [f"round failed: {why(e)}"]
+        healthy = not waiting
         pause = every_s if healthy else min(pause * 2, MAX_PAUSE_S)
-        beat(graph, healthy, pause)
+        beat(graph, healthy, pause, waiting[0] if waiting else None)
         if not healthy:
             say(f"next round in {pause:g} s")
         wake.wait(pause)
         wake.clear()
 
 
-def one_round(connectors: list[Connector], graph: str, bot: Any, say=print) -> bool:
-    """One sync round, said out loud, then the Slack cards of new alerts. True when nothing
-    had to wait (the pause between rounds grows while rounds keep waiting)."""
+def one_round(connectors: list[Connector], graph: str, bot: Any, say=print) -> list[str]:
+    """One sync round, said out loud, then the Slack cards of new alerts. Returns why items
+    or tools had to wait, empty when nothing did (the pause between rounds grows while rounds
+    keep waiting, and the heartbeat says why: e.g. the spend cap pausing extraction)."""
     from app.sentinel import approve, engine
 
     for alert_id in approve.complete_stuck(graph):  # responses a stopped process left (D110)
@@ -482,18 +484,21 @@ def one_round(connectors: list[Connector], graph: str, bot: Any, say=print) -> b
                 carded[alert["id"]] = bot.post_card(base.public_alert(alert, graph))
                 say(f"card {alert['id']}")
         save_state(graph, state)
-    return not report["waiting"]
+    return sorted({f"{r['source']}: {r['why']}" for r in report["waiting"]})
 
 
 HEARTBEAT = "heartbeat.json"
 HEARTBEAT_GRACE_MS = 120_000  # a round may run this long past its announced time
 
 
-def beat(graph: str, healthy: bool, pause_s: float) -> None:
-    """After every round: when it ended, whether it was clean, and when the next one is due.
-    `yaan connectors health` (the worker's healthcheck) and the API's /health read it."""
+def beat(graph: str, healthy: bool, pause_s: float, waiting: str | None = None) -> None:
+    """After every round: when it ended, whether it was clean (else why something waited),
+    and when the next one is due. `yaan connectors health` (the worker's healthcheck) and the
+    API's /health read it."""
     now = int(time.time() * 1000)
     body = {"at_ms": now, "healthy": healthy, "next_by_ms": now + int(pause_s * 1000)}
+    if waiting:
+        body["waiting"] = waiting[:300]
     filestate.write(live.live_dir(graph) / HEARTBEAT, body)
 
 
@@ -509,4 +514,7 @@ def worker_health(graph: str, now_ms: int | None = None) -> dict[str, Any]:
         status = "stale"
     else:
         status = "ok" if beat_["healthy"] else "waiting"
-    return {"status": status, "last_round_ms": beat_["at_ms"], "next_by_ms": beat_["next_by_ms"]}
+    out = {"status": status, "last_round_ms": beat_["at_ms"], "next_by_ms": beat_["next_by_ms"]}
+    if status == "waiting" and beat_.get("waiting"):
+        out["why"] = beat_["waiting"]  # e.g. "slack: SpendCapReached: ...": extraction paused
+    return out

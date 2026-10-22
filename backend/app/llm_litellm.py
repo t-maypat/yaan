@@ -209,7 +209,7 @@ def complete(
     }
     if output is not None:
         kwargs["response_format"] = output
-    with llm.spend(worst) as pay:
+    with llm.spend(worst, role=role) as pay:
         started = time.perf_counter()
         response = litellm.completion(**kwargs)
         elapsed_ms = (time.perf_counter() - started) * 1000
@@ -378,7 +378,7 @@ def converse(
             "type": "json_schema",
             "json_schema": {"name": "answer", "schema": output_schema, "strict": True},
         }
-    with llm.spend(worst) as pay:
+    with llm.spend(worst, role=role) as pay:
         started = time.perf_counter()
         response = litellm.completion(**kwargs)
         elapsed_ms = (time.perf_counter() - started) * 1000

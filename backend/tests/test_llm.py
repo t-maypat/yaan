@@ -409,3 +409,61 @@ def test_a_prices_file_adds_a_model_and_changes_a_price(tmp_path, monkeypatch):
     path.write_text("my-model: 3\n")
     with pytest.raises(llm.LLMError, match="needs \[input, output"):
         llm.cost_usd("my-model", 1, 1)
+
+
+# --- budgets in org mode (F8, D124) --------------------------------------------------------------
+def org_budgets(monkeypatch, **caps):
+    settings = llm.get_settings().model_copy(
+        update={"lore_data_mode": "org", "lore_daily_spend_cap_usd": 1.0, **caps}
+    )
+    monkeypatch.setattr(llm, "get_settings", lambda: settings)
+
+
+def test_answers_cannot_use_up_what_extraction_needs(gateway, monkeypatch):
+    """F8: answers and extraction shared one cap, so a day of heavy asking paused ingestion
+    and the graph went quietly stale. In org mode answers get a share (half by default)."""
+    org_budgets(monkeypatch)
+    path = llm.ledger_path()
+    with llm.spend(0.4, path, role="answer") as pay:
+        pay(0.4)
+    with pytest.raises(llm.SpendCapReached, match="share"):
+        with llm.spend(0.2, path, role="answer"):
+            pass
+    with llm.spend(0.5, path, role="extract") as pay:  # extraction still has its half
+        pay(0.5)
+    assert llm.spent_today(path) == pytest.approx(0.9)
+
+
+def test_each_person_has_a_daily_budget_of_their_own(gateway, monkeypatch):
+    org_budgets(monkeypatch, lore_person_spend_cap_usd=0.05)
+    path = llm.ledger_path()
+    with llm.paying("eid_0000beef"):
+        with llm.spend(0.03, path, role="answer") as pay:
+            pay(0.03)
+        with pytest.raises(llm.PersonCapReached, match="your questions today"):
+            with llm.spend(0.03, path, role="answer"):
+                pass
+    with llm.paying("eid_12345678"), llm.spend(0.03, path, role="answer") as pay:
+        pay(0.03)  # someone else still can
+    assert llm.spent_by("eid_0000beef", path) == pytest.approx(0.03)
+    # a person cap is a spend cap: the connector loop's "wait and retry" class
+    assert issubclass(llm.PersonCapReached, llm.SpendCapReached)
+
+
+def test_a_persons_calls_in_flight_count_against_them(gateway, monkeypatch):
+    org_budgets(monkeypatch, lore_person_spend_cap_usd=0.05)
+    path = llm.ledger_path()
+    with llm.paying("eid_0000beef"), llm.spend(0.03, path, role="answer"):
+        with pytest.raises(llm.PersonCapReached):  # a second question at the same time
+            with llm.spend(0.03, path, role="answer"):
+                pass
+
+
+def test_the_demo_and_the_eval_keep_one_shared_cap(gateway):
+    """Answers may use the whole cap outside org mode, as before (an eval run isn't cut at
+    half), and nobody has a personal budget."""
+    path = llm.ledger_path()
+    assert llm.answer_cap() is None and llm.person_cap() is None
+    with llm.paying("eid_0000beef"), llm.spend(0.045, path, role="answer") as pay:
+        pay(0.045)
+    assert llm.spent_today(path) == pytest.approx(0.045)

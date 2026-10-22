@@ -23,8 +23,7 @@ import hmac
 import json
 import queue
 import threading
-import time
-from collections import Counter, defaultdict, deque
+from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
@@ -33,9 +32,11 @@ import anyio
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from app import __version__, auth, db, mcp_server
 from app.config import REPO_ROOT, get_settings
+from app.limits import RateLimiter, person_limits
 
 mcp_http = mcp_server.HttpEndpoint()  # /mcp (17.1): Lore's tools for any MCP client
 
@@ -61,48 +62,20 @@ def finish_stuck_responses() -> None:
 
 app = FastAPI(title="Lore", version=__version__, lifespan=lifespan)
 app.router.add_route("/mcp", mcp_http, include_in_schema=False)
-ASK_PER_MINUTE = 6  # per IP; the LLM gateway's daily spend cap is the second guard
+ASK_PER_MINUTE = 6  # per IP when nobody is signed in; the daily spend caps are the second guard
 STREAM_POLL_S = 0.5  # /ask checks this often whether the browser is still listening
 
-
-class RateLimiter:
-    """A sliding window (one minute by default) per key, usually the client IP. In memory: one
-    API process. A swarm of many IPs grows the table, so expired keys are swept now and then."""
-
-    SWEEP_EVERY = 5_000  # calls between sweeps of keys whose window has emptied
-
-    def __init__(self, per_minute: int, window: float = 60):
-        self.per_minute = per_minute  # the limit per window (per day for a 24 h window)
-        self.window = window
-        self.hits: dict[str, deque[float]] = defaultdict(deque)
-        self.lock = threading.Lock()
-        self.calls = 0
-
-    def allow(self, key: str, now: float | None = None) -> bool:
-        now = time.monotonic() if now is None else now
-        with self.lock:
-            self.calls += 1
-            if self.calls % self.SWEEP_EVERY == 0:
-                stale = [k for k, h in self.hits.items() if not h or now - h[-1] > self.window]
-                for k in stale:
-                    del self.hits[k]
-            hits = self.hits[key]
-            while hits and now - hits[0] > self.window:
-                hits.popleft()
-            if len(hits) >= self.per_minute:
-                return False
-            hits.append(now)
-            return True
-
-
 _s = get_settings()
+# Anonymous askers (the demo) are counted per IP; a signed-in person on their own (D124), so an
+# office behind one address, or everyone behind one TLS proxy, doesn't share one budget.
 ask_limiter = RateLimiter(ASK_PER_MINUTE)
-# D081: guards for a public deployment, where an agent swarm can come from many IPs at once.
 ask_daily_limiter = RateLimiter(_s.lore_ask_per_ip_per_day, window=86_400)
+ask_person_limiter, ask_person_daily_limiter = person_limits()
+# D081: guards for a public deployment, where an agent swarm can come from many IPs at once.
 ask_global_limiter = RateLimiter(_s.lore_ask_global_per_minute)  # one key for everyone
 ask_slots = threading.BoundedSemaphore(_s.lore_ask_concurrency)
 request_limiter = RateLimiter(_s.lore_requests_per_ip_per_minute)
-UNLIMITED_PATHS = {"/health"}
+person_request_limiter = RateLimiter(_s.lore_requests_per_person_per_minute)
 # The routes that read or write the graph (D100). /ingest/artifact has its own secret; /health
 # and the built UI's files are public, and the UI signs in when an API call answers 401.
 API_PREFIXES = (
@@ -119,6 +92,9 @@ API_PREFIXES = (
     "/mcp",
     "/me",
 )
+# What the request budget counts: the API, sign-in (token guessing) and the ingest endpoint.
+# /health and the web UI's own files aren't counted: a page load is dozens of them.
+LIMITED_PREFIXES = (*API_PREFIXES, "/auth", "/ingest")
 
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -139,26 +115,44 @@ SECURITY_HEADERS = {
 
 @app.middleware("http")
 async def identify(request: Request, call_next):
-    """Who is asking (app/auth.py): the principal every route below reads, never the body.
-    Defined before the rate limit, so the limit wraps it and guessing tokens is limited too.
-    A browser session (cookie) may change something only with the X-Yaan-CSRF header (D111)."""
+    """Who is asking (app/auth.py), then their request budget. The principal is what every
+    route below reads, never the body. The budget is the person's own when they signed in,
+    else their address's, and a failed sign-in counts against the address, so guessing tokens
+    is limited too (D124). A browser session (cookie) may change something only with the
+    X-Yaan-CSRF header (D111)."""
     request.state.principal = None
-    if request.url.path.startswith(API_PREFIXES):
-        try:
-            who, how = auth.identify(request.headers, request.cookies)
+    path = request.url.path
+    who = how = refused = None
+    if path.startswith(API_PREFIXES):
+        try:  # in a thread: a token's last-use stamp may wait briefly for the token file
+            who, how = await run_in_threadpool(auth.identify, request.headers, request.cookies)
         except auth.AuthError as e:
+            refused = e
+    if path.startswith(LIMITED_PREFIXES):
+        if who:
+            allowed = person_request_limiter.allow(who)
+        else:
+            allowed = request_limiter.allow(client_ip(request))
+        if not allowed:
+            source = "you" if who else "this address"
             return JSONResponse(
-                {"detail": str(e), "auth": auth.mode()},
-                status_code=401,
-                headers={"WWW-Authenticate": "Bearer"},
+                {"detail": f"too many requests from {source}; wait a minute"},
+                status_code=429,
+                headers={"Retry-After": "60"},
             )
-        if how == "cookie" and request.method not in SAFE_METHODS:
-            if not request.headers.get(auth.CSRF_HEADER):
-                return JSONResponse(
-                    {"detail": f"a browser session needs the {auth.CSRF_HEADER} header"},
-                    status_code=403,
-                )
-        request.state.principal = who
+    if refused is not None:
+        return JSONResponse(
+            {"detail": str(refused), "auth": auth.mode()},
+            status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if how == "cookie" and request.method not in SAFE_METHODS:
+        if not request.headers.get(auth.CSRF_HEADER):
+            return JSONResponse(
+                {"detail": f"a browser session needs the {auth.CSRF_HEADER} header"},
+                status_code=403,
+            )
+    request.state.principal = who
     return await call_next(request)
 
 
@@ -199,18 +193,6 @@ def open_session(request: Request, response: Response) -> dict:
 def close_session(response: Response) -> dict:
     response.delete_cookie(auth.SESSION_COOKIE, path="/")
     return {"signed_out": True}
-
-
-@app.middleware("http")
-async def limit_requests(request: Request, call_next):
-    """Every route but /health: a per-IP budget, so a scraper or a swarm can't flood FalkorDB."""
-    if request.url.path not in UNLIMITED_PATHS and not request_limiter.allow(client_ip(request)):
-        return JSONResponse(
-            {"detail": "too many requests from this address; wait a minute"},
-            status_code=429,
-            headers={"Retry-After": "60"},
-        )
-    return await call_next(request)
 
 
 DEMO_PER_MINUTE = 6  # per IP: injections, resets, approvals and dismissals
@@ -303,16 +285,22 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
     """Answer a question, streaming the tool trace, the answer, citations and evidence."""
     from app.agent import loop
 
-    ip = client_ip(request)
+    who = principal(request)
     viewer = as_principal(request, body.viewer_id, "the viewer")
     # The slot first: a request turned away as busy doesn't use up the asker's limits (D098).
     if not ask_slots.acquire(blocking=False):
         raise HTTPException(503, "Lore is busy answering; try again shortly", {"Retry-After": "10"})
+    # a signed-in person's own limits; an anonymous asker's address's (D124)
+    key = who or client_ip(request)
+    minute, day = (ask_person_limiter, ask_person_daily_limiter)
+    if not who:
+        minute, day = ask_limiter, ask_daily_limiter
     refused = None
-    if not ask_limiter.allow(ip):
-        refused = f"at most {ASK_PER_MINUTE} questions per minute"
-    elif not ask_daily_limiter.allow(ip):
-        refused = "this address has asked its questions for today"
+    if not minute.allow(key):
+        refused = f"at most {minute.per_minute} questions per minute"
+    elif not day.allow(key):
+        asker = "you have" if who else "this address has"
+        refused = f"{asker} asked {day.per_minute} questions today: the limit for a day"
     elif not ask_global_limiter.allow("*"):
         refused = "Lore is answering many questions right now; try in a minute"
     if refused:
@@ -331,6 +319,7 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
                 as_of_ms=body.as_of_ms,
                 viewer_id=viewer,
                 cancel=cancel,
+                payer=who,
             )
         except Exception as e:  # shown to the viewer as an error event, never a fake answer
             events.put(("error", {"error": type(e).__name__, "message": str(e)[:500]}))
@@ -674,7 +663,10 @@ def health(response: Response) -> dict[str, str]:
     from app.connectors import runner
 
     # the connector worker's heartbeat (D108): reported, not a reason to stop serving answers
-    worker = runner.worker_health(graph())["status"]
+    beat = runner.worker_health(graph())
+    worker = beat["status"]
+    if beat.get("why"):  # say why rounds wait (e.g. the spend cap pausing extraction, D124)
+        worker = f"{worker}: {beat['why']}"[:200]
     try:
         db.client(readonly=True).connection.ping()
     except Exception as e:  # down, wrong password, users missing: all mean "not serving"

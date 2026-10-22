@@ -22,7 +22,7 @@ from typing import Any
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from app import db, org
+from app import db, limits, org
 from app.connectors import base, render
 from app.connectors.base import ConnectorError, Item, Maps
 from app.ingest.normalize import Artifact
@@ -349,6 +349,8 @@ class SlackBot:
         self.app = App(token=bot_token)
         self.app_token, self.graph, self.on_message = app_token, graph, on_message
         self.connector = SlackConnector(self.app.client, graph)
+        # each Slack user's questions, as /ask counts a signed-in person's (D124)
+        self.per_minute, self.per_day = limits.person_limits()
         # Links to sources in other tools; the runner sets one over every connector.
         self.resolve: render.Resolve = self.connector.link
         self.app.event("app_mention")(self._mention)
@@ -372,6 +374,20 @@ class SlackBot:
         except ConnectorError:
             return None
 
+    def limited(self, user: str | None) -> str | None:
+        """Why this Slack user may not ask now, or None. Counted per account, like /ask."""
+        key = user or "unknown"
+        if not self.per_minute.allow(key):
+            n = self.per_minute.per_minute
+            return f"You've asked {n} questions in a minute: try again shortly."
+        if not self.per_day.allow(key):
+            return f"You've asked {self.per_day.per_minute} questions today: the daily limit."
+        return None
+
+    def payer(self, user: str | None) -> str | None:
+        """Whose daily budget an answer counts against: the asker, in org mode (D124)."""
+        return self.connector.who(user) if user and not base.is_demo() else None
+
     def _mention(self, event: dict[str, Any], say: Callable[..., Any]) -> None:
         from app.agent import access, loop
 
@@ -381,13 +397,22 @@ class SlackBot:
             hint = "Ask me about the company, e.g. `@lore who knows the export module?`"
             say(text=hint, thread_ts=thread)
             return
+        if refusal := self.limited(event.get("user")):
+            say(text=refusal, thread_ts=thread)
+            return
         try:
             # Posted in the channel, so it may use only what everyone there can read, not
             # what the asker alone may (D109); a DM to the bot answers from all of that.
             channel = self.connector.yaan_channel(event.get("channel") or "")
             scope = access.Access.audience(channel, self.graph)
             product = self.connector.maps.product_of("slack", channel)
-            out = loop.answer(question, product, graph=self.graph, audience=scope)
+            out = loop.answer(
+                question,
+                product,
+                graph=self.graph,
+                audience=scope,
+                payer=self.payer(event.get("user")),
+            )
         except Exception as e:  # shown in the thread, never a made-up answer
             say(text=f"I couldn't answer: {type(e).__name__}: {e}", thread_ts=thread)
             return
@@ -403,10 +428,17 @@ class SlackBot:
         question = MENTION.sub("", event.get("text") or "").strip()
         if len(question) < 3:
             return
+        if refusal := self.limited(event.get("user")):
+            say(text=refusal)
+            return
         try:
             viewer = self.connector.who(event.get("user"))
             out = loop.answer(
-                question, self.connector.maps.product, graph=self.graph, viewer_id=viewer
+                question,
+                self.connector.maps.product,
+                graph=self.graph,
+                viewer_id=viewer,
+                payer=self.payer(event.get("user")),
             )
         except Exception as e:  # shown to the asker, never a made-up answer
             say(text=f"I couldn't answer: {type(e).__name__}: {e}")
