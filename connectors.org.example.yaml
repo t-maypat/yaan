@@ -25,6 +25,10 @@ slack:
     # mobile: {channel: bug-mobile, product: Acme Mobile}
   alerts_channel: yaan-alerts       # alert cards with Approve / Dismiss, and notifications
   people: {}                        # optional: Slack member id -> person id (people.yaml is easier)
+  # Thread replies, edits and deletions arrive over the socket. At start-up and daily Yaan also
+  # compares the last 14 days of these channels with its graph, for what it missed while down
+  # (`sweep_days: 30` reaches further; `yaan connectors reconcile --days 90` checks once).
+  # sweep_days: 14
 
 github:
   visibility: everyone              # who may read its pull requests in Yaan

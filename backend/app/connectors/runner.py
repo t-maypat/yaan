@@ -18,6 +18,11 @@ A failed item is never dropped (H1, D107). What went wrong decides what happens:
   can't stall its connector.
 A connector's cursor never passes an item that will be retried, and a round that fails as a
 whole is reported and retried after a growing pause: the loop doesn't die.
+
+Deletions and the sweep (D126): an item the source deleted is forgotten (app/forget.py) before
+anything else in the round, and kept for the next round if that fails. A connector with a
+`sweep` (Slack) is reconciled with its source in org mode, at the first round of each process
+and then daily, and on demand with `yaan connectors reconcile`.
 """
 
 import json
@@ -64,6 +69,8 @@ MAX_BATCH = 200  # items per live batch; state is saved after each (D114)
 EXTRACT_WORKERS = 4  # items extracted at once within a batch
 KEEP_SEEN_MS = 86_400_000  # versions remembered a day behind the cursor: more than any re-read
 MAX_PAUSE_S = 900  # the longest wait between failing rounds
+SWEEP_EVERY_MS = 86_400_000  # a connector's reconciliation sweep, besides each process's first
+_swept: set[str] = set()  # the connectors this process has swept (its first round sweeps)
 
 
 def load_state(graph: str) -> dict[str, Any]:
@@ -80,9 +87,13 @@ def why(e: BaseException) -> str:
     return f"{type(e).__name__}: {e}"
 
 
-def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any]:
-    """One round: ingest what changed, then deliver approved actions. Fails loudly per item:
-    an item the live path refuses becomes a dead letter; one that may still go in waits."""
+def sync(
+    connectors: list[Connector], graph: str | None = None, sweep_days: float | None = None
+) -> dict[str, Any]:
+    """One round: forget what the sources deleted, ingest what changed, then deliver approved
+    actions. Fails loudly per item: an item the live path refuses becomes a dead letter; one
+    that may still go in waits. `sweep_days`: reconcile every connector that can with its
+    source that far back, now (`yaan connectors reconcile`)."""
     graph = live.demo_graph(graph)
     if org.active():
         prepare(graph, connectors)
@@ -94,6 +105,7 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
         "waiting": [],
         "sent": [],
         "unsent": [],
+        "forgotten": [],
     }
     for c in connectors:
         # one cursor per repo, project or page when a tool reads several (D118)
@@ -106,6 +118,26 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
         except Exception as e:  # the tool is down or refused us: this one waits, the rest go on
             report["waiting"].append({"id": None, "source": c.name, "why": why(e)})
             continue
+        if sweep_due(c, mine, sweep_days):
+            try:  # a failed sweep is retried next round; the round's own items still go in
+                items += c.sweep(sweep_days)  # type: ignore[attr-defined]
+                mine["swept_ms"] = int(time.time() * 1000)
+                _swept.add(getattr(c, "state_key", c.name))
+            except Exception as e:
+                report["waiting"].append({"id": None, "source": c.name, "why": f"sweep: {why(e)}"})
+        # what the source deleted goes first, so nothing in this round brings it back (D126)
+        gone = sorted({i.artifact.id for i in items if i.deleted} | set(mine.get("deletes", [])))
+        items = [i for i in items if not i.deleted and i.artifact.id not in gone]
+        if gone:
+            try:
+                forget.forget(gone, graph, reason=f"deleted in {c.name}")
+                report["forgotten"].append({"source": c.name, "items": len(gone)})
+                mine["deletes"] = []
+            except Exception as e:  # the lock was busy, FalkorDB left: next round, not lost
+                mine["deletes"] = gone
+                report["waiting"].append(
+                    {"id": None, "source": c.name, "why": f"forgetting {len(gone)}: {why(e)}"}
+                )
         items.sort(key=lambda i: (i.artifact.ts_ms or 0, i.artifact.id))
         present = live.present_ids(graph, [i.artifact.id for i in items])
         # forgotten, or by an erased person: skipped before the live path, so no dead letter
@@ -180,6 +212,20 @@ def sync(connectors: list[Connector], graph: str | None = None) -> dict[str, Any
     report["sent"], report["unsent"] = deliver(connectors, graph)
     report["derived"] = live.derive_if_due(graph)  # the derived layer, if a write made it due
     return report
+
+
+def sweep_due(c: Connector, mine: dict[str, Any], days: float | None) -> bool:
+    """Whether `c` reconciles with its source this round: asked for (`days`), or in org mode at
+    a process's first round (Yaan may have been down) and then every SWEEP_EVERY_MS. The demo
+    never sweeps on its own: a demo reset would bring the sandbox's old messages back."""
+    if not hasattr(c, "sweep"):
+        return False
+    if days is not None:
+        return True
+    if base.is_demo():
+        return False
+    first = getattr(c, "state_key", c.name) not in _swept
+    return first or time.time() * 1000 - mine.get("swept_ms", 0) >= SWEEP_EVERY_MS
 
 
 def first_cursor(c: Connector, now_ms: int | None = None) -> int:
@@ -322,10 +368,16 @@ def configured(graph: str) -> list[Connector]:
     out: list[Connector] = []
     if st.slack_bot_token:
         from slack_sdk import WebClient
+        from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
 
         from app.connectors.slack import SlackConnector
 
-        out.append(SlackConnector(WebClient(token=st.slack_bot_token), graph))
+        # a sweep reads many threads: wait out Slack's rate limit (Retry-After) a few times
+        client = WebClient(
+            token=st.slack_bot_token,
+            retry_handlers=[RateLimitErrorRetryHandler(max_retry_count=3)],
+        )
+        out.append(SlackConnector(client, graph))
     # several repos, projects or pages: connectors.yaml lists them (D118), one connector each
     projects = maps.containers("jira", "projects", st.jira_project)
     if st.jira_base_url and st.jira_email and st.jira_api_token and projects:
@@ -476,6 +528,8 @@ def one_round(connectors: list[Connector], graph: str, bot: Any, say=print) -> l
         say(f"in  {r['id']} ({r['freshness_lag_ms']:.0f} ms) alerts={r['alerts']}")
     for r in report["refused"]:
         say(f"refused {r['id']}: {r['why']}")
+    for r in report["forgotten"]:
+        say(f"forgot {r['items']} item(s) deleted in {r['source']}")
     for r in report["dead"]:
         say(f"dead letter {r['id']}: {r['why']} (yaan connectors dead | retry)")
     for r in report["waiting"]:

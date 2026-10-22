@@ -189,3 +189,58 @@ def test_the_commands_are_dry_runs_until_told_and_refuse_a_listed_person(story, 
     assert "wrote 2 items and is @-mentioned in 1" in capsys.readouterr().err
     assert cli.main(["forget", fix.id, "--graph", g, "--yes"]) == 0
     assert json.loads(capsys.readouterr().out)["artifacts"] == 1
+
+
+# --- threads, edits and deletions from a source (F1, F7, D126) ------------------------------
+def in_thread(a: Artifact, root: Artifact) -> Artifact:
+    return a.model_copy(update={"meta": {**a.meta, "thread_id": root.id}})
+
+
+def test_a_reply_is_read_with_its_thread_and_a_message_with_its_channel(story):
+    g, sam, priya = story["graph"], story["sam"], story["priya"]
+    report, fix, back = story["msgs"]
+    first = in_thread(message(3, priya, "Looking at it now."), report)
+    live.ingest_artifact(first, g, events=[])
+    stored = rows(g, "MATCH (m:Message {id: $id}) RETURN m.thread_id AS t LIMIT 1", id=first.id)
+    assert stored == [{"t": report.id}]
+
+    second = in_thread(message(4, sam, "Thanks, it's the 4.2 build."), report)
+    assert [m.id for m in live.conversation(second, g)] == [report.id, first.id]
+    # ten days on: the root is read however old; the replies of the last week only
+    later = in_thread(message(240, sam, "Still slow."), report)
+    assert [m.id for m in live.conversation(later, g)] == [report.id]
+    # a top-level message reads the channel's top-level messages, not the thread
+    top = message(5, sam, "Another thing: the PDF export too.")
+    assert [m.id for m in live.conversation(top, g)] == [report.id, fix.id, back.id]
+    # a reply in the same batch, not yet in the graph, is part of its thread
+    assert [m.id for m in live.conversation(later, g, earlier=[second])] == [report.id, second.id]
+
+
+def test_a_round_applies_an_edit_and_a_deletion_from_the_source(story):
+    from app.connectors import runner
+    from app.connectors.base import Item
+
+    g, priya = story["graph"], story["priya"]
+    report, fix, back = story["msgs"]
+    unsaid = fix.model_copy(update={"text": "Looking into the CSV export timeout."})
+
+    class Source:
+        name, maps = "slack", MAPS
+
+        def fetch(self, since_ms):
+            return [Item(unsaid, updated_ms=int(time.time() * 1000), events=[]),
+                    Item(back, updated_ms=int(time.time() * 1000), deleted=True)]  # fmt: skip
+
+    report_ = runner.sync([Source()], g)
+    assert report_["forgotten"] == [{"source": "slack", "items": 1}]
+    assert [r["id"] for r in report_["ingested"]] == [fix.id]
+    assert live.present_ids(g, [back.id]) == set()
+    # the edited message no longer says it's fixed: its event is closed, the issue reported
+    live_events = rows(g, "MATCH (e:Event {artifact_id: $id}) WHERE e.retracted_ms IS NULL "
+                          "RETURN e.id LIMIT 5", id=fix.id)  # fmt: skip
+    assert live_events == []
+    (issue,) = rows(g, "MATCH (i:Issue) RETURN i.current_status AS status LIMIT 1")
+    assert issue["status"] == "reported"
+    assert priya  # the lead's message is still there, with its new words
+    (kept,) = rows(g, "MATCH (a:Artifact {id: $id}) RETURN a.text AS text LIMIT 1", id=fix.id)
+    assert kept["text"] == unsaid.text

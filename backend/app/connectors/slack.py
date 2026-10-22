@@ -11,10 +11,21 @@ Who may read what (H1, D109): in org mode each round also reads which mapped cha
 private and who is in them, so Yaan shows a private channel only to its members. An answer
 posted in a channel uses only what everyone there may read; a direct message to the bot gets
 an answer from everything the asker may read.
+
+Threads, edits and deletions (F1, F7, D126). `conversations.history` returns only top-level
+messages created since the cursor, so the poll alone never saw a thread reply, a later edit or
+a deletion. The socket hears all of them: the bot queues each one (`hear`), and the next round
+(woken at once) takes them in: a reply as a message of its thread, an edit through the live
+path's replace (which closes the events the new words no longer state), a deletion through
+`forget`. What the socket misses while Yaan is down, the reconciliation sweep finds (org mode,
+at start-up and daily): every message and reply Slack holds over the last `sweep_days`
+(default 14), compared with the graph. A deletion is inferred only from a complete read.
 """
 
 import re
+import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -27,10 +38,41 @@ from app.connectors import base, render
 from app.connectors.base import ConnectorError, Item, Maps
 from app.ingest.normalize import Artifact
 
-SKIP_SUBTYPES = {"channel_join", "channel_leave", "bot_message", "channel_topic", "channel_purpose"}
+# not company knowledge; a "tombstone" is the placeholder Slack keeps for a deleted thread root
+SKIP_SUBTYPES = {
+    "channel_join",
+    "channel_leave",
+    "bot_message",
+    "channel_topic",
+    "channel_purpose",
+    "tombstone",
+}
 LINK = re.compile(r"<(https?://[^|>]+)(?:\|([^>]+))?>")
 MENTION = re.compile(r"<@([A-Z0-9]+)(?:\|[^>]+)?>")
 SEEDED = "[synthetic demo · as "  # a bot post counts only when it opens with a persona label
+SWEEP_DAYS = 14  # how far back the reconciliation sweep compares Slack with the graph (D126)
+HEARD_SUBTYPES = {None, "thread_broadcast", "file_share", "me_message", "message_changed",
+                  "message_deleted"}  # fmt: skip
+
+# Socket events (D126): what the bot heard in the channels it is in, for the connector loop's
+# next round. Bounded: past it the oldest go, and the sweep finds them.
+_heard: deque[dict[str, Any]] = deque(maxlen=10_000)
+_heard_lock = threading.Lock()
+
+
+def hear(event: dict[str, Any]) -> bool:
+    """Queue a channel message event (a new message, a thread reply, an edit or a deletion) for
+    the next round. False for what Yaan doesn't read: bot posts, joins, topic changes."""
+    sub = event.get("subtype")
+    if sub not in HEARD_SUBTYPES:
+        return False
+    inner = event.get("message") or event.get("previous_message") or {}
+    by_bot = event.get("bot_id") or (sub in HEARD_SUBTYPES - {None} and inner.get("bot_id"))
+    if by_bot and not (base.is_demo() and SEEDED in ((inner or event).get("text") or "")):
+        return False  # Yaan's own answers and cards, never read back
+    with _heard_lock:
+        _heard.append(event)
+    return True
 
 
 def ts_ms(ts: str) -> int:
@@ -79,7 +121,7 @@ class SlackConnector:
         if not base.is_demo():
             self._channels = None  # re-read: a channel may have turned private, or been added
             self.sync_access()
-        items = []
+        items = self.heard()  # replies, edits and deletions the socket heard (D126)
         for slack_name, herb_id in org.channel_map(self.conf).items():
             cid = self.channel_ids().get(slack_name)
             if not cid:
@@ -181,6 +223,9 @@ class SlackConnector:
         author = self.who(m.get("user"), text)
         created = ts_ms(m["ts"])
         edited = (m.get("edited") or {}).get("ts")
+        thread = m.get("thread_ts")
+        # a reply names its thread's root: its conversation, read with it (D126)
+        root = base.synthetic_id("msg", "slack", f"{cid}-{thread}") if thread != m["ts"] else None
         a = Artifact(
             id=base.synthetic_id("msg", "slack", f"{cid}-{m['ts']}"),
             kind="message",
@@ -198,9 +243,137 @@ class SlackConnector:
                 "source": "slack",
                 "slack_channel": cid,
                 "slack_ts": m["ts"],
-            },
+            }
+            | ({"thread_id": root} if thread and root else {}),
         )
         return Item(a, updated_ms=ts_ms(edited) if edited else created)
+
+    def deletion(self, cid: str, ts: str, herb_id: str) -> Item:
+        """A message Slack no longer holds: only its id matters (the runner forgets it)."""
+        a = Artifact(
+            id=base.synthetic_id("msg", "slack", f"{cid}-{ts}"),
+            kind="message",
+            product_hint=self.maps.product_of("slack", herb_id),
+            channel_id=herb_id,
+            ts_ms=ts_ms(ts),
+            ts_iso=iso(ts_ms(ts)),
+            text="",
+            raw_ref=f"slack:{cid}:{ts}",
+            meta={"source": "slack", "slack_channel": cid, "slack_ts": ts},
+        )
+        return Item(a, updated_ms=now_ms(), deleted=True)
+
+    def heard(self) -> list[Item]:
+        """The events the bot queued since the last round, as items: a new message or reply,
+        an edit (only when its words changed: Slack also sends one when a link preview
+        appears, and each would cost a model call), or a deletion (a deleted root that keeps
+        its replies arrives as an edit into a "tombstone")."""
+        with _heard_lock:
+            events = list(_heard)
+            _heard.clear()
+        if not events:
+            return []
+        try:
+            return self._items(events)
+        except Exception:  # nothing heard is lost to a failed round: the next one retries
+            with _heard_lock:
+                _heard.extendleft(reversed(events))
+            raise
+
+    def _items(self, events: list[dict[str, Any]]) -> list[Item]:
+        names = {v: k for k, v in self.channel_ids().items()}
+        mapped = org.channel_map(self.conf)
+        channels: dict[str, list[dict[str, Any]]] = {}
+        out = []
+        for ev in events:
+            cid = ev.get("channel") or ""
+            herb_id = mapped.get(names.get(cid, ""))
+            if not herb_id:
+                continue  # a channel Yaan doesn't read
+            if herb_id not in channels:
+                channels[herb_id] = db.run("get_channel", {"id": herb_id}, graph=self.graph).rows
+            if not channels[herb_id]:
+                continue
+            sub = ev.get("subtype")
+            if sub == "message_deleted":
+                prev = ev.get("previous_message") or {}
+                out.append(self.deletion(cid, ev.get("deleted_ts") or prev["ts"], herb_id))
+                continue
+            if sub == "message_changed":
+                m, prev = ev.get("message") or {}, ev.get("previous_message") or {}
+                if m.get("subtype") == "tombstone":
+                    out.append(self.deletion(cid, m["ts"], herb_id))
+                    continue
+                if self.plain(m.get("text") or "") == self.plain(prev.get("text") or ""):
+                    continue
+                ev = m
+            if item := self.normalize(ev, cid, herb_id, channels[herb_id][0]["name"]):
+                out.append(item)
+        return out
+
+    def sweep(self, days: float | None = None) -> list[Item]:
+        """The reconciliation sweep (D126): what the socket missed while Yaan was down. Over
+        the last `days` (connectors.yaml `sweep_days`, default 14), per mapped channel: every
+        message and reply Slack holds, against what the graph holds from that channel. New or
+        changed ones come back as items; ones the graph holds that Slack doesn't, as
+        deletions, but only from a complete read: a thread whose replies couldn't be read, or
+        whose root is older than the window and wasn't read, is left alone."""
+        days = float(self.conf.get("sweep_days", SWEEP_DAYS) if days is None else days)
+        since_ms = now_ms() - int(days * 86_400_000)
+        oldest = f"{since_ms / 1000:.6f}"
+        out: list[Item] = []
+        for slack_name, herb_id in org.channel_map(self.conf).items():
+            cid = self.channel_ids().get(slack_name)
+            rows = db.run("get_channel", {"id": herb_id}, graph=self.graph).rows
+            if not cid or not rows:
+                raise ConnectorError(f"#{slack_name} can't be swept: run a sync first")
+            prefix = base.synthetic_id("msg", "slack", f"{cid}-x")[:-1]
+            held = {
+                r["id"]: r
+                for r in db.run_all(
+                    "held_messages",
+                    {"channel_id": herb_id, "since_ms": since_ms, "prefix": prefix},
+                    cap=200_000,
+                    graph=self.graph,
+                    timeout_ms=30_000,
+                )
+            }
+            found = self.pages("conversations_history", channel=cid, oldest=oldest)
+            roots = {m["ts"] for m in found if m.get("reply_count")}
+            # replies the graph holds under a root older than the window: read those too
+            roots |= {
+                r["thread_id"].rsplit("-", 1)[1] for r in held.values() if r.get("thread_id")
+            }
+            unread: set[str] = set()
+            for ts in sorted(roots):
+                try:
+                    replies = self.pages("conversations_replies", channel=cid, ts=ts, oldest=oldest)
+                except ConnectorError:
+                    unread.add(base.synthetic_id("msg", "slack", f"{cid}-{ts}"))
+                    continue
+                found += [m for m in replies if m["ts"] != ts]
+            slack: dict[str, Item] = {}
+            for m in found:
+                if item := self.normalize(m, cid, herb_id, rows[0]["name"]):
+                    slack[item.artifact.id] = item
+            for aid, item in slack.items():
+                if aid not in held or held[aid]["text"] != item.artifact.text:
+                    out.append(item)  # missed, or edited while Yaan was down
+            for aid, r in held.items():
+                if aid in slack or (r.get("thread_id") or aid) in unread:
+                    continue
+                out.append(self.deletion(cid, aid.rsplit("-", 1)[1], herb_id))
+        return out
+
+    def pages(self, method: str, **kw: Any) -> list[dict[str, Any]]:
+        """Every message of a paged history or replies read."""
+        out, cursor = [], None
+        while True:
+            r = self._call(method, limit=200, cursor=cursor, **kw)
+            out += r.get("messages") or []
+            cursor = (r.get("response_metadata") or {}).get("next_cursor")
+            if not cursor:
+                return out
 
     # --- writing ---------------------------------------------------------------------------
     def post(self, action: dict[str, Any], resolve: render.Resolve | None = None) -> str | None:
@@ -446,12 +619,12 @@ class SlackBot:
         say(text=answer_text(out, self._permalink), unfurl_links=False)
 
     def _message(self, event: dict[str, Any], say: Callable[..., Any] | None = None) -> None:
-        if event.get("bot_id") or event.get("subtype"):
+        if event.get("channel_type") == "im":
+            if say is not None and not event.get("bot_id") and not event.get("subtype"):
+                self._direct(event, say)
             return
-        if event.get("channel_type") == "im" and say is not None:
-            self._direct(event, say)
-            return
-        self.on_message()
+        if hear(event):  # a message, reply, edit or deletion: the loop takes it now (D126)
+            self.on_message()
 
     def _verdict(self, verdict: str) -> Callable[..., None]:
         def handle(ack: Callable[[], None], body: dict[str, Any], client: WebClient) -> None:

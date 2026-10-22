@@ -700,7 +700,8 @@ def cmd_connectors(args: argparse.Namespace) -> int:
             print(f"configured: {[c.name for c in connectors] or 'none (see docs/connectors.md)'}")
             print(json.dumps(runner.load_state(graph), indent=1)[:2000])
             return 0
-        print(json.dumps(runner.sync(connectors, graph), indent=1, default=str))
+        days = args.days if args.action == "reconcile" else None
+        print(json.dumps(runner.sync(connectors, graph, sweep_days=days), indent=1, default=str))
         return 0
     except (base.ConnectorError, live.LiveError) as e:
         print(f"lore connectors: {e}", file=sys.stderr)
@@ -920,10 +921,12 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
                     "retry",
                     "health",
                     "backfill",
+                    "reconcile",
                 ),
                 "help": "what to do (dead: items that couldn't go in; retry: replay them; "
                 "health: is the connector loop running; backfill: reach --days back, a dry "
-                "run with its cost unless --yes)",
+                "run with its cost unless --yes; reconcile: compare the last --days of Slack "
+                "with the graph: missed replies and edits in, deletions forgotten)",
             },
         ),
         ("--id", {"help": "dead / retry: one dead letter's id (default: all)"}),

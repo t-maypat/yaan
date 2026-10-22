@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-238 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+241 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -140,7 +140,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_links.cypher`](../backend/queries/upsert_links.cypher) | shared link artifacts, one per address (D023) |
 | [`upsert_meeting_chats.cypher`](../backend/queries/upsert_meeting_chats.cypher) | meeting chat artifacts |
 | [`upsert_meetings.cypher`](../backend/queries/upsert_meetings.cypher) | meeting transcript artifacts |
-| [`upsert_messages.cypher`](../backend/queries/upsert_messages.cypher) | Slack message artifacts |
+| [`upsert_messages.cypher`](../backend/queries/upsert_messages.cypher) | Slack message artifacts; a thread reply carries its root's id (thread_id, D126) |
 | [`upsert_orgs.cypher`](../backend/queries/upsert_orgs.cypher) | org nodes from the hierarchy's `org` field |
 | [`upsert_people.cypher`](../backend/queries/upsert_people.cypher) | person nodes from metadata/employee.json or people.yaml, with an explicit authority when people.yaml gives one (D102) |
 | [`upsert_products.cypher`](../backend/queries/upsert_products.cypher) | product nodes from channel names, with codenames found in artifacts (D029) |
@@ -149,7 +149,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
 | [`upsert_tombstones.cypher`](../backend/queries/upsert_tombstones.cypher) | a content-free record of each forgotten item (id, kind, when, why), so a sync, sweep or backfill doesn't bring it back (F2, D125) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (116)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (119)
 
 | Query | Purpose |
 |---|---|
@@ -171,7 +171,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`artifact_people_detail.cypher`](../backend/queries/artifact_people_detail.cypher) | the people around one artifact: authors, attendees, speakers, reviewers (with review state) and people it mentions |
 | [`artifact_texts.cypher`](../backend/queries/artifact_texts.cypher) | every quotable text of the given artifacts (title, url, text, chunk spans), for the citation validator |
 | [`artifacts_present.cypher`](../backend/queries/artifacts_present.cypher) | which of these ids are artifacts in the graph: the live path's "already ingested?" and the demo's injected flags (D101) |
-| [`channel_context.cypher`](../backend/queries/channel_context.cypher) | the messages before a new one in its channel, newest first: the conversation the live extraction reads it in, as the batch extraction does (D102) |
+| [`channel_context.cypher`](../backend/queries/channel_context.cypher) | the top-level messages before a new one in its channel (thread replies have their own conversation, D126), newest first: the conversation the live extraction reads it in, as the batch extraction does (D102) |
 | [`channel_members.cypher`](../backend/queries/channel_members.cypher) | the people a channel lists as members (org mode), so a membership sync changes only what changed (H1, D109) |
 | [`claim_alert_response.cypher`](../backend/queries/claim_alert_response.cypher) | the first step of a response: an open alert becomes 'responding' and stores every write the response will make, so a crash midway is finished, not left half-done (H2, D110); matches nothing when the alert isn't open |
 | [`collab_meetings.cypher`](../backend/queries/collab_meetings.cypher) | who attended each meeting: the co-attendance part of COLLAB (10.1) |
@@ -213,6 +213,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`get_alert.cypher`](../backend/queries/get_alert.cypher) | one alert with its facts, and the person who would respond to it (approver), before an approve or dismiss (11.4) |
 | [`get_artifact.cypher`](../backend/queries/get_artifact.cypher) | one artifact's full text, its channel, and its other quotable fields (PR reviews, doc feedback) from its chunks |
 | [`get_channel.cypher`](../backend/queries/get_channel.cypher) | one channel by id and its kind: the live path checks that a new message's channel exists before writing it (11.6), and reads what to extract from it (D116) |
+| [`held_messages.cypher`](../backend/queries/held_messages.cypher) | the messages from one source channel the graph holds since a moment, with their text and thread: what the reconciliation sweep compares with the source (F1, F7, D126) |
 | [`impact_of.cypher`](../backend/queries/impact_of.cypher) | blast radius of one decision (tool 11, §9.5, D040): for its issue, the fixing PRs with their authors and reviewers, the reporting customers and their companies, assignees, other issues on the same component; for its PR, the author, reviewers and the issues it fixes; the evidence and decider of the state it replaced; WORKS_ON teams; CAUSED decisions ≤ 3 hops. One row per item: kind, id, name, role, why, via (the id it hangs off), detail, quote, artifact_id, ts_iso |
 | [`issue_fix_prs.cypher`](../backend/queries/issue_fix_prs.cypher) | the pull requests that fix one issue, for a connector that comments on them (17.4 write-back) |
 | [`issue_report_ids.cypher`](../backend/queries/issue_report_ids.cypher) | the messages that reported one issue, oldest first, so a connector can find the ticket it came from (17.5 write-back) |
@@ -226,6 +227,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`list_dead_letters.cypher`](../backend/queries/list_dead_letters.cypher) | the items connectors couldn't ingest, newest failure first, for status, retry and Graph health (H1, D107) |
 | [`list_indexes.cypher`](../backend/queries/list_indexes.cypher) | every index in the graph with its kind, options and build status (lore schema checks these against 00_schema.cypher) |
 | [`list_products.cypher`](../backend/queries/list_products.cypher) | every product with its codenames and how many artifacts it holds, for the UI's product picker |
+| [`message_context.cypher`](../backend/queries/message_context.cypher) | one message as conversation context (a thread's root, read with every reply however old) (F1, D126) |
 | [`name_mentions.cypher`](../backend/queries/name_mentions.cypher) | artifacts whose text still names a person (after erasure: listed for a human to review, never rewritten, since a name can be a namesake's) (F2, D125) |
 | [`outside_decisions.cypher`](../backend/queries/outside_decisions.cypher) | active dismissals decided by someone whose working group (CDLP community) is not among the groups of the people who did the work in the issue's area (11.5, D064); rows shaped like sentinel_changes |
 | [`outside_decisions_for.cypher`](../backend/queries/outside_decisions_for.cypher) | outside_decisions for the decision chains a fold just changed (the live path, D112): a dismissal decided outside the area's working group, found from the topic index |
@@ -263,6 +265,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`stuck_responses.cypher`](../backend/queries/stuck_responses.cypher) | responses claimed but never closed (the process stopped midway), with the writes they still owe (H2, D110) |
 | [`subject_product.cypher`](../backend/queries/subject_product.cypher) | the product an issue or pull request belongs to, for the API's lineage endpoint |
 | [`suppressed_ids.cypher`](../backend/queries/suppressed_ids.cypher) | which of these hashed person ids were erased: their items stay out (F2, D125) |
+| [`thread_context.cypher`](../backend/queries/thread_context.cypher) | a thread reply's conversation: the earlier replies of its thread, newest first; the root comes from message_context (F1, D126) |
 | [`unlink_channel_members.cypher`](../backend/queries/unlink_channel_members.cypher) | a person left a private channel (or was removed): they stop seeing it (H1, D109) |
 | [`viewer_channels.cypher`](../backend/queries/viewer_channels.cypher) | the channels a person belongs to (they posted there), for viewer-scoped answers (W7) |
 | [`viewer_meetings.cypher`](../backend/queries/viewer_meetings.cypher) | the meetings a person attended or spoke in, for viewer-scoped answers (W7) |

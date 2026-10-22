@@ -253,6 +253,7 @@ def artifact_row(a: Artifact, observed_ms: int) -> dict[str, Any]:
     }
     if a.kind == "message":
         row |= {"channel_id": a.channel_id, "system": a.system}
+        row["thread_id"] = a.meta.get("thread_id")  # a reply names its root (D126); HERB's don't
     elif a.kind == "meeting":
         row["document_type"] = a.meta["document_type"]
     elif a.kind == "meeting_chat":

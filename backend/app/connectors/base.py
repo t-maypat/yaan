@@ -44,6 +44,7 @@ class Item:
     artifact: Artifact
     updated_ms: int  # the source's last change: a newer value re-ingests the artifact
     events: list[dict[str, Any]] | None = None  # None: the live path extracts with the LLM
+    deleted: bool = False  # the source deleted it: Yaan forgets it (only its id matters, D126)
 
 
 class Connector(Protocol):

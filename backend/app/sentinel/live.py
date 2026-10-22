@@ -446,20 +446,28 @@ CONTEXT_WINDOW_MS = 7 * 86_400_000  # within the week before it
 
 
 def conversation(a: Artifact, graph: str, earlier: list[Artifact] | None = None) -> list[Artifact]:
-    """The messages before `a` in its channel, oldest first (D102). The batch extraction reads
-    whole conversations, so "the PR" and "that bug" resolve to what was said earlier; a live
-    message read alone could not, and org mode, which runs only the live path, extracted less
-    than the evaluated batch did. `earlier`: a live batch's items before `a`, not yet in the
-    graph (D112)."""
+    """The messages before `a` in its conversation, oldest first (D102). The batch extraction
+    reads whole conversations, so "the PR" and "that bug" resolve to what was said earlier; a
+    live message read alone could not, and org mode, which runs only the live path, extracted
+    less than the evaluated batch did. A thread reply's conversation is its thread: the root,
+    however old, then the replies before it ("fixed it" means nothing without the root); a
+    top-level message's is the channel's top-level messages (D126). `earlier`: a live batch's
+    items before `a`, not yet in the graph (D112)."""
     if a.kind != "message" or not a.channel_id or a.ts_ms is None:
         return []
+    thread = a.meta.get("thread_id")
     params = {
         "channel_id": a.channel_id,
         "before_ms": a.ts_ms,
         "since_ms": a.ts_ms - CONTEXT_WINDOW_MS,
         "limit": CONTEXT_MESSAGES,
     }
-    rows = db.run("channel_context", params, graph=graph).rows
+    if thread:
+        rows = db.run("thread_context", params | {"thread_id": thread}, graph=graph).rows
+        rows += db.run("message_context", {"id": thread}, graph=graph).rows  # the root
+    else:
+        rows = db.run("channel_context", params, graph=graph).rows
+    rows.sort(key=lambda r: (r["ts_ms"] or 0, r["id"]), reverse=True)
     found = [
         Artifact(
             id=r["id"],
@@ -483,12 +491,18 @@ def conversation(a: Artifact, graph: str, earlier: list[Artifact] | None = None)
         if m.kind == "message"
         and m.channel_id == a.channel_id
         and m.ts_ms is not None
-        and params["since_ms"] <= m.ts_ms < a.ts_ms
+        and m.ts_ms < a.ts_ms
+        and (
+            (m.id == thread or m.meta.get("thread_id") == thread)
+            if thread
+            else not m.meta.get("thread_id") and params["since_ms"] <= m.ts_ms
+        )
     ]
-    if not pending:
-        return found
     merged = {m.id: m for m in [*found, *pending] if m.id != a.id}
-    return sorted(merged.values(), key=lambda m: (m.ts_ms or 0, m.id))[-CONTEXT_MESSAGES:]
+    ordered = sorted(merged.values(), key=lambda m: (m.ts_ms or 0, m.id))
+    root = [m for m in ordered if m.id == thread]
+    rest = [m for m in ordered if m.id != thread]
+    return root + rest[-(CONTEXT_MESSAGES - len(root)) :]
 
 
 def live_units(
@@ -501,8 +515,11 @@ def live_units(
         return []
     context = [m for m in conversation(a, graph, earlier) if not m.system]
     budget = extract.UNIT_CHARS - len(a.text)
-    while context and sum(len(m.text) + 20 for m in context) > budget:
-        context.pop(0)
+    keep = 1 if context and context[0].id == a.meta.get("thread_id") else 0  # a thread's root
+    while len(context) > keep and sum(len(m.text) + 20 for m in context) > budget:
+        context.pop(keep)
+    if context and sum(len(m.text) + 20 for m in context) > budget:
+        context.pop(0)  # a root too long to fit with the reply
     channel = a.meta.get("channel_name") or a.channel_id
     unit_id = f"unit:{a.product_hint}:{channel}:live:{a.id}"
     return [extract.Unit(unit_id, a.product_hint, channel, (*context, a))]
