@@ -10,6 +10,13 @@ Modes (`LORE_AUTH`, default `auto` = `token` in org mode, `none` in the demo):
 - `header`: a single-sign-on proxy (oauth2-proxy, Cloudflare Access ...) in front of Lore sets
   the user's email in `LORE_AUTH_HEADER` and `X-Lore-Proxy-Secret` to `LORE_AUTH_PROXY_SECRET`.
   Without the secret, anyone who reached Lore around the proxy could name themselves.
+  oauth2-proxy can't set a fixed header with its stable options, so it may instead send
+  `Authorization: Basic <email>:<secret>` (`--basic-auth-password`, `--prefer-email-to-user`;
+  the `sso` compose profile, D133).
+
+Admins (`admin: true` in people.yaml, D133) see the ops pages and endpoints: graph health, the
+eval, query texts, dead letters, tokens and spend. With no sign-in (`none`, the demo) everyone
+does, as before.
 
 The web UI never keeps the token where page scripts can read it (H2, D111): it trades the token
 once for a session cookie (`POST /auth/session`), HttpOnly and SameSite=Strict, signed with a
@@ -219,6 +226,28 @@ def session_person(cookie: str) -> str:
     return entry["person"]
 
 
+def proxy_basic(authorization: str) -> tuple[str, bytes]:
+    """oauth2-proxy's `Authorization: Basic <email>:<secret>` as (email, secret), else ("", b"")."""
+    scheme, _, value = authorization.partition(" ")
+    if scheme.casefold() != "basic" or not value:
+        return "", b""
+    try:
+        user, _, password = base64.b64decode(value, validate=True).decode("utf-8").partition(":")
+    except (ValueError, UnicodeDecodeError):
+        return "", b""
+    return user, password.encode("utf-8")
+
+
+def is_admin(person: str | None) -> bool:
+    """May this principal run Yaan (D133)? Everyone with no sign-in (the demo); else only
+    people.yaml entries with `admin: true`."""
+    from app import org
+
+    if mode() == "none":
+        return True
+    return bool(person) and bool(org.roster().get(person or "", {}).get("admin"))
+
+
 def principal(headers: Any, cookies: Any = None) -> str | None:
     """The person behind a request (an eid_), None in mode `none`, or AuthError."""
     return identify(headers, cookies)[0]
@@ -244,9 +273,14 @@ def identify(headers: Any, cookies: Any = None) -> tuple[str | None, str | None]
         if not s.lore_auth_proxy_secret:
             raise AuthError("LORE_AUTH=header needs LORE_AUTH_PROXY_SECRET, sent by the proxy")
         sent = (headers.get("x-lore-proxy-secret") or "").encode("utf-8")
-        if not hmac.compare_digest(sent, s.lore_auth_proxy_secret.encode("utf-8")):
+        basic_email, basic_secret = proxy_basic(headers.get("authorization") or "")
+        secret = s.lore_auth_proxy_secret.encode("utf-8")
+        if not (
+            hmac.compare_digest(sent, secret) or hmac.compare_digest(basic_secret, secret)
+        ):
             raise AuthError("identity headers are accepted only from the sign-in proxy")
-        email = (headers.get(s.lore_auth_header.lower()) or "").strip().casefold()
+        given = headers.get(s.lore_auth_header.lower()) or basic_email
+        email = given.strip().casefold()
         if not email:
             raise AuthError(f"the sign-in proxy sent no {s.lore_auth_header} header")
         from app import org

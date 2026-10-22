@@ -336,6 +336,25 @@ def _settle(
         _write_ledger(path, days)
 
 
+def spending(path: Path | None = None) -> dict[str, Any]:
+    """Today's spend for the admin page (D133): in all, on answers, per person, and the caps."""
+    path = path or ledger_path()
+    with _FILES_LOCK, _lock(path):
+        days = _read_ledger(path)
+    day = today()
+    by_person = (days.get(PAYERS) or {}).get(day) or {}
+    ranked = sorted(by_person.items(), key=lambda kv: -kv[1])
+    return {
+        "day": day,
+        "spent_usd": round(float(days.get(day, 0.0)), 4),
+        "cap_usd": get_settings().lore_daily_spend_cap_usd,
+        "answers_usd": round(float((days.get(ANSWERS) or {}).get(day, 0.0)), 4),
+        "answer_cap_usd": answer_cap(),
+        "person_cap_usd": person_cap(),
+        "by_person": {p: round(float(v), 4) for p, v in ranked},
+    }
+
+
 def spent_by(person: str, path: Path | None = None) -> float:
     """What `person`'s answers have cost today."""
     path = path or ledger_path()

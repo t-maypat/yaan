@@ -37,6 +37,7 @@
 #     role: Tech Lead
 #     authority: lead                # optional: lead | qa | member
 #     team: Platform                 # optional: the org chart (who works on what, team mix)
+#     admin: true                    # optional: runs Yaan (Admin, Graph health, Evaluation pages)
 #     accounts:
 #       slack: U0123ABCDEF
 #       github: priya-s

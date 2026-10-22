@@ -76,7 +76,7 @@ docker compose --profile app exec api yaan token issue "Priya Shah"   # prints h
 docker compose --profile app exec api yaan token revoke "Priya Shah"
 ```
 
-   Behind a single-sign-on proxy (oauth2-proxy, Cloudflare Access), set `LORE_AUTH=header` instead: the proxy sends the user's email in `X-Forwarded-Email` and `LORE_AUTH_PROXY_SECRET` in `X-Lore-Proxy-Secret`. In a Slack channel, `@yaan` answers from what everyone in that channel may read; a direct message to the bot answers from everything the asker may read.
+   Behind a single-sign-on proxy (oauth2-proxy, Cloudflare Access), set `LORE_AUTH=header` instead: the proxy sends the user's email in `X-Forwarded-Email` and `LORE_AUTH_PROXY_SECRET` in `X-Lore-Proxy-Secret`. For sign-in with Google, Okta or Entra ID, the `sso` profile runs oauth2-proxy for you: fill the `OAUTH2_PROXY_*` settings in `.env`, then `docker compose --profile app --profile sso up -d` and open port 4180. People with `admin: true` in `people.yaml` see the Admin page (worker, dead letters, tokens, spend, people not yet listed), Graph health and Evaluation; others see Ask and Inbox. In a Slack channel, `@yaan` answers from what everyone in that channel may read; a direct message to the bot answers from everything the asker may read.
 
 | Tool | In | Out, once you approve |
 |---|---|---|

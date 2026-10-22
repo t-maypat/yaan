@@ -92,6 +92,7 @@ API_PREFIXES = (
     "/query",
     "/mcp",
     "/me",
+    "/admin",
 )
 # What the request budget counts: the API, sign-in (token guessing) and the ingest endpoint.
 # /health and the web UI's own files aren't counted: a page load is dozens of them.
@@ -223,6 +224,16 @@ def as_principal(request: Request, given: str | None, what: str) -> str | None:
         return given
     if given not in (None, who):
         raise HTTPException(403, f"signed in as {who}: {what} is you, not {given}")
+    return who
+
+
+def admin_only(request: Request) -> str | None:
+    """The ops routes (D133): graph health, the eval, dead letters, tokens, spend (query texts
+    stay open: "Show the Cypher" is every reader's, and the queries are public).
+    Everyone may with no sign-in (the demo); else only people.yaml's `admin: true`."""
+    who = principal(request)
+    if not auth.is_admin(who):
+        raise HTTPException(403, "for Yaan's admins only (admin: true in people.yaml)")
     return who
 
 
@@ -440,20 +451,22 @@ def entity(
 
 
 @app.get("/graph/health")
-def graph_health() -> dict:
+def graph_health(request: Request) -> dict:
     """The Graph Health page (12.6): node and edge counts, isolated nodes, PR chains,
     duplicate ids, unresolved mentions (Phase 3 health report) on the API's graph."""
     from app.ingest import health
 
+    admin_only(request)
     return {"graph": graph(), **health.report(graph())}
 
 
 @app.get("/eval/latest")
-def eval_latest() -> dict:
+def eval_latest(request: Request) -> dict:
     """The Eval page (12.6): the newest results per system (eval/results/*.json), their
     HERB-Drift rows, the who_knows benchmark and HERB's published reference row."""
     from app.eval import report
 
+    admin_only(request)
     latest, drift = report.latest_results()
     experts = report.results_dir() / "experts_dev.json"
     return {
@@ -487,7 +500,53 @@ def me(request: Request) -> dict:
         rows = db.run("entity_card", {"id": who}, graph=graph()).rows
         props = rows[0]["props"] if rows else {}
         you = {"id": who, "name": props.get("name"), "role": props.get("role")}
-    return {"auth": auth.mode(), "mode": "org" if org.active() else "demo", "you": you}
+    mode = "org" if org.active() else "demo"
+    return {"auth": auth.mode(), "mode": mode, "you": you, "admin": auth.is_admin(who)}
+
+
+class DeadRetry(BaseModel):
+    id: str | None = Field(default=None, min_length=1, max_length=300)  # None: every one
+
+
+class TokenRevoke(BaseModel):
+    id: str = Field(min_length=6, max_length=64)
+
+
+@app.get("/admin/overview")
+def admin_overview(request: Request) -> dict:
+    """What an admin checks (D133): the worker and why it waits, dead letters (without their
+    items), sign-in tokens (without secrets), today's spend, and people met but not listed."""
+    from app import llm, org
+    from app.connectors import runner
+
+    admin_only(request)
+    g = graph()
+    return {
+        "worker": runner.worker_health(g),
+        "dead_letters": runner.dead_letters(g),
+        "tokens": auth.listing(),
+        "spend": llm.spending(),
+        "unlisted": org.unlisted(g) if org.active() else [],
+    }
+
+
+@app.post("/admin/dead/retry")
+def admin_retry(body: DeadRetry, request: Request) -> dict:
+    """Replay dead letters (all, or one) through the live path, as `yaan connectors retry`."""
+    from app.connectors import runner
+
+    admin_only(request)
+    try:
+        with db.writer_lock(graph()):
+            return runner.retry(graph(), body.id)
+    except db.LockBusy as e:
+        raise HTTPException(503, f"the graph is busy: {e}", {"Retry-After": "10"}) from e
+
+
+@app.post("/admin/tokens/revoke")
+def admin_revoke(body: TokenRevoke, request: Request) -> dict:
+    admin_only(request)
+    return {"revoked": auth.revoke_id(body.id)}
 
 
 class AlertResponse(BaseModel):

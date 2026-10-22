@@ -9,6 +9,8 @@ What changed between versions, newest first. Yaan is 0.x: settings and the graph
 #### Added
 - `yaan people` prints the people Yaan met in your tools who aren't in `people.yaml`, as entries to paste.
 - `scripts/load_fold.py`: a load test of the decision fold on synthetic events (no model calls).
+- An admin role: `admin: true` in `people.yaml`. Admins see a new Admin page (the connector worker and why it waits, dead letters with retry, sign-in tokens with revoke, today's spend by person, people met but not listed) and the Graph health and Evaluation pages; with sign-in on, nobody else does.
+- Sign-in with Google, Okta or Entra ID: the `sso` compose profile runs oauth2-proxy in front of Yaan (`LORE_AUTH=header`).
 - Optional webhooks: `GITHUB_WEBHOOK_SECRET` / `JIRA_WEBHOOK_SECRET` and `/hooks/github`, `/hooks/jira` wake the worker as soon as something changes.
 - `visibility: synced` for GitHub and Jira in `connectors.yaml`: who may read a repository or a Jira project comes from the tool itself, every hour.
 
@@ -21,6 +23,7 @@ What changed between versions, newest first. Yaan is 0.x: settings and the graph
 - People met in a tool get 64-bit ids (`eid_` + 16 hex digits), so two accounts no longer collide; a second account landing on a taken id is refused loudly. Slack and Jira emails at your domains merge a person across tools.
 
 #### Upgrading
+- With sign-in on, the Graph health and Evaluation pages are for admins only: mark yourself `admin: true` in `people.yaml`.
 - Slack: add the bot events `member_joined_channel`, `member_left_channel`, `channel_archive`, `channel_unarchive`, `channel_rename`, `channel_left`, `group_archive`, `group_unarchive`, `group_rename`, `group_left` to your app (the manifest in `backend/app/connectors/README.md` lists them); without them a membership change reaches Yaan within 10 minutes instead of at once.
 - Accounts already registered keep their 8-digit ids; `people.yaml` ids never change. An unlisted account whose Slack or Jira email matches a listed person now counts as that person: their earlier items stay under the old id.
 - The first fold of each product after upgrading matches everything once (the stored matches don't exist yet); with years of chat-named issues this can take minutes.

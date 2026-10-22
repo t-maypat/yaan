@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { type AnswerEvent, ask, type Citation, type DataMode, getProducts, type Product, type Subgraph } from "./api";
+import { type AnswerEvent, ask, type Citation, type DataMode, getMe, getProducts, type Product, type Subgraph } from "./api";
 import { Answer } from "./components/Answer";
+import { AdminPage } from "./components/AdminPage";
 import { EvalPage } from "./components/EvalPage";
 import { EvidenceGraph } from "./components/EvidenceGraph";
 import { GraphHealthPage } from "./components/GraphHealthPage";
@@ -64,9 +65,17 @@ type Run = {
   running: boolean;
 };
 
-const VIEWS = ["ask", "inbox", "health", "eval"] as const;
+const VIEWS = ["ask", "inbox", "health", "eval", "admin"] as const;
 type View = (typeof VIEWS)[number];
-const VIEW_WORDS: Record<View, string> = { ask: "Ask", inbox: "Inbox", health: "Graph health", eval: "Evaluation" };
+const VIEW_WORDS: Record<View, string> = {
+  ask: "Ask",
+  inbox: "Inbox",
+  health: "Graph health",
+  eval: "Evaluation",
+  admin: "Admin",
+};
+// the ops pages, for people.yaml's `admin: true` (everyone in the demo, D133)
+const OPS: readonly View[] = ["health", "eval", "admin"];
 const viewFromHash = (): View => {
   const h = window.location.hash.slice(1);
   return (VIEWS as readonly string[]).includes(h) ? (h as View) : "ask";
@@ -81,6 +90,14 @@ export default function App() {
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
+  const [admin, setAdmin] = useState(false);
+  useEffect(() => {
+    getMe().then(
+      (m) => setAdmin(!!m.admin),
+      () => setAdmin(false), // not signed in yet: the ops pages stay hidden
+    );
+  }, []);
+  const views = VIEWS.filter((v) => admin || !OPS.includes(v));
   const [products, setProducts] = useState<Product[]>([]);
   const [mode, setMode] = useState<DataMode>("demo");
   const [productError, setProductError] = useState<string | null>(null);
@@ -241,7 +258,7 @@ export default function App() {
             Yaan
           </button>
           <nav aria-label="Views" className="tabs mr-auto overflow-x-auto max-w-full">
-            {VIEWS.map((v) => (
+            {views.map((v) => (
               <a key={v} href={`#${v}`} aria-current={view === v ? "page" : undefined} className="tab">
                 {VIEW_WORDS[v]}
                 {v === "inbox" && openAlerts ? (
@@ -276,10 +293,12 @@ export default function App() {
       <main className="max-w-[90rem] mx-auto px-4 sm:px-8 pb-20">
         {view === "inbox" ? (
           <Inbox onCount={countAlerts} />
-        ) : view === "health" ? (
+        ) : view === "health" && admin ? (
           <GraphHealthPage />
-        ) : view === "eval" ? (
+        ) : view === "eval" && admin ? (
           <EvalPage />
+        ) : view === "admin" && admin ? (
+          <AdminPage />
         ) : compact ? (
           <div className="pt-5 pb-4 max-w-[64rem]">
             {form}

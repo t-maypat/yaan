@@ -271,8 +271,31 @@ export type Me = {
   auth: "none" | "token" | "header";
   mode: DataMode;
   you: { id: string; name: string | null; role: string | null } | null;
+  // may see the ops pages: people.yaml's `admin: true`, or everyone with no sign-in (D133)
+  admin?: boolean;
 };
 export const getMe = () => getJson<Me>("/me");
+
+// Admin (21.7, D133)
+export type AdminOverview = {
+  worker: { status: string; why?: string | null; warning?: string | null };
+  dead_letters: { id: string; artifact_id?: string; source?: string; why: string; attempts?: number }[];
+  tokens: { id: string; person: string; label: string; created: string; expires: string; last_used: string | null }[];
+  spend: {
+    day: string;
+    spent_usd: number;
+    cap_usd: number;
+    answers_usd: number;
+    answer_cap_usd: number | null;
+    person_cap_usd: number | null;
+    by_person: Record<string, number>;
+  };
+  unlisted: { name: string; id: string; email?: string; accounts?: Record<string, string> }[];
+};
+export const getAdmin = () => getJson<AdminOverview>("/admin/overview");
+export const retryDead = (id?: string) =>
+  send<{ ingested: { id: string }[]; failed: { id: string; why: string }[] }>("POST", "/admin/dead/retry", { id: id ?? null });
+export const revokeToken = (id: string) => send<{ revoked: number }>("POST", "/admin/tokens/revoke", { id });
 
 // The Timeline (12.4): an issue's or PR's chain of states, each with its validity window.
 export type Decider = { id: string; name: string | null; role?: string | null };

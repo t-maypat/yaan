@@ -14,6 +14,7 @@ people:
   - name: Priya Shah
     email: priya@acme.example
     role: Engineering Lead
+    admin: true
   - name: Ken Ito
     id: eid_0000beef
     email: ken@acme.example
@@ -76,6 +77,62 @@ def test_a_proxy_header_counts_only_with_the_proxy_secret(signed, monkeypatch):
         auth.principal({**proxied, "x-forwarded-email": "eve@evil.example"})
 
 
+def test_oauth2_proxy_proves_itself_with_basic_auth(signed, monkeypatch):
+    """D133: oauth2-proxy's stable options can't set a fixed header, but can send
+    `Authorization: Basic <email>:<secret>` (the `sso` compose profile)."""
+    import base64
+
+    monkeypatch.setenv("LORE_AUTH", "header")
+    monkeypatch.setenv("LORE_AUTH_PROXY_SECRET", "s3cret")
+    get_settings.cache_clear()
+
+    def basic(user, password):
+        pair = base64.b64encode(f"{user}:{password}".encode()).decode()
+        return {"authorization": f"Basic {pair}"}
+
+    assert auth.principal(basic("ken@acme.example", "s3cret")) == "eid_0000beef"
+    with pytest.raises(auth.AuthError, match="only from the sign-in proxy"):
+        auth.principal(basic("ken@acme.example", "guess"))
+    with pytest.raises(auth.AuthError, match="only from the sign-in proxy"):
+        auth.principal({"authorization": "Basic !!not-base64!!"})
+
+
+def test_ops_pages_and_admin_endpoints_are_for_admins_only(signed, monkeypatch):
+    """D133 (F17): every signed-in person saw the ops pages; now only people.yaml's
+    `admin: true`. With no sign-in (the demo) everyone still does."""
+    from app import llm
+    from app.connectors import runner
+
+    monkeypatch.setattr(runner, "worker_health", lambda g: {"status": "ok"})
+    monkeypatch.setattr(runner, "dead_letters", lambda g: [{"id": "dead:1", "why": "x"}])
+    monkeypatch.setattr(llm, "spending", lambda: {"spent_usd": 0.5})
+    monkeypatch.setattr(org, "unlisted", lambda g: [])
+    monkeypatch.setattr(main.db, "run", lambda *a, **k: type("R", (), {"rows": []}))
+    priya = next(e for e, p in org.roster().items() if p["name"] == "Priya Shah")
+    admin = TestClient(main.app, headers={"Authorization": f"Bearer {auth.issue(priya)}"})
+    ken = TestClient(main.app, headers={"Authorization": f"Bearer {auth.issue('eid_0000beef')}"})
+    for path in ("/admin/overview", "/graph/health", "/eval/latest"):
+        assert ken.get(path).status_code == 403, path
+    seen = admin.get("/admin/overview").json()
+    assert seen["dead_letters"] == [{"id": "dead:1", "why": "x"}] and seen["spend"]["spent_usd"]
+    assert {t["person"] for t in seen["tokens"]} == {priya, "eid_0000beef"}
+    kens = next(t["id"] for t in seen["tokens"] if t["person"] == "eid_0000beef")
+    assert ken.post("/admin/tokens/revoke", json={"id": kens}).status_code == 403
+    assert admin.post("/admin/tokens/revoke", json={"id": kens}).json() == {"revoked": 1}
+    assert ken.get("/me").status_code == 401  # revoked
+    assert admin.get("/me").json()["admin"] is True
+    monkeypatch.setenv("LORE_AUTH", "none")
+    get_settings.cache_clear()
+    assert auth.is_admin(None)  # the demo: no sign-in, everyone runs it
+
+
+def test_admin_must_be_true_or_false(tmp_path):
+    bad = tmp_path / "people.yaml"
+    bad.write_text("people: [{name: A, admin: yes please}]", encoding="utf-8")
+    with pytest.raises(org.OrgError, match="admin must be true or false"):
+        org.parse_roster(bad)
+
+
 def test_the_cli_issues_a_token_for_a_listed_person(signed, capsys):
     assert cli.main(["token", "issue", "Ken Ito", "--label", "laptop"]) == 0
     token = capsys.readouterr().out.strip().splitlines()[-1]
@@ -135,6 +192,7 @@ def test_me_says_how_people_sign_in_and_who_you_are(signed, monkeypatch):
         "auth": "token",
         "mode": "org",
         "you": {"id": "eid_0000beef", "name": "Ken Ito", "role": "QA Specialist"},
+        "admin": False,
     }
     refused = TestClient(main.app).get("/me")
     assert refused.status_code == 401 and refused.json()["auth"] == "token"

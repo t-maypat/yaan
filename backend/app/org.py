@@ -110,6 +110,7 @@ def parse_roster(path: Path) -> dict[str, dict[str, Any]]:
             "location": e.get("location") or "",
             "org": e.get("org") or "",
             "team": str(e.get("team") or "").strip(),  # the org chart, for WORKS_ON (D127)
+            "admin": admin(path, e),  # runs Yaan: ops pages, dead letters, tokens (D133)
             "accounts": accounts,
         }
     return out
@@ -157,6 +158,13 @@ def unknown_speakers() -> str:
     value = raw.get("unknown_speakers", "unverified")
     if value not in UNKNOWN:
         raise OrgError(f"{PEOPLE_FILE.name}: unknown_speakers must be one of {UNKNOWN}")
+    return value
+
+
+def admin(path: Path, e: dict[str, Any]) -> bool:
+    value = e.get("admin", False)
+    if not isinstance(value, bool):
+        raise OrgError(f"{path.name}: {e['name']}'s admin must be true or false, not {value!r}")
     return value
 
 
