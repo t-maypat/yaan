@@ -59,6 +59,30 @@ HEARD_SUBTYPES = {None, "thread_broadcast", "file_share", "me_message", "message
 _heard: deque[dict[str, Any]] = deque(maxlen=10_000)
 _heard_lock = threading.Lock()
 
+# Polling cost (D132): with the socket connected, new messages arrive as events, so the history
+# read is a safety net every HISTORY_EVERY_MS, and channel access (the list, private members) is
+# read every ACCESS_EVERY_MS or as soon as Slack says a membership or channel changed.
+HISTORY_EVERY_MS = 300_000
+ACCESS_EVERY_MS = 600_000
+ACCESS_EVENTS = (
+    "member_joined_channel",
+    "member_left_channel",
+    "channel_archive",
+    "channel_unarchive",
+    "channel_rename",
+    "channel_left",
+    "group_archive",
+    "group_unarchive",
+    "group_rename",
+    "group_left",
+)
+_live = {"socket": False, "access_changed": True}
+
+
+def access_changed(event: dict[str, Any] | None = None) -> None:
+    """Slack says who is in a channel, or which channels there are, changed: read it again."""
+    _live["access_changed"] = True
+
 
 def hear(event: dict[str, Any]) -> bool:
     """Queue a channel message event (a new message, a thread reply, an edit or a deletion) for
@@ -96,6 +120,9 @@ class SlackConnector:
         self._channels: dict[str, str] | None = None
         self._private: set[str] = set()  # names of the private channels among _channels
         self._team_url: str | None = None
+        self.problems: list[str] = []  # channels that wait this round; the rest go on (D132)
+        self._access_ms: int | None = None  # when channel access was last read
+        self._polled_ms: int | None = None  # when history was last read
         self._names: dict[str, str | None] = {}  # org mode: Slack user id -> display name
         self._emails: dict[str, str | None] = {}  # and the email on its profile (D130)
         self._bots: set[str] = set()  # accounts users.info says are bots
@@ -122,23 +149,44 @@ class SlackConnector:
         return self._channels
 
     def fetch(self, since_ms: int) -> list[Item]:
-        if not base.is_demo():
+        now = now_ms()
+        self.problems = []
+        if not base.is_demo() and (
+            _live["access_changed"]
+            or self._access_ms is None
+            or now - self._access_ms >= ACCESS_EVERY_MS
+        ):
+            _live["access_changed"] = False
             self._channels = None  # re-read: a channel may have turned private, or been added
-            self.sync_access()
-        items = self.heard()  # replies, edits and deletions the socket heard (D126)
+            try:
+                self.sync_access()
+            except Exception:
+                _live["access_changed"] = True  # try again next round
+                raise
+            self._access_ms = now
+        items = self.heard()  # messages, replies, edits and deletions the socket heard (D126)
+        if _live["socket"] and self._polled_ms and now - self._polled_ms < HISTORY_EVERY_MS:
+            return items  # the socket brings them; the history read is the safety net (D132)
+        # with the socket, from the last read (a minute's overlap): the socket's items may have
+        # moved the cursor past a message it missed. Without it, history is all: the cursor.
+        oldest = since_ms
+        if _live["socket"] and self._polled_ms:
+            oldest = min(since_ms, self._polled_ms - 60_000)
         for slack_name, herb_id in org.channel_map(self.conf).items():
             cid = self.channel_ids().get(slack_name)
-            if not cid:
-                raise ConnectorError(f"the bot can't see #{slack_name}: /invite @lore there")
+            if not cid:  # archived, or the bot was removed: this channel waits, not Slack
+                self.problems.append(f"the bot can't see #{slack_name}: /invite @lore there")
+                continue
             rows = db.run("get_channel", {"id": herb_id}, graph=self.graph).rows
             if not rows:
-                raise ConnectorError(f"{herb_id!r} (mapped from #{slack_name}) isn't in the graph")
+                self.problems.append(f"{herb_id!r} (mapped from #{slack_name}) isn't in the graph")
+                continue
             cursor = None
             while True:
                 r = self._call(
                     "conversations_history",
                     channel=cid,
-                    oldest=f"{since_ms / 1000:.6f}" if since_ms else "0",
+                    oldest=f"{oldest / 1000:.6f}" if oldest else "0",
                     limit=200,
                     cursor=cursor,
                 )
@@ -148,6 +196,7 @@ class SlackConnector:
                 cursor = (r.get("response_metadata") or {}).get("next_cursor")
                 if not cursor:
                     break
+        self._polled_ms = now
         return items
 
     def sync_access(self) -> dict[str, int]:
@@ -160,11 +209,14 @@ class SlackConnector:
         for slack_name, target in org.channel_map(self.conf).items():
             by_target.setdefault(target, []).append(slack_name)
         ids = self.channel_ids()
-        if unseen := sorted(n for names in by_target.values() for n in names if n not in ids):
-            # never guess "public" for a channel we can't see: it may be private
-            raise ConnectorError(f"the bot can't see #{unseen[0]}: /invite @lore there")
         rows, members = [], {}
         for target, names in sorted(by_target.items()):
+            if unseen := [n for n in names if n not in ids]:
+                # never guess "public" for a channel we can't see (it may have turned private),
+                # nor keep what it was: unknown, so hidden, until the bot sees it again (D132)
+                rows.append({"id": target, "visibility": "unknown"})
+                self.problems.append(f"the bot can't see #{unseen[0]}: /invite @lore there")
+                continue
             private = [n for n in names if n in self._private]
             if private and len(names) > 1:
                 raise ConnectorError(
@@ -484,7 +536,12 @@ class SlackConnector:
         try:
             return getattr(self.client, method)(**kwargs)
         except SlackApiError as e:  # fail loudly, with Slack's own reason
-            raise ConnectorError(f"Slack {method}: {e.response.get('error', e)}") from e
+            message = f"Slack {method}: {e.response.get('error', e)}"
+            limited = getattr(e.response, "status_code", None) == 429
+            if limited or e.response.get("error") == "ratelimited":  # after the client's retries
+                headers = getattr(e.response, "headers", None) or {}
+                raise base.RateLimited(message, float(headers.get("Retry-After") or 60)) from e
+            raise ConnectorError(message) from e
 
 
 # --- the bot: @lore questions and alert cards ----------------------------------------------
@@ -534,6 +591,8 @@ class SlackBot:
         self.resolve: render.Resolve = self.connector.link
         self.app.event("app_mention")(self._mention)
         self.app.event("message")(self._message)
+        for name in ACCESS_EVENTS:  # who may read a channel changed: re-read it now (D132)
+            self.app.event(name)(self._access_changed)
         self.app.action("lore_approve")(self._verdict("approved"))
         self.app.action("lore_dismiss")(self._verdict("dismissed"))
 
@@ -542,6 +601,11 @@ class SlackBot:
 
         self.handler = SocketModeHandler(self.app, self.app_token)
         self.handler.connect()  # returns; the socket runs on its own threads
+        _live["socket"] = True  # messages arrive as events: history becomes the safety net
+
+    def _access_changed(self, event: dict[str, Any]) -> None:
+        access_changed(event)
+        self.on_message()  # the next round reads it
 
     def _permalink(self, artifact_id: str) -> str | None:
         prefix = base.id_prefix("msg", "slack")

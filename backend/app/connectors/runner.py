@@ -69,6 +69,7 @@ MAX_BATCH = 200  # items per live batch; state is saved after each (D114)
 EXTRACT_WORKERS = 4  # items extracted at once within a batch
 KEEP_SEEN_MS = 86_400_000  # versions remembered a day behind the cursor: more than any re-read
 MAX_PAUSE_S = 900  # the longest wait between failing rounds
+BACKOFF_FIRST_S = 30  # a failing tool's first wait, doubling per failure up to MAX_PAUSE_S
 # The fold re-reads a product's whole history and matches events to issues pairwise (review
 # F3: 47 s at 2,000 chat-named issues). The incremental fold is the review's Phase 1; until
 # then a slow fold is said out loud, on the heartbeat and /health, before the lock starves.
@@ -117,11 +118,31 @@ def sync(
         failures = mine.setdefault("failures", {})  # "<id>@<version>" -> failures so far
         if not mine["since_ms"]:  # the first sync: not the whole history at once (D114)
             mine["since_ms"] = first_cursor(c)
+        now_ms = int(time.time() * 1000)
+        if mine.get("retry_ms", 0) > now_ms:  # backing off: not one call until then (D132)
+            report["waiting"].append(
+                {"id": None, "source": c.name, "why": mine["retry_why"],
+                 "retry_at": iso_ms(mine["retry_ms"])}  # fmt: skip
+            )
+            continue
         try:
             items = c.fetch(mine["since_ms"])
+            for problem in getattr(c, "problems", []):  # one channel, not the whole tool
+                report["waiting"].append({"id": None, "source": c.name, "why": problem})
         except Exception as e:  # the tool is down or refused us: this one waits, the rest go on
-            report["waiting"].append({"id": None, "source": c.name, "why": why(e)})
+            # as long as it asked (Retry-After), else 30 s doubling per failure (D132)
+            fails = mine["fails"] = mine.get("fails", 0) + 1
+            wait_s = getattr(e, "retry_after_s", None) or min(
+                BACKOFF_FIRST_S * 2 ** (fails - 1), MAX_PAUSE_S
+            )
+            mine["retry_ms"], mine["retry_why"] = now_ms + int(wait_s * 1000), why(e)
+            report["waiting"].append(
+                {"id": None, "source": c.name, "why": why(e), "retry_at": iso_ms(mine["retry_ms"])}
+            )
+            save_state(graph, state)
             continue
+        for done in ("fails", "retry_ms", "retry_why"):
+            mine.pop(done, None)
         if sweep_due(c, mine, sweep_days):
             try:  # a failed sweep is retried next round; the round's own items still go in
                 items += c.sweep(sweep_days)  # type: ignore[attr-defined]
@@ -219,6 +240,10 @@ def sync(
     report["derived"] = live.derive_if_due(graph)  # the derived layer, if a write made it due
     report["algorithms"] = live.algorithms_if_due(graph)  # org mode, hourly (D127)
     return report
+
+
+def iso_ms(ms: int) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ms / 1000))
 
 
 def sweep_due(c: Connector, mine: dict[str, Any], days: float | None) -> bool:
@@ -510,6 +535,31 @@ def from_connector(alert: dict[str, Any]) -> bool:
     return any(kind_free.startswith(shape.format(s)) for s in SOURCES)
 
 
+POKE = "poke.json"
+
+
+def poke(graph: str, source: str) -> None:
+    """A webhook says `source` changed (main.py, D132): the worker's next round starts now."""
+    said = {"source": source, "at_ms": int(time.time() * 1000)}
+    filestate.write(live.live_dir(graph) / POKE, said)
+
+
+def poked_since(graph: str, ms: int) -> bool:
+    found = filestate.cached(live.live_dir(graph) / POKE, {})
+    return found.get("at_ms", 0) > ms
+
+
+def wait(wake: Any, pause_s: float, graph: str, since_ms: int) -> None:
+    """Until the pause is over, Slack's socket wakes us, or a webhook pokes (a file the API
+    process writes; checked every second)."""
+    deadline = time.monotonic() + pause_s
+    while not wake.is_set() and not poked_since(graph, since_ms):
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return
+        wake.wait(min(1.0, left))
+
+
 def run_forever(graph: str | None = None, every_s: float = 30, say=print) -> None:
     """`lore connectors run`: sync every `every_s` seconds, or at once when Slack reports a
     message; post each new alert a connector caused as a Slack card."""
@@ -536,27 +586,31 @@ def run_forever(graph: str | None = None, every_s: float = 30, say=print) -> Non
     say(f"connectors: {', '.join(c.name for c in connectors)} -> {graph}, every {every_s:g} s")
     pause = every_s
     while True:
+        started_ms = int(time.time() * 1000)
         try:
-            waiting, slow = one_round(connectors, graph, bot, say)
+            waiting, slow, stalled = one_round(connectors, graph, bot, say)
         except Exception as e:  # anything at all: reported and retried, never the end of the loop
             say(f"round failed: {why(e)}")
-            waiting, slow = [f"round failed: {why(e)}"], None
+            waiting, slow, stalled = [f"round failed: {why(e)}"], None, True
         healthy = not waiting
-        pause = every_s if healthy else min(pause * 2, MAX_PAUSE_S)
+        # a tool that fails backs off on its own (D132); the loop slows only when items wait
+        # (the lock, the spend cap) or every tool is down
+        pause = min(pause * 2, MAX_PAUSE_S) if stalled else every_s
         beat(graph, healthy, pause, waiting[0] if waiting else None, slow)
         if not healthy:
             say(f"next round in {pause:g} s")
-        wake.wait(pause)
+        wait(wake, pause, graph, started_ms)
         wake.clear()
 
 
 def one_round(
     connectors: list[Connector], graph: str, bot: Any, say=print
-) -> tuple[list[str], str | None]:
+) -> tuple[list[str], str | None, bool]:
     """One sync round, said out loud, then the Slack cards of new alerts. Returns why items
-    or tools had to wait, empty when nothing did (the pause between rounds grows while rounds
-    keep waiting, and the heartbeat says why: e.g. the spend cap pausing extraction), and a
-    warning when a fold was slow."""
+    or tools had to wait, empty when nothing did (the heartbeat says why: e.g. the spend cap
+    pausing extraction), a warning when a fold was slow, and whether the round stalled: items
+    waited, or every tool did (the pause between rounds then grows; a single failing tool
+    backs off on its own, D132)."""
     from app.sentinel import approve, engine
 
     for alert_id in approve.complete_stuck(graph):  # responses a stopped process left (D110)
@@ -586,7 +640,11 @@ def one_round(
         save_state(graph, state)
     if slow := slow_fold(report):
         say(f"warning: {slow}")
-    return sorted({f"{r['source']}: {r['why']}" for r in report["waiting"]}), slow
+    tools_down = {r["source"] for r in report["waiting"] if r["id"] is None}
+    stalled = any(r["id"] is not None for r in report["waiting"]) or (
+        bool(connectors) and tools_down >= {c.name for c in connectors}
+    )
+    return sorted({f"{r['source']}: {r['why']}" for r in report["waiting"]}), slow, stalled
 
 
 HEARTBEAT = "heartbeat.json"

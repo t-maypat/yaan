@@ -4,7 +4,7 @@ shapes follow Slack's Web API (conversations.list / history, chat.postMessage)."
 import pytest
 
 from app.connectors import slack
-from app.connectors.base import ConnectorError, Maps
+from app.connectors.base import Maps
 
 MAPS = Maps(
     product="VizForce",
@@ -106,10 +106,12 @@ def test_messages_become_live_messages_in_the_channel_they_play(conn):
     assert [i.artifact.id for i in conn.fetch(1805000000500)] == [second.id]  # since the cursor
 
 
-def test_a_channel_the_bot_cant_see_is_a_loud_error(monkeypatch, conn):
-    conn.conf = {**conn.conf, "channels": {"vizforce-dev": "ch-x"}}
-    with pytest.raises(ConnectorError, match="/invite @lore"):
-        conn.fetch(0)
+def test_a_channel_the_bot_cant_see_waits_alone_and_says_so(monkeypatch, conn):
+    """D132: one archived or unreadable channel used to stop every Slack channel."""
+    mapped = conn.conf["channels"]
+    conn.conf = {**conn.conf, "channels": {**mapped, "vizforce-dev": "ch-x"}}
+    assert len(conn.fetch(0)) == 2  # the readable channel's messages still come in
+    assert conn.problems == ["the bot can't see #vizforce-dev: /invite @lore there"]
 
 
 def test_post_routes_notifications_and_thread_corrections(conn):

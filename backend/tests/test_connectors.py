@@ -2,6 +2,9 @@
 actions. Fake connectors and a faked live path: no network, no LLM. The two write-back
 queries run on the real server (marked db)."""
 
+import time
+
+import httpx
 import pytest
 
 from app import db, forget
@@ -187,15 +190,45 @@ def test_an_item_that_keeps_failing_becomes_a_dead_letter(offline, monkeypatch):
 def test_a_tool_that_fails_to_answer_waits_and_the_others_go_on(offline, monkeypatch):
     monkeypatch.setattr(live, "ingest_artifact", answers)
 
+    calls = []
+
     class Down(Fake):
         def fetch(self, since_ms):
-            raise base.ConnectorError("Jira GET /search: 503")
+            calls.append(since_ms)
+            raise self.error
 
-    report = runner.sync([Down("jira"), Fake("slack", [Item(msg(1), 10)])], "lore_demo")
-    assert report["waiting"] == [
-        {"id": None, "source": "jira", "why": "ConnectorError: Jira GET /search: 503"}
-    ]
+    down = Down("jira")
+    down.error = base.ConnectorError("Jira GET /search: 503")
+    report = runner.sync([down, Fake("slack", [Item(msg(1), 10)])], "lore_demo")
+    (waiting,) = report["waiting"]
+    assert (waiting["source"], waiting["why"]) == ("jira", "ConnectorError: Jira GET /search: 503")
     assert [r["id"] for r in report["ingested"]] == [msg(1).id]
+    # D132: it backs off on its own (30 s, doubling), without one call meanwhile
+    again = runner.sync([down], "lore_demo")
+    assert len(calls) == 1 and again["waiting"][0]["retry_at"] == waiting["retry_at"]
+    mine = runner.load_state("lore_demo")["jira"]
+    mine["retry_ms"] = 0  # the wait is over
+    runner.save_state("lore_demo", {**runner.load_state("lore_demo"), "jira": mine})
+    down.error = base.RateLimited("Jira GET /search: 429", retry_after_s=600)
+    runner.sync([down], "lore_demo")
+    mine = runner.load_state("lore_demo")["jira"]
+    assert mine["fails"] == 2 and mine["retry_ms"] - time.time() * 1000 > 590_000  # as asked
+    mine["retry_ms"] = 0
+    runner.save_state("lore_demo", {**runner.load_state("lore_demo"), "jira": mine})
+    runner.sync([Fake("jira")], "lore_demo")  # it answers: the backoff is forgotten
+    assert "fails" not in runner.load_state("lore_demo")["jira"]
+
+
+def test_a_rate_limit_says_when_to_come_back():
+    def response(status, **headers):
+        return httpx.Response(status, headers=headers, text="slow down")
+
+    late = base.http_error("Jira", "GET", "/x", response(429, **{"Retry-After": "120"}))
+    assert isinstance(late, base.RateLimited) and late.retry_after_s == 120
+    reset = str(int(time.time()) + 300)
+    spent = response(403, **{"x-ratelimit-remaining": "0", "x-ratelimit-reset": reset})
+    assert 290 < base.http_error("GitHub", "GET", "/x", spent).retry_after_s <= 300
+    assert type(base.http_error("GitHub", "GET", "/x", response(403))) is base.ConnectorError
 
 
 def test_seen_versions_are_kept_a_day_behind_the_cursor_and_state_writes_are_atomic(
@@ -425,3 +458,37 @@ def test_a_slow_fold_is_said_out_loud_and_on_the_heartbeat(offline):
     runner.beat("lore_demo", healthy=True, pause_s=30, warning=said)
     beat = runner.worker_health("lore_demo")
     assert beat["status"] == "ok" and beat["warning"] == said
+
+
+def test_a_signed_webhook_wakes_the_worker_and_a_forged_one_doesnt(tmp_path, monkeypatch):
+    """D132: GitHub or Jira can wake the worker now instead of at the next poll. The payload
+    is never trusted (the worker reads the tool's API), but its signature is checked."""
+    import hashlib
+    import hmac
+    import threading
+
+    from fastapi.testclient import TestClient
+
+    from app import main
+    from app.config import get_settings
+
+    monkeypatch.setattr(live, "live_dir", lambda graph: tmp_path / graph)
+    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "s3cret")
+    get_settings.cache_clear()
+    try:
+        api = TestClient(main.app)
+        body = b'{"action": "opened"}'
+        good = "sha256=" + hmac.new(b"s3cret", body, hashlib.sha256).hexdigest()
+        graph = live.demo_graph(None)
+        assert api.post("/hooks/jira", content=body).status_code == 404  # no secret: off
+        forged = {"X-Hub-Signature-256": "sha256=" + "0" * 64}
+        assert api.post("/hooks/github", content=body, headers=forged).status_code == 401
+        assert not runner.poked_since(graph, 0)
+        before = int(time.time() * 1000) - 1
+        signed = api.post("/hooks/github", content=body, headers={"X-Hub-Signature-256": good})
+        assert signed.status_code == 202 and runner.poked_since(graph, before)
+        started = time.monotonic()
+        runner.wait(threading.Event(), 30, graph, before)  # returns at once: poked
+        assert time.monotonic() - started < 1
+    finally:
+        get_settings.cache_clear()

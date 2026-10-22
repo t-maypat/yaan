@@ -200,3 +200,26 @@ def test_the_sweep_runs_in_org_mode_at_start_and_daily_and_never_on_its_own_in_t
     mine["swept_ms"] -= runner.SWEEP_EVERY_MS
     assert runner.sweep_due(c, mine, None)  # a day later
     runner._swept.discard("slack")
+
+
+def test_with_the_socket_the_history_read_is_a_safety_net(conn, monkeypatch):
+    """D132: messages arrive as socket events, so history is read every HISTORY_EVERY_MS,
+    from the last read with a minute's overlap (the socket's items move the cursor)."""
+    reads = []
+
+    class Counting(Threads):
+        def conversations_history(self, channel, oldest=None, **kw):
+            reads.append(float(oldest) * 1000)
+            return super().conversations_history(channel, oldest, **kw)
+
+    conn.client = Counting([said(ROOT, "Export broken?")], {})
+    clock = [1805001000000]
+    monkeypatch.setattr(slack, "now_ms", lambda: clock[0])
+    monkeypatch.setitem(slack._live, "socket", True)
+    conn.fetch(0)
+    clock[0] += 60_000
+    conn.fetch(clock[0])  # the socket brought this minute's messages: no read
+    assert len(reads) == 1
+    clock[0] += slack.HISTORY_EVERY_MS
+    conn.fetch(clock[0])  # the cursor moved on; the read starts where the last one did
+    assert reads[1] == pytest.approx(1805001000000 - 60_000)

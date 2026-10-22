@@ -21,6 +21,7 @@ from app.ingest.normalize import Artifact
 
 API = "https://api.notion.com"
 VERSION = "2022-06-28"
+COMMENTS_EVERY_MS = 600_000
 TEXT_BLOCKS = (
     "paragraph",
     "heading_1",
@@ -62,6 +63,7 @@ class NotionConnector:
         self.page_id, self.graph = page_id.replace("-", ""), graph
         self.maps = maps or base.maps()
         self.channel = self.maps.source("notion").get("channel")
+        self._comments_ms: int | None = None  # when every page's comments were last read
         self.http = client or httpx.Client(
             base_url=API,
             timeout=20,
@@ -71,7 +73,7 @@ class NotionConnector:
     def _req(self, method: str, path: str, **kw: Any) -> Any:
         r = self.http.request(method, path, **kw)
         if r.status_code >= 400:
-            raise ConnectorError(f"Notion {method} {path}: {r.status_code} {r.text[:300]}")
+            raise base.http_error("Notion", method, path, r)
         return r.json()
 
     def _all(self, path: str, **params: Any) -> list[dict[str, Any]]:
@@ -98,18 +100,25 @@ class NotionConnector:
         if not rows:
             raise ConnectorError(f"notion.channel {self.channel!r} isn't in the graph")
         items: list[Item] = []
+        now = int(time.time() * 1000)
+        # a new comment may not change the page's edit time: every page's comments are read
+        # every COMMENTS_EVERY_MS, an edited page's at once (D132; before, every round)
+        comments_due = self._comments_ms is None or now - self._comments_ms >= COMMENTS_EVERY_MS
         for block in self._all(f"/v1/blocks/{self.page_id}/children"):
             if block.get("type") != "child_page":
                 continue
             page = self._req("GET", f"/v1/pages/{block['id']}")
+            edited = ms(page["last_edited_time"])
+            if edited <= since_ms and not comments_due:
+                continue
             comments = self._all("/v1/comments", block_id=block["id"])
-            changed = max(
-                [ms(page["last_edited_time"])] + [ms(c["created_time"]) for c in comments]
-            )
+            changed = max([edited] + [ms(c["created_time"]) for c in comments])
             if changed <= since_ms:
                 continue
             body = self._all(f"/v1/blocks/{block['id']}/children")
             items.extend(self.normalize(block, page, body, comments, rows[0]["name"]))
+        if comments_due:
+            self._comments_ms = now
         return items
 
     def normalize(

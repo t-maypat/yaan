@@ -9,16 +9,19 @@ What changed between versions, newest first. Yaan is 0.x: settings and the graph
 #### Added
 - `yaan people` prints the people Yaan met in your tools who aren't in `people.yaml`, as entries to paste.
 - `scripts/load_fold.py`: a load test of the decision fold on synthetic events (no model calls).
+- Optional webhooks: `GITHUB_WEBHOOK_SECRET` / `JIRA_WEBHOOK_SECRET` and `/hooks/github`, `/hooks/jira` wake the worker as soon as something changes.
 - `visibility: synced` for GitHub and Jira in `connectors.yaml`: who may read a repository or a Jira project comes from the tool itself, every hour.
 
 #### Changed
 - The decision fold no longer slows down as history grows: each event's issue match is kept and only new events, or ones a change could affect, are matched again. A year of 2.5M messages (one product holding 62,000 events) folds in about 13 s per batch; before, matching was quadratic and took minutes.
+- Connectors cost less and fail alone: a rate-limited or failing tool waits as long as it asks (Retry-After), or 30 s doubling, while the others go on; Slack reads channel access when Slack says it changed (else every 10 minutes) and history every 5 minutes as a safety net behind its socket; an archived or unreadable Slack channel waits alone and is hidden instead of stopping Slack; GitHub uses conditional requests and reads every review, not the first 100; Notion re-reads a page's body only when it changed and its comments every 10 minutes.
 - Search ranks only what the asker may read, so someone who can't see a private channel still gets a full page of results instead of the top results minus the hidden ones.
 - An answer's sources are hidden whenever a result row names a hidden item under any field, not only under five known ones.
 - Org mode builds who-knows-what only from what everyone may read: work seen only in a private channel no longer makes someone an area's expert.
 - People met in a tool get 64-bit ids (`eid_` + 16 hex digits), so two accounts no longer collide; a second account landing on a taken id is refused loudly. Slack and Jira emails at your domains merge a person across tools.
 
 #### Upgrading
+- Slack: add the bot events `member_joined_channel`, `member_left_channel`, `channel_archive`, `channel_unarchive`, `channel_rename`, `channel_left`, `group_archive`, `group_unarchive`, `group_rename`, `group_left` to your app (the manifest in `backend/app/connectors/README.md` lists them); without them a membership change reaches Yaan within 10 minutes instead of at once.
 - Accounts already registered keep their 8-digit ids; `people.yaml` ids never change. An unlisted account whose Slack or Jira email matches a listed person now counts as that person: their earlier items stay under the old id.
 - The first fold of each product after upgrading matches everything once (the stored matches don't exist yet); with years of chat-named issues this can take minutes.
 

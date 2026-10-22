@@ -20,6 +20,7 @@ its people.yaml entry, or to a person registered on first sight, never to a stan
 """
 
 import re
+import time
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Protocol
@@ -37,6 +38,34 @@ PERSONA = re.compile(r"\[synthetic demo[^\]]*\((eid_[0-9a-f]{8})\)\]")
 
 class ConnectorError(RuntimeError):
     """A connector can't run: missing token or map, or the source refused a call."""
+
+
+class RateLimited(ConnectorError):
+    """The source asked Yaan to slow down: no call to it for `retry_after_s` (D132)."""
+
+    def __init__(self, message: str, retry_after_s: float):
+        super().__init__(f"{message} (rate limited: back in {retry_after_s:.0f} s)")
+        self.retry_after_s = retry_after_s
+
+
+def http_error(tool: str, method: str, path: str, r: Any, detail: str | None = None):
+    """A failed HTTP call as a ConnectorError, or RateLimited when the tool says when to come
+    back: Retry-After (Jira, Notion, GitHub's secondary limit) or GitHub's exhausted primary
+    limit (`x-ratelimit-remaining: 0` until `x-ratelimit-reset`). A 429 without a time waits
+    a minute."""
+    message = f"{tool} {method} {path}: {r.status_code} {detail or r.text[:300]}"
+    wait: float | None = None
+    if r.status_code in (403, 429, 503):
+        if retry := r.headers.get("retry-after"):
+            try:
+                wait = max(1.0, float(retry))
+            except ValueError:  # an HTTP date: rare; a minute is near enough
+                wait = 60.0
+        elif r.headers.get("x-ratelimit-remaining") == "0" and r.headers.get("x-ratelimit-reset"):
+            wait = max(1.0, float(r.headers["x-ratelimit-reset"]) - time.time())
+        elif r.status_code == 429:
+            wait = 60.0
+    return RateLimited(message, wait) if wait is not None else ConnectorError(message)
 
 
 @dataclass

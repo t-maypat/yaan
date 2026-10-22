@@ -152,11 +152,17 @@ def test_a_private_slack_channel_may_not_share_a_yaan_channel(org_mode, written)
 
 
 def test_a_channel_the_bot_cant_see_is_never_guessed_public(org_mode, written):
+    """Nor kept as it was (it may have turned private since): unknown, so hidden, and the
+    other channels' access is still read (D132)."""
     fake = FakeSlack([{"name": "support", "id": "C1", "is_private": False}], {})
     maps = slack_maps({"support": "bug-support", "leads": "bug-leads"})
-    with pytest.raises(ConnectorError, match="can't see #leads"):
-        slack.SlackConnector(fake, "yaan_org", maps).sync_access()
-    assert written == {}
+    conn = slack.SlackConnector(fake, "yaan_org", maps)
+    conn.sync_access()
+    assert written["rows"] == [
+        {"id": "bug-leads", "visibility": "unknown"},
+        {"id": "bug-support", "visibility": "public"},
+    ]
+    assert conn.problems == ["the bot can't see #leads: /invite @lore there"]
 
 
 def bot(conn) -> slack.SlackBot:
@@ -332,3 +338,32 @@ def test_text_that_leaves_yaan_quotes_only_what_everyone_may_read(acme, monkeypa
     assert base.public_alert(card, acme)["quote"] == base.WITHHELD
     open_card = {**card, "quote": "Export is slow.", "artifact_id": PUB}
     assert base.public_alert(open_card, acme) == open_card
+
+
+def test_slack_access_is_read_when_it_changes_or_every_ten_minutes(org_mode, written, monkeypatch):
+    """D132: every 30 s round listed every channel and every private channel's members; now
+    on a membership or channel event from the socket, else every ACCESS_EVERY_MS."""
+    lists = []
+
+    class Counting(FakeSlack):
+        def conversations_list(self, **kw):
+            lists.append(1)
+            return super().conversations_list(**kw)
+
+    fake = Counting([{"name": "support", "id": "C1", "is_private": False}], {})
+    conn = slack.SlackConnector(fake, "yaan_org", slack_maps({"support": "bug-support"}))
+    clock = [1_800_000_000_000]
+    monkeypatch.setattr(slack, "now_ms", lambda: clock[0])
+    monkeypatch.setattr(slack.db, "run", lambda *a, **k: type("R", (), {"rows": [{"name": "s"}]}))
+    monkeypatch.setitem(slack._live, "socket", True)
+    monkeypatch.setitem(slack._live, "access_changed", False)
+    conn.fetch(0)  # the first round reads it
+    clock[0] += 60_000
+    conn.fetch(0)
+    assert len(lists) == 1
+    slack.access_changed({"type": "member_left_channel", "channel": "C1"})
+    conn.fetch(0)
+    assert len(lists) == 2
+    clock[0] += slack.ACCESS_EVERY_MS
+    conn.fetch(0)
+    assert len(lists) == 3

@@ -115,3 +115,28 @@ def test_corrections_go_on_the_page(conn):
     assert (
         conn.post({"id": "a3", "kind": "notify_owner", "target_id": "eid_1", "draft": "x"}) is None
     )
+
+
+def test_an_unchanged_page_costs_one_call_and_its_comments_are_read_every_ten_minutes(
+    conn, monkeypatch
+):
+    """D132: every round re-read every page, its comments and its body."""
+    paths = []
+    handle = conn.http._transport.handler
+
+    def counting(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        return handle(request)
+
+    conn.http = httpx.Client(base_url=notion.API, transport=httpx.MockTransport(counting))
+    later = notion.ms("2027-03-12T00:00:00.000Z")
+    clock = [1_900_000_000.0]
+    monkeypatch.setattr(notion.time, "time", lambda: clock[0])
+    conn.fetch(later)  # the first round reads the comments
+    paths.clear()
+    clock[0] += 60
+    assert conn.fetch(later) == []
+    assert "/v1/comments" not in paths and f"/v1/blocks/{PAGE}/children" not in paths
+    clock[0] += notion.COMMENTS_EVERY_MS / 1000
+    conn.fetch(later)
+    assert "/v1/comments" in paths  # ten minutes on: a new comment would show

@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     slack_bot_token: str | None = None
     slack_app_token: str | None = None
     github_token: str | None = None
+    # a webhook's secret (D132): GitHub and Jira can wake the worker at once instead of at the
+    # next poll; unset, /hooks/<tool> answers 404
+    github_webhook_secret: str | None = None
+    jira_webhook_secret: str | None = None
     github_repo: str | None = None
     jira_base_url: str | None = None
     jira_email: str | None = None

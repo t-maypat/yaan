@@ -71,6 +71,16 @@ settings:
       - message.channels
       - message.groups
       - message.im
+      - member_joined_channel
+      - member_left_channel
+      - channel_archive
+      - channel_unarchive
+      - channel_rename
+      - channel_left
+      - group_archive
+      - group_unarchive
+      - group_rename
+      - group_left
   interactivity:
     is_enabled: true
   org_deploy_enabled: false
@@ -93,6 +103,9 @@ Socket Mode means Slack talks to Lore over an outgoing connection, so no public 
 1. https://www.notion.so/profile/integrations → **New integration** (internal), on your workspace. Capabilities: Read content, Insert content, Read comments, Insert comments. Copy the secret into `NOTION_TOKEN`.
 2. Create a page named **Lore demo (synthetic)**. Open its **•••** menu → **Connections** → add your integration.
 3. Copy the page id (the 32 characters at the end of its URL) into `NOTION_PAGE_ID`.
+
+## Webhooks (optional)
+The worker polls GitHub, Jira and Notion every 30 s (Slack arrives over its socket). If Yaan is reachable from the internet, GitHub and Jira can wake it the moment something changes: set `GITHUB_WEBHOOK_SECRET` or `JIRA_WEBHOOK_SECRET` in `.env`, then add a webhook in the tool pointing at `https://<your Yaan>/hooks/github` (content type JSON, the same secret; pull request and review events) or `/hooks/jira` (issue events, the same secret). A webhook only wakes the worker: Yaan still reads what changed from the tool's API, and a request whose signature doesn't match the secret is refused. A tool that refuses or rate-limits Yaan waits on its own, as long as it asks (Retry-After) or 30 s doubling up to 15 minutes; the other tools go on.
 
 ## What each connector does
 | Source | In (to Lore) | Out (approved actions) |

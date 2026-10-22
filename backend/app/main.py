@@ -19,6 +19,7 @@ main graph (live.demo_graph). Public demo writes are limited to the labeled file
 exports/inject/, rate-limited per IP and serialized by one lock (D058).
 """
 
+import hashlib
 import hmac
 import json
 import queue
@@ -94,7 +95,7 @@ API_PREFIXES = (
 )
 # What the request budget counts: the API, sign-in (token guessing) and the ingest endpoint.
 # /health and the web UI's own files aren't counted: a page load is dozens of them.
-LIMITED_PREFIXES = (*API_PREFIXES, "/auth", "/ingest")
+LIMITED_PREFIXES = (*API_PREFIXES, "/auth", "/ingest", "/hooks")
 
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -653,6 +654,30 @@ def query_text(name: str) -> dict:
         return {"name": name, "text": db.load_query(name.removesuffix(".cypher"))}
     except (ValueError, FileNotFoundError) as e:
         raise HTTPException(404, str(e)) from e
+
+
+# A webhook only wakes the worker (D132): Yaan still reads what changed from the tool's API, so
+# the payload is never trusted. Its HMAC (`sha256=<hex>` of the body) is checked anyway, so
+# nobody else can make the worker poll.
+HOOK_SIGNATURES = {"github": "x-hub-signature-256", "jira": "x-hub-signature"}
+
+
+@app.post("/hooks/{source}", status_code=202)
+async def hook(source: str, request: Request) -> dict:
+    from app.connectors import runner
+    from app.sentinel import live
+
+    st = get_settings()
+    secret = {"github": st.github_webhook_secret, "jira": st.jira_webhook_secret}.get(source)
+    if not secret:
+        raise HTTPException(404, f"no webhook for {source!r}: set {source.upper()}_WEBHOOK_SECRET")
+    body = await request.body()
+    want = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    given = request.headers.get(HOOK_SIGNATURES[source]) or ""
+    if not hmac.compare_digest(given.encode(), want.encode()):
+        raise HTTPException(401, "bad or missing signature")
+    await run_in_threadpool(runner.poke, live.demo_graph(None), source)
+    return {"woke": source}
 
 
 @app.get("/health")

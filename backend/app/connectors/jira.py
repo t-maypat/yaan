@@ -127,8 +127,7 @@ class JiraConnector:
     def _req(self, method: str, path: str, **kw: Any) -> Any:
         r = self.http.request(method, path, **kw)
         if r.status_code >= 400:
-            detail = r.text[:300]
-            raise ConnectorError(f"Jira {method} {path}: {r.status_code} {detail}")
+            raise base.http_error("Jira", method, path, r)
         return r.json()
 
     def synced(self) -> bool:

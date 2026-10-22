@@ -181,3 +181,29 @@ def test_issue_report_ids_lists_the_reporting_messages(empty_graph):
         "issue_report_ids", {"issue_id": "iss:Widget:abc", "limit": 5}, graph=empty_graph
     ).rows
     assert [r["id"] for r in rows] == ["msg:r1"]
+
+
+def test_an_unchanged_list_costs_a_304_and_reviews_are_all_read():
+    """D132: conditional requests (a 304 doesn't count against GitHub's rate limit), and
+    reviews past the first 100 (they were cut there)."""
+    calls = []
+    many = [{"id": n, "user": {"login": "hannah-gh"}, "state": "COMMENTED", "body": "ok",
+             "submitted_at": "2027-03-15T11:00:00Z"} for n in range(130)]  # fmt: skip
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append((request.url.path, request.headers.get("if-none-match")))
+        if request.url.path.endswith("/pulls"):
+            if request.headers.get("if-none-match") == '"v1"':
+                return httpx.Response(304)
+            return httpx.Response(200, json=PULLS[:1], headers={"etag": '"v1"'})
+        page = int(request.url.params.get("page", 1))
+        return httpx.Response(200, json=many[(page - 1) * 100 : page * 100])
+
+    client = httpx.Client(transport=httpx.MockTransport(handle), base_url="https://api.github.com")
+    c = github.GitHubConnector("t", REPO, "lore_demo", MAPS, client=client)
+    first = c.fetch(0)
+    assert len(first[0].artifact.meta["reviews"]) == 130
+    again = c.fetch(0)
+    assert [i.artifact.id for i in again] == [i.artifact.id for i in first]
+    pulls = [h for path, h in calls if path.endswith("/pulls")]
+    assert pulls == [None, '"v1"']  # the second list was a 304, answered from the cache

@@ -43,6 +43,9 @@ class GitHubConnector:
     ):
         self.repo, self.graph = repo, graph
         self._own: str | None = None
+        # conditional requests (D132): GitHub answers 304 for an unchanged list, and a 304
+        # doesn't count against the rate limit. url -> (ETag, the body it stood for)
+        self._etags: dict[str, tuple[str, Any]] = {}
         self.maps = maps or base.maps()
         self.http = client or httpx.Client(
             base_url=API,
@@ -55,12 +58,22 @@ class GitHubConnector:
         )
 
     def _get(self, path: str, **params: Any) -> Any:
-        r = self.http.get(path, params=params)
-        if r.status_code >= 400:  # loud, with GitHub's message
-            raise ConnectorError(
-                f"GitHub GET {path}: {r.status_code} {r.json().get('message', '')}"
-            )
-        return r.json()
+        key = str(self.http.build_request("GET", path, params=params).url)
+        known = self._etags.get(key)
+        headers = {"If-None-Match": known[0]} if known else {}
+        r = self.http.get(path, params=params, headers=headers)
+        if r.status_code == 304 and known:
+            return known[1]
+        if r.status_code >= 400:  # loud, with GitHub's message; rate limits wait (D132)
+            try:
+                message = r.json().get("message", "")
+            except ValueError:
+                message = r.text[:300]
+            raise base.http_error("GitHub", "GET", path, r, message)
+        body = r.json()
+        if etag := r.headers.get("etag"):
+            self._etags[key] = (etag, body)
+        return body
 
     def who(self, login: str | None, text: str = "") -> str:
         """The person a GitHub login plays; "self" in the map is the token's own login."""
@@ -90,10 +103,19 @@ class GitHubConnector:
             )
             fresh = [p for p in prs if (ms(p["updated_at"]) or 0) > since_ms]
             for p in fresh:
-                reviews = self._get(f"/repos/{self.repo}/pulls/{p['number']}/reviews", per_page=100)
-                items.append(self.normalize(p, reviews))
+                items.append(self.normalize(p, self.reviews(p["number"])))
             if len(fresh) < len(prs) or len(prs) < 50:  # sorted by update: the rest is older
                 return items
+            page += 1
+
+    def reviews(self, number: int) -> list[dict[str, Any]]:
+        """Every review of a PR (the first 100 only, before D132)."""
+        out, page = [], 1
+        while True:
+            found = self._get(f"/repos/{self.repo}/pulls/{number}/reviews", per_page=100, page=page)
+            out += found
+            if len(found) < 100:
+                return out
             page += 1
 
     def synced(self) -> bool:
