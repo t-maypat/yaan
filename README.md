@@ -95,7 +95,9 @@ docker compose --profile app exec api yaan restore data/backups/<file> --as yaan
 docker compose --profile app exec api yaan restore data/backups/<file> --force           # stop the worker first
 ```
 
-   FalkorDB keeps the graph in memory, capped by `FALKORDB_MAXMEMORY` (2 GB; about 5.5 KB per item read). At the cap it refuses every write, deletion included, so Yaan warns from 80% on `/health` and the Admin page; `yaan persistence` shows the numbers. A new deployment can also keep an append-only file (`FALKORDB_APPENDONLY=yes`), losing at most about a second of writes in a crash; an existing one switches with `yaan persistence aof` first (see `.env.example`).
+   A big graph is better backed up with `--files-only`: FalkorDB answers nothing while it writes a graph's copy (about 20 s per 1.4 GB in use), so past about 30 s `yaan backup` refuses. With `--files-only`, Yaan saves its own files and then has FalkorDB save in the background; copy FalkorDB's volume after that.
+
+   FalkorDB keeps the graph in memory, capped by `FALKORDB_MAXMEMORY` (2 GB; about 7 KB per item read, measured: a year at 5,000 items a day needs about 13 GB, and `retention_days` bounds it). At the cap it refuses every write, deletion included, so Yaan warns from 80% on `/health` and the Admin page; `yaan persistence` shows the numbers. A new deployment can also keep an append-only file (`FALKORDB_APPENDONLY=yes`), losing at most about a second of writes in a crash; an existing one switches with `yaan persistence aof` first (see `.env.example`).
 
    Logs are JSON lines (`docker compose logs api worker`), one per request with its `X-Request-ID`, and one per connector round with its numbers. `/metrics` serves Prometheus text to admins, or to a scraper holding `LORE_METRICS_TOKEN`: requests by route and status, graph memory, today's spend, the worker's rounds and items, dead letters, tools backing off.
 
@@ -144,7 +146,7 @@ FalkorDB features Yaan depends on: Cypher over a property graph, a **full-text i
 | [`connection_path`](backend/queries/connection_path.cypher) | the shortest chain of collaborators between two people |
 | [`find_missing`](backend/queries/find_missing.cypher) | what isn't there: unfixed issues, unreviewed PRs, single-author areas |
 
-All 250 queries, one parameterized statement per file, each with a fixture test: **[docs/queries.md](docs/queries.md)**.
+All 251 queries, one parameterized statement per file, each with a fixture test: **[docs/queries.md](docs/queries.md)**.
 
 ## Results
 

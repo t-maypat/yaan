@@ -189,3 +189,57 @@ def test_a_trial_restore_brings_the_graph_back_under_a_new_name_and_writes_no_fi
             backup.restore(out, as_graph=trial)
     finally:
         snapshot.admin().delete(trial)
+
+
+def test_a_dump_that_would_block_the_server_is_refused_unless_asked(deployment, monkeypatch):
+    graph, out, _, _ = deployment
+    monkeypatch.setattr(backup, "dump_seconds", lambda r: 120.0)
+    with pytest.raises(backup.BackupError, match="about 120 s. Use --files-only"):
+        backup.backup(graph, out)
+    assert backup.backup(graph, out, block_ok=True)["nodes"] > 0
+
+
+def test_a_files_only_backup_saves_the_graph_after_the_files_and_restores_beside_it(
+    deployment, monkeypatch
+):
+    """D141: a big graph's DUMP would block FalkorDB for minutes. The files are read under
+    the lock, then a fresh background save runs, so the volume's dump.rdb is never behind."""
+    graph, out, data, _ = deployment
+    seen = []
+    files = backup.state_files
+    monkeypatch.setattr(backup, "state_files", lambda g: seen.append("files") or files(g))
+    saved = "2026-10-23T03:00:00Z"
+    monkeypatch.setattr(backup, "fresh_save", lambda r: seen.append("save") or saved)
+    report = backup.backup(graph, out, files_only=True)
+    assert seen == ["files", "save"] and "dump.rdb" in report["next"]
+    with tarfile.open(out) as tar:
+        assert "graph.dump" not in tar.getnames()
+    with pytest.raises(backup.BackupError, match="holds no graph to try"):
+        backup.restore(out, as_graph=f"{graph}_x")
+    (data / "tokens.json").unlink()
+    got = backup.restore(out)  # the graph is there (its volume came back): only the files
+    assert got["files_written"] == 6 and (data / "tokens.json").is_file()
+    snapshot.admin().delete(graph)
+    with pytest.raises(backup.BackupError, match="restore its volume"):
+        backup.restore(out, force=True)
+
+
+def test_a_fresh_save_waits_out_one_already_running_then_starts_its_own():
+    class Server:
+        def __init__(self):
+            self.calls, self.running, self.last = [], 2, 100  # someone's save, 2 polls long
+
+        def info(self, section):
+            if self.running:
+                self.running -= 1
+                return {"rdb_bgsave_in_progress": 1, "rdb_last_save_time": self.last}
+            return {"rdb_bgsave_in_progress": 0, "rdb_last_save_time": self.last,
+                    "rdb_last_bgsave_status": "ok"}  # fmt: skip
+
+        def bgsave(self):
+            self.calls.append("bgsave")
+            self.running, self.last = 1, int(time.time()) + 1
+
+    s = Server()
+    assert backup.fresh_save(s, wait_s=30).startswith("20")
+    assert s.calls == ["bgsave"]  # not before the running one ended, and once

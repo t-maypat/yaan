@@ -49,6 +49,9 @@ GRAPH_DIRS = ("live", "audit")  # data/<dir>/<graph>/, every file but the transi
 TRANSIENT = ("heartbeat.json", "poke.json")
 CONFIG = ("people.yaml", "connectors.yaml", "permissions.yaml")  # relative to the repo root
 LOCK = "derived"  # db.writer_lock's default name
+# DUMP is one command: FalkorDB answers nothing while it serialises. Measured (22.6, D141): a
+# payload is ~31% of used memory (443 MB of 1,415), written at ~21 MB/s on this laptop
+DUMP_RATIO, DUMP_MB_PER_S, DUMP_BLOCK_MAX_S = 0.31, 21.0, 30.0
 
 
 class BackupError(RuntimeError):
@@ -81,20 +84,45 @@ def _transient(path: Path) -> bool:
     return path.name in TRANSIENT or path.suffix in (".lock", ".tmp")
 
 
-def backup(graph: str | None = None, out: Path | None = None, keep: int | None = None) -> dict:
+def dump_seconds(r) -> float:
+    """How long a DUMP would keep FalkorDB from answering, from the server's used memory (an
+    upper bound for one graph): a payload is ~31% of it, serialised at ~21 MB/s (22.6)."""
+    used_mb = r.info("memory")["used_memory"] / 2**20
+    return used_mb * DUMP_RATIO / DUMP_MB_PER_S
+
+
+def backup(
+    graph: str | None = None,
+    out: Path | None = None,
+    keep: int | None = None,
+    files_only: bool = False,
+    block_ok: bool = False,
+) -> dict:
     """Write one backup of `graph` (default: the graph the API serves); returns its manifest.
-    `keep`: then delete this graph's oldest backups in the same folder beyond that many."""
+    `keep`: then delete this graph's oldest backups in the same folder beyond that many.
+    `files_only` (a big graph, D141): the state files, then a fresh background save, so any
+    dump.rdb copied from FalkorDB's volume afterwards is at or ahead of them. A DUMP that would
+    block the server past DUMP_BLOCK_MAX_S is refused unless `block_ok`."""
     graph = graph or get_settings().api_graph()
     out = out or default_out(graph)
     r = snapshot.admin()
     if not r.exists(graph):
         raise BackupError(f"graph {graph!r} doesn't exist")
+    if not files_only and not block_ok and (est := dump_seconds(r)) > DUMP_BLOCK_MAX_S:
+        raise BackupError(
+            f"a DUMP would stop FalkorDB answering for about {est:.0f} s. Use --files-only "
+            "(then copy FalkorDB's volume, whose dump.rdb is saved without blocking), or "
+            "--block-ok at a quiet time"
+        )
     members: dict[str, bytes] = {}
+    payload = None
     with db.writer_lock(graph, name=LOCK) as holder:  # no batch half-written while we read
         for name, path in state_files(graph).items():  # files first, then the graph (above)
             members[name] = path.read_bytes()
-        payload = r.dump(graph)
+        if not files_only:
+            payload = r.dump(graph)
         found = snapshot.counts(r, graph)
+    saved = None if payload is not None else fresh_save(r)  # after the files: never behind them
     for name in CONFIG:
         if (REPO_ROOT / name).is_file():
             members[f"config/{name}"] = (REPO_ROOT / name).read_bytes()
@@ -105,12 +133,17 @@ def backup(graph: str | None = None, out: Path | None = None, keep: int | None =
         "falkordb_tag": get_settings().falkordb_tag,
         "lock_holder": holder,
         **found,
-        "members": {"graph.dump": _sha(payload)} | {n: _sha(b) for n, b in members.items()},
+        "members": {n: _sha(b) for n, b in members.items()},
     }
+    if payload is not None:
+        manifest["members"]["graph.dump"] = _sha(payload)
+    else:  # the graph lives in FalkorDB's own save, copied with its volume
+        manifest["graph_in"] = f"FalkorDB's dump.rdb, saved at {saved} or later"
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_name(out.name + ".part")
     with tarfile.open(tmp, "w:gz") as tar:
-        snapshot._add(tar, "graph.dump", payload)
+        if payload is not None:
+            snapshot._add(tar, "graph.dump", payload)
         for name, blob in members.items():
             snapshot._add(tar, name, blob)
         snapshot._add(tar, "manifest.json", json.dumps(manifest, indent=1).encode())
@@ -126,9 +159,39 @@ def backup(graph: str | None = None, out: Path | None = None, keep: int | None =
         **found,
         "files": len(members),
     }
+    if saved:
+        report["graph_in"] = manifest["graph_in"]
+        report["next"] = (
+            "copy FalkorDB's volume (dump.rdb, appendonlydir) now: it is at or ahead of these "
+            "files, so a restore loses nothing"
+        )
     if keep:
         report["deleted"] = prune(out.parent, graph, keep)
     return report
+
+
+def fresh_save(r, wait_s: float = 3600) -> str:
+    """A background save that starts now and has finished: one already running may have
+    forked before the caller's files were read. BGSAVE forks; the server keeps answering."""
+    deadline = time.monotonic() + wait_s
+    started = None
+    while time.monotonic() < deadline:
+        p = r.info("persistence")
+        if not p["rdb_bgsave_in_progress"]:
+            if started is not None and p["rdb_last_save_time"] >= started:
+                if p["rdb_last_bgsave_status"] != "ok":
+                    raise BackupError("FalkorDB's background save failed: see its log")
+                return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(p["rdb_last_save_time"]))
+            if started is None:
+                started = int(time.time())
+                try:
+                    r.bgsave()
+                except Exception as e:  # "already in progress": someone else's; wait, then ours
+                    if "progress" not in str(e):
+                        raise
+                    started = None
+        time.sleep(0.2)
+    raise BackupError(f"FalkorDB's background save didn't finish in {wait_s:g} s")
 
 
 def sidecar(path: Path) -> Path:
@@ -171,12 +234,20 @@ def restore(
         )
     graph = as_graph or manifest["graph"]
     r = snapshot.admin()
+    files_only = "graph.dump" not in manifest["members"]  # the graph came back with its volume
+    if files_only and as_graph:
+        raise BackupError("a files-only backup holds no graph to try: restore FalkorDB's volume")
+    if files_only and not r.exists(graph):
+        raise BackupError(
+            f"graph {graph!r} isn't in FalkorDB: restore its volume (the dump.rdb copied after "
+            "this backup) first, then these files"
+        )
     if as_graph:
         if r.exists(graph):
             raise BackupError(f"graph {graph!r} exists: a trial restore needs a new name")
         files = {"graph.dump": files["graph.dump"]}
     elif not force:
-        if r.exists(graph):
+        if r.exists(graph) and not files_only:
             raise BackupError(f"graph {graph!r} exists: pass --force to replace it")
         if runner.worker_health(graph)["status"] in ("ok", "waiting"):
             raise BackupError(
@@ -193,14 +264,17 @@ def restore(
         if clash:
             raise BackupError(f"{len(clash)} files differ from the backup ({clash[0]}, …): --force")
     t0 = time.perf_counter()
-    r.restore(graph, 0, files.pop("graph.dump"), replace=True)
-    got = snapshot.counts(r, graph)
-    want = {"nodes": manifest["nodes"], "edges": manifest["edges"]}
-    if got != want:
-        raise BackupError(f"{graph}: restored {got}, expected {want}")
-    # the lock the backup held while it dumped comes back taken: give it back
-    db.run("release_lock", {"name": LOCK, "holder": manifest["lock_holder"]}, graph=graph,
-           readonly=False)  # fmt: skip
+    if files_only:  # at or ahead of the files (D141): more nodes than then is expected
+        got = snapshot.counts(r, graph)
+    else:
+        r.restore(graph, 0, files.pop("graph.dump"), replace=True)
+        got = snapshot.counts(r, graph)
+        want = {"nodes": manifest["nodes"], "edges": manifest["edges"]}
+        if got != want:
+            raise BackupError(f"{graph}: restored {got}, expected {want}")
+        # the lock the backup held while it dumped comes back taken: give it back
+        db.run("release_lock", {"name": LOCK, "holder": manifest["lock_holder"]}, graph=graph,
+               readonly=False)  # fmt: skip
     graph_ms = round((time.perf_counter() - t0) * 1000)
     if not as_graph:
         for d in GRAPH_DIRS:  # the graph's own folders become the backup's, not a mix of both

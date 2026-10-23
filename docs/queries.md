@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-250 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+251 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -153,7 +153,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
 | [`upsert_tombstones.cypher`](../backend/queries/upsert_tombstones.cypher) | a content-free record of each forgotten item (id, kind, when, why), so a sync, sweep or backfill doesn't bring it back (F2, D125) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (124)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (125)
 
 | Query | Purpose |
 |---|---|
@@ -184,6 +184,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`collab_messages_org.cypher`](../backend/queries/collab_messages_org.cypher) | org mode's conversation part of COLLAB: who wrote each message, where, when and in which thread, to group into conversations (threads, else sessions) (F4, D127) |
 | [`collab_paths.cypher`](../backend/queries/collab_paths.cypher) | the shortest COLLAB path (at most 4 hops) between each given pair of people: how a listed owner reaches the real expert, or how close a backup already is to a key person (10.5, D065) |
 | [`connection_path.cypher`](../backend/queries/connection_path.cypher) | the shortest chain of people who work together (COLLAB, at most 6 hops) between two people, with each hop's tie: weight, shared reviews, meetings and chats (tool 13 connection_path, R2, D065) |
+| [`count_chunks.cypher`](../backend/queries/count_chunks.cypher) | how many chunks the graph holds: whether a product's vector search may scan its chunks exactly or must start from the index (22.6, D141) |
 | [`count_linked_chunks.cypher`](../backend/queries/count_linked_chunks.cypher) | how many of the given chunk ids exist and hang off an artifact |
 | [`decision_chain.cypher`](../backend/queries/decision_chain.cypher) | every state in the given decision topics: value, validity window, origin, who decided it, the evidence quotes, the claims behind it with the policy's verdict, refused claims, alerts that flagged it, the responses it caused and similar earlier cases; oldest first (tool 6 decision_lineage, R2) |
 | [`decision_precedents.cypher`](../backend/queries/decision_precedents.cypher) | the earlier decisions that are precedents for the given one (similar subject, same kind of decision), most similar first, with who decided and the evidence quote (10.6, D066) |

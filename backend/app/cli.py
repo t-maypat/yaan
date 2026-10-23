@@ -619,7 +619,13 @@ def cmd_backup(args: argparse.Namespace) -> int:
     from app import backup, db, snapshot
 
     try:
-        out = backup.backup(args.graph, Path(args.out) if args.out else None, keep=args.keep)
+        out = backup.backup(
+            args.graph,
+            Path(args.out) if args.out else None,
+            keep=args.keep,
+            files_only=args.files_only,
+            block_ok=args.block_ok,
+        )
     except (backup.BackupError, snapshot.SnapshotError, db.LockBusy, OSError) as e:
         print(f"yaan backup: {e}", file=sys.stderr)
         return 1
@@ -1018,6 +1024,15 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--graph", {"help": "default: the graph the API serves"}),
         ("--out", {"help": "file to write (default: data/backups/<graph>-<UTC time>.tar.gz)"}),
         ("--keep", {"type": int, "help": "then keep only the newest N of this graph's backups"}),
+        (
+            "--files-only",
+            {
+                "action": "store_true",
+                "help": "a big graph: the state files, then a background save; copy FalkorDB's "
+                "volume afterwards (DUMP would block the server)",
+            },
+        ),
+        ("--block-ok", {"action": "store_true", "help": "DUMP even if it blocks FalkorDB > 30 s"}),
     ],
     "restore": [
         ("path", {"help": "a backup file (its .sha256 beside it)"}),

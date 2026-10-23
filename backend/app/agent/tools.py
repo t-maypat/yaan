@@ -22,6 +22,12 @@ RRF_K = 60  # reciprocal rank fusion constant (Cormack et al.); damps the top ra
 DEPTH_FACTOR = 3
 INDEX_FACTOR = 5  # the graph-wide vector index is asked for more: its filters apply after it
 MAX_FETCH = 200
+# A product's exact vector scan costs ~1.5 µs a chunk (22.6, D141): ~0.45 s at this size, so a
+# graph holding more chunks searches a product from the index first (asked this deep)
+SCAN_MAX_CHUNKS = 300_000
+INDEX_FETCH_DEEP = 1_000
+CHUNK_COUNT_TTL_S = 300
+_chunk_counts: dict[str, tuple[float, int]] = {}
 MAX_KEYWORDS = 12
 SNIPPET_CHARS = 300
 STOPWORDS = frozenset(
@@ -94,16 +100,29 @@ def search_artifacts(
             vector = embed_query(query)
         timings["embed_ms"] = ms_since(started)
         started = time.perf_counter()
-        # With a product, score that product's own chunks exactly: the index returns the
-        # nearest chunks graph-wide, and filtering those by product loses most of them once
-        # several products share the graph (D042). Unscoped searches keep the index.
-        name = "search_vector" if product_id is None else "search_vector_scoped"
         # a viewer's search filters the index's nearest: ask the index for as many as allowed
         index_k = MAX_FETCH if reach["scoped"] else min(MAX_FETCH, k * INDEX_FACTOR)
         params = {"qvec": vector, "fetch": index_k, "k": fetch, **filters, **reach}
-        lists["vector"] = db.run(name, params, graph=graph).rows
+        if product_id is None:  # unscoped searches keep the index
+            names = ["search_vector"]
+        elif chunk_total(graph) <= SCAN_MAX_CHUNKS:
+            # With a product, score its own chunks exactly: the index returns the nearest
+            # chunks graph-wide, and filtering those by product loses most of them once
+            # several products share the graph (D042).
+            names = ["search_vector_scoped"]
+        else:
+            # A big graph (22.6, D141): the exact scan would pass the read timeout. The index,
+            # asked deep, fills k for a product holding much of the graph; one it can't fill
+            # holds few chunks, so its exact scan is cheap again.
+            names = ["search_vector"]
+            params["fetch"] = INDEX_FETCH_DEEP
+        rows = db.run(names[0], params, graph=graph).rows
+        if names == ["search_vector"] and product_id is not None and len(rows) < fetch:
+            names.append("search_vector_scoped")
+            rows = db.run(names[1], params, graph=graph).rows
+        lists["vector"] = rows
         timings["vector_ms"] = ms_since(started)
-        used.append(f"{name}.cypher")
+        used += [f"{name}.cypher" for name in names]
 
     results = fuse(lists, k, full_text)
     if people and results:
@@ -170,6 +189,17 @@ def fuse(
 
 def ms_since(started: float) -> float:
     return round((time.perf_counter() - started) * 1000, 2)
+
+
+def chunk_total(graph: str | None) -> int:
+    """How many chunks `graph` holds, read at most every CHUNK_COUNT_TTL_S (a label count)."""
+    key = graph or ""
+    hit = _chunk_counts.get(key)
+    if hit and time.monotonic() - hit[0] < CHUNK_COUNT_TTL_S:
+        return hit[1]
+    n = int(db.run("count_chunks", {}, graph=graph).rows[0]["n"])
+    _chunk_counts[key] = (time.monotonic(), n)
+    return n
 
 
 # --- agent tools that need no extraction: slice A (9.0, D038) ------------------------------

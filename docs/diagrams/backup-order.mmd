@@ -1,0 +1,15 @@
+%% Why a backup loses no item (Phase 22.2, D135): a batch writes the graph before its cursor; a backup reads the cursor before the graph, both under the writer lock.
+flowchart TB
+  subgraph W["The connector worker, each batch"]
+    direction TB
+    W1["Take the writer lock"]:::guard --> W2["Write the items into the graph"]:::store
+    W2 --> W3["Give the lock back"]:::guard
+    W3 --> W4["Save the cursor file:<br/>'done up to here'"]:::file
+  end
+  subgraph B["yaan backup"]
+    direction TB
+    B1["Take the writer lock:<br/>no batch is half-written"]:::guard --> B2["Copy every state file:<br/>cursors, tokens, people, ledger, audit"]:::file
+    B2 --> B3["DUMP the graph"]:::store
+    B3 --> B4["Give the lock back;<br/>write the file and its .sha256"]:::code
+  end
+  B --> R["After a restore, the cursor is never ahead of the graph:<br/>the worker re-reads at most one batch (idempotent) and loses nothing"]:::human

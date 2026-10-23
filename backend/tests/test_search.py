@@ -267,6 +267,23 @@ def test_unscoped_vector_search_keeps_the_index(two_products):
 
 
 @pytest.mark.db
+def test_a_big_graph_searches_a_product_from_the_index_and_scans_only_a_small_one(
+    two_products, monkeypatch
+):
+    """22.6 (D141): past SCAN_MAX_CHUNKS the exact scan would pass the read timeout. B holds
+    most of the graph: the deep index fills k. A is crowded out (the index's nearest are B's,
+    filtered away), so few of its chunks exist and its exact scan runs instead."""
+    monkeypatch.setattr(tools, "SCAN_MAX_CHUNKS", 0)
+    b = tools.search_artifacts("anything", product_id="B", mode="vector", k=5, graph=two_products)
+    assert b["cypher"] == ["search_vector.cypher"] and len(b["evidence_ids"]) == 5
+    assert all(i.startswith("b") or i == "shared" for i in b["evidence_ids"])
+    a = tools.search_artifacts("anything", product_id="A", mode="vector", k=5, graph=two_products)
+    assert a["cypher"] == ["search_vector.cypher", "search_vector_scoped.cypher"]
+    assert a["evidence_ids"] == ["a0", "shared", "a1", "a2", "a3"]  # exact, as before
+    assert tools.chunk_total(two_products) == 25  # cached: 20 + 4 + one shared link
+
+
+@pytest.mark.db
 def test_scoped_vector_search_starts_from_the_product_index(empty_graph):
     from app import db
 

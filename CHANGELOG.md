@@ -15,6 +15,12 @@ What changed between versions, newest first. Yaan is 0.x: settings and the graph
 - Retention: `retention_days` in `connectors.yaml`, for every tool or per tool (org mode). The worker forgets older items daily, through `yaan forget`, and refuses them at the door; a backfill stops at the retention. `yaan retention` shows what is due (and forgets it with `--yes`).
 - An access audit log: each answer (web, MCP, Slack), MCP tool call and item read is one line in `data/audit/<graph>/<month>.jsonl` (or `AUDIT_DIR`) naming who was shown which items, by id only. `yaan audit` and the Admin page read it; 13 months are kept (`LORE_AUDIT_MONTHS`); `yaan erase` removes the person from it; `yaan backup` carries it.
 
+- `yaan backup --files-only` for a big graph: Yaan's state files, then a background save by FalkorDB; copy its volume afterwards. A `yaan backup` whose copy would keep FalkorDB from answering for more than about 30 s is refused (`--block-ok` overrides).
+- `scripts/load_size.py`: memory per item and vector-search times as a graph grows (synthetic, no model calls).
+
+#### Changed
+- Searching one product in a big graph (over 300,000 chunks) starts from the vector index, asked deep, instead of scanning every chunk of the product exactly, which would pass the 2 s limit at about 1.4M chunks. A product the index can't fill holds few chunks, so it is still scanned exactly. Graphs the size of the demo search as before.
+
 #### Fixed
 - Running the database tests emptied the real LLM disk cache (the eval's free replay): an org-mode test of `forget` reached `data/cache` because its fixture moved `DATA_DIR` but not `CACHE_DIR`. Every test now gets its own cache and audit folders.
 
