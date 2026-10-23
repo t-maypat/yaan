@@ -279,6 +279,17 @@ export const getMe = () => getJson<Me>("/me");
 // Admin (21.7, D133)
 export type AdminOverview = {
   worker: { status: string; why?: string | null; warning?: string | null };
+  // FalkorDB's memory against its cap and how it persists (22.3, D136); `error` when INFO failed
+  storage: {
+    used_mb?: number;
+    cap_mb?: number | null;
+    used_pct?: number | null;
+    aof?: boolean;
+    last_save_utc?: string;
+    last_save_ok?: boolean;
+    warning?: string | null;
+    error?: string;
+  };
   dead_letters: { id: string; artifact_id?: string; source?: string; why: string; attempts?: number }[];
   tokens: { id: string; person: string; label: string; created: string; expires: string; last_used: string | null }[];
   spend: {

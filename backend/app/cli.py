@@ -644,6 +644,24 @@ def cmd_restore(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_persistence(args: argparse.Namespace) -> int:
+    """How FalkorDB keeps the graph on disk, and its memory against the cap (22.3)."""
+    import json
+
+    from app import backup, db, snapshot
+
+    try:
+        if args.action == "aof":
+            out = backup.switch_to_aof()
+        else:
+            out = db.storage() | {"warning": db.memory_warning()}
+    except (backup.BackupError, snapshot.SnapshotError) as e:
+        print(f"yaan persistence: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(out, indent=1))
+    return 0
+
+
 def cmd_seed(args: argparse.Namespace) -> int:
     import json
 
@@ -874,6 +892,7 @@ COMMANDS = {
     "seed": ("restore a snapshot (file or URL) and the demo graph, no API key (15.2)", cmd_seed),
     "backup": ("the graph + tokens, cursors, people, ledger: one checked file (22.2)", cmd_backup),
     "restore": ("bring a `yaan backup` file back: graph, then state files (22.2)", cmd_restore),
+    "persistence": ("memory vs cap, disk persistence; aof: switch on live (22.3)", cmd_persistence),
     "export": ("write a graph to plain JSONL, readable anywhere (D120)", cmd_export),
     "import": ("load a JSONL export into a new graph (D120)", cmd_import),
     "connectors": (
@@ -970,6 +989,17 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
             "--as",
             {"dest": "as_graph", "help": "a trial: the graph alone under this new name, no files"},
         ),
+    ],
+    "persistence": [
+        (
+            "action",
+            {
+                "nargs": "?",
+                "choices": ("status", "aof"),
+                "default": "status",
+                "help": "aof: turn the append-only file on a running server, keeping its data",
+            },
+        )
     ],
     "import": [
         ("path", {"help": "an export file (.jsonl or .jsonl.gz)"}),

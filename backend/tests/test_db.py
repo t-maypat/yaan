@@ -159,6 +159,42 @@ def test_a_server_timeout_becomes_query_timeout(fake):
         db.run("get_people")
 
 
+def test_a_write_at_the_memory_cap_becomes_graph_full(fake, monkeypatch):
+    """At maxmemory FalkorDB refuses every GRAPH.QUERY (redis-py: OutOfMemoryError, D136):
+    a GraphFull the connector loop waits on, not an item's fault."""
+    from redis.exceptions import OutOfMemoryError
+
+    def full(text, params):
+        raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+
+    monkeypatch.setattr(fake[False], "query", full)
+    with pytest.raises(db.GraphFull, match="upsert_people"):
+        db.run("upsert_people", {"rows": [{"id": 1}]}, readonly=False)
+
+
+def test_storage_reads_memory_and_persistence_and_warns_from_80_percent(monkeypatch):
+    mb = 2**20
+    info = {
+        "memory": {"used_memory": 850 * mb, "maxmemory": 1000 * mb},
+        "persistence": {"aof_enabled": 0, "rdb_last_save_time": 0, "rdb_last_bgsave_status": "ok",
+                        "aof_last_bgrewrite_status": "ok", "aof_last_write_status": "ok"},
+    }  # fmt: skip
+
+    class Conn:
+        def info(self, section):
+            return info[section]
+
+    monkeypatch.setattr(db, "client", lambda readonly: type("C", (), {"connection": Conn()})())
+    found = db.storage()
+    assert found == {"used_mb": 850, "cap_mb": 1000, "used_pct": 85.0, "aof": False,
+                     "last_save_utc": "1970-01-01T00:00:00Z", "last_save_ok": True}  # fmt: skip
+    assert "85% of its 1000 MB cap" in db.memory_warning(found)
+    assert db.memory_warning(found | {"used_pct": 79.9}) is None
+    assert "no memory cap" in db.memory_warning(found | {"cap_mb": None, "used_pct": None})
+    info["persistence"]["rdb_last_bgsave_status"] = "err"
+    assert db.storage()["last_save_ok"] is False
+
+
 @pytest.mark.parametrize(("readonly", "key"), [(True, "READER"), (False, "WRITER")])
 def test_client_fails_loudly_without_a_password(monkeypatch, readonly, key):
     settings = Settings(

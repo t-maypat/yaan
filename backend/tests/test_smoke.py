@@ -19,6 +19,11 @@ class FakeClient:
             raise self.error
         return True
 
+    def info(self, section):  # 1 GB used of a 2 GB cap, snapshots only (22.3)
+        if section == "memory":
+            return {"used_memory": 2**30, "maxmemory": 2**31}
+        return {"aof_enabled": 0, "rdb_last_save_time": 0, "rdb_last_bgsave_status": "ok"}
+
 
 @pytest.fixture
 def no_worker(monkeypatch):
@@ -35,8 +40,18 @@ def test_health_is_ok_when_falkordb_answers(monkeypatch, no_worker):
         "status": "ok",
         "version": __version__,
         "falkordb": "ok",
+        "memory": "ok",
         "worker": "absent",
     }
+
+
+def test_health_says_when_graph_memory_nears_its_cap(monkeypatch, no_worker):
+    fake = FakeClient()
+    monkeypatch.setattr(fake, "info", lambda s: {"used_memory": 9, "maxmemory": 10} if
+                        s == "memory" else FakeClient().info(s))  # fmt: skip
+    monkeypatch.setattr(db, "client", lambda readonly: fake)
+    body = TestClient(app).get("/health").json()
+    assert body["status"] == "ok" and body["memory"].startswith("graph memory at 90%")
 
 
 def test_health_is_503_when_falkordb_is_down(monkeypatch, no_worker):

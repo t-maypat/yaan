@@ -8,6 +8,12 @@ What changed between versions, newest first. Yaan is 0.x: settings and the graph
 
 #### Added
 - `yaan backup` writes one file with the graph and every state file beside it (sign-in tokens, connector cursors, the people met in your tools, synced access lists, the spend ledger), plus the config files, with a `.sha256` beside it; `--keep N` deletes older ones. `yaan restore` brings it back, refusing a damaged file, another FalkorDB version, an existing graph or a running worker unless `--force`; `--as <graph>` is a trial restore of the graph alone.
+- A memory cap for FalkorDB (`FALKORDB_MAXMEMORY`, 2 GB by default, nothing evicted). `/health`, the worker's heartbeat and the Admin page warn from 80%; at the cap, writes wait (no item becomes a dead letter) while answers go on. `yaan persistence` shows memory and how the graph is saved.
+- Optional append-only persistence (`FALKORDB_APPENDONLY=yes`, `FALKORDB_SAVE`): at most about a second of writes lost in a crash instead of up to a minute. `yaan persistence aof` switches a running server over without losing its data.
+
+#### Upgrading
+- FalkorDB now starts with a 2 GB memory cap: if `yaan persistence` (or `INFO memory`) shows more in use, set `FALKORDB_MAXMEMORY` higher before `docker compose up -d`, or writes stop at once.
+- Don't set `FALKORDB_APPENDONLY=yes` on an existing volume before running `yaan persistence aof`: started that way over a snapshot-only volume, FalkorDB comes up empty, and its next snapshot overwrites the good one.
 
 ### Running Yaan at an organisation's scale (23 Oct)
 

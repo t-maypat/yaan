@@ -60,6 +60,7 @@ WAITING = (  # the system isn't ready: retry later, the item isn't at fault
     llm.MissingCredentials,
     llm.CacheOnly,
     db.LockBusy,
+    db.GraphFull,  # at the memory cap every write waits for an admin, not a dead letter (D136)
     RedisConnectionError,
     RedisTimeoutError,
 )
@@ -608,7 +609,8 @@ def one_round(
 ) -> tuple[list[str], str | None, bool]:
     """One sync round, said out loud, then the Slack cards of new alerts. Returns why items
     or tools had to wait, empty when nothing did (the heartbeat says why: e.g. the spend cap
-    pausing extraction), a warning when a fold was slow, and whether the round stalled: items
+    pausing extraction), a warning (a slow fold, graph memory near its cap), and whether the
+    round stalled: items
     waited, or every tool did (the pause between rounds then grows; a single failing tool
     backs off on its own, D132)."""
     from app.sentinel import approve, engine
@@ -638,7 +640,12 @@ def one_round(
                 carded[alert["id"]] = bot.post_card(base.public_alert(alert, graph))
                 say(f"card {alert['id']}")
         save_state(graph, state)
-    if slow := slow_fold(report):
+    slow = slow_fold(report)
+    try:  # a graph nearing its memory cap, before writes stop (22.3)
+        slow = slow or db.memory_warning()
+    except Exception as e:  # INFO failed: the round's own errors already say why
+        say(f"memory check failed: {why(e)}")
+    if slow:
         say(f"warning: {slow}")
     tools_down = {r["source"] for r in report["waiting"] if r["id"] is None}
     stalled = any(r["id"] is not None for r in report["waiting"]) or (

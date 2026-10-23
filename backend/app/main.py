@@ -514,15 +514,22 @@ class TokenRevoke(BaseModel):
 
 @app.get("/admin/overview")
 def admin_overview(request: Request) -> dict:
-    """What an admin checks (D133): the worker and why it waits, dead letters (without their
-    items), sign-in tokens (without secrets), today's spend, and people met but not listed."""
+    """What an admin checks (D133): the worker and why it waits, the graph's memory and disk
+    (D136), dead letters (without their items), sign-in tokens (without secrets), today's
+    spend, and people met but not listed."""
     from app import llm, org
     from app.connectors import runner
 
     admin_only(request)
     g = graph()
+    try:  # the graph's memory against its cap and how it persists (22.3)
+        store = db.storage()
+        store["warning"] = db.memory_warning(store)
+    except Exception as e:  # the rest of the page still helps when INFO fails
+        store = {"error": f"{type(e).__name__}: {e}"[:200]}
     return {
         "worker": runner.worker_health(g),
+        "storage": store,
         "dead_letters": runner.dead_letters(g),
         "tokens": auth.listing(),
         "spend": llm.spending(),
@@ -764,7 +771,17 @@ def health(response: Response) -> dict[str, str]:
             "falkordb": type(e).__name__,
             "worker": worker,
         }
-    return {"status": "ok", "version": __version__, "falkordb": "ok", "worker": worker}
+    try:  # near the memory cap answers still work, writes soon won't (22.3): said, still 200
+        memory = db.memory_warning() or "ok"
+    except Exception as e:  # INFO refused or odd: reported, not a reason to stop serving
+        memory = f"unknown: {type(e).__name__}"
+    return {
+        "status": "ok",
+        "version": __version__,
+        "falkordb": "ok",
+        "memory": memory,
+        "worker": worker,
+    }
 
 
 # The built web UI (the Docker image, R2 W6). Mounted last, so every API route above wins; in

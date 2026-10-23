@@ -95,6 +95,8 @@ docker compose --profile app exec api yaan restore data/backups/<file> --as yaan
 docker compose --profile app exec api yaan restore data/backups/<file> --force           # stop the worker first
 ```
 
+   FalkorDB keeps the graph in memory, capped by `FALKORDB_MAXMEMORY` (2 GB; about 5.5 KB per item read). At the cap it refuses every write, deletion included, so Yaan warns from 80% on `/health` and the Admin page; `yaan persistence` shows the numbers. A new deployment can also keep an append-only file (`FALKORDB_APPENDONLY=yes`), losing at most about a second of writes in a crash; an existing one switches with `yaan persistence aof` first (see `.env.example`).
+
 ## Use it from your AI client
 
 Yaan is an MCP server: Claude Code, Codex, Cursor or any MCP client gets its 16 read-only graph tools plus `ask`.

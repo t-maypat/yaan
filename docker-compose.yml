@@ -44,7 +44,15 @@ services:
       FALKORDB_ARGS: "TIMEOUT_DEFAULT 10000 TIMEOUT_MAX 120000 RESULTSET_SIZE -1 MAX_QUEUED_QUERIES 25"
       # Redis options. run.sh word-splits this unquoted, so passwords must have no spaces or
       # glob characters (`allkeys` / `allcommands` stand in for `~*` / `+@all` for that reason).
-      # - Persistence (D013): a snapshot within 60 s of any change, plus a final save on a clean stop.
+      # - Persistence (D013, D136): a snapshot within FALKORDB_SAVE (60 s) of any change, plus a
+      #   final save on a clean stop. FALKORDB_APPENDONLY=yes adds an append-only file (at most
+      #   ~1 s of writes lost in a crash instead of ~60 s; set FALKORDB_SAVE="3600 1" with it).
+      #   Only for a NEW volume: over a volume that has only a snapshot it starts EMPTY. Switch
+      #   a running server with `yaan persistence aof` first, which keeps the data.
+      # - Memory (D136): FALKORDB_MAXMEMORY (2gb), noeviction. At the cap FalkorDB refuses every
+      #   write, deletes included; reads go on. Yaan warns from 80% (/health, the Admin page).
+      #   Leave the container room above the cap: a snapshot forks, and pages written meanwhile
+      #   are copied.
       # - ACL users (D018, A12), recreated from these arguments at every start:
       #   default = admin, password required (redis-cli, the Browser, snapshots, config);
       #   writer  = graph commands only: no FLUSHALL, no CONFIG, no key commands; GRAPH.COPY for the
@@ -54,7 +62,9 @@ services:
       #   Both app users get INFO and CLIENT SETINFO because the falkordb client sends them on
       #   connect. Key access is ~* because FalkorDB declares even RO_QUERY as read-write on its key.
       REDIS_ARGS: >-
-        --save 60 1
+        --save ${FALKORDB_SAVE:-60 1}
+        --appendonly ${FALKORDB_APPENDONLY:-no} --appendfsync everysec
+        --maxmemory ${FALKORDB_MAXMEMORY:-2gb} --maxmemory-policy noeviction
         --user default on >${FALKORDB_ADMIN_PASSWORD:?set FALKORDB_ADMIN_PASSWORD in .env (see .env.example)} allkeys allcommands
         --user ${FALKORDB_WRITER_USER:-lore_writer} on >${FALKORDB_WRITER_PASSWORD:?set FALKORDB_WRITER_PASSWORD in .env} allkeys -@all
         +graph.query +graph.ro_query +graph.explain +graph.profile +graph.list +graph.delete +graph.copy

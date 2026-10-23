@@ -228,6 +228,42 @@ def restore(
     }
 
 
+def switch_to_aof(wait_s: float = 900) -> dict[str, Any]:
+    """`yaan persistence aof` (22.3, D136): turn on the append-only file on a running server,
+    keeping its data. Starting a server with `--appendonly yes` over a volume that has only a
+    snapshot loads NOTHING (verified on 6.0.1: 0 keys, and an empty AOF base written; the next
+    snapshot would then overwrite the good one). Switched live, the server first writes an AOF
+    base from what it holds; after that a restart with FALKORDB_APPENDONLY=yes loads it."""
+    r = snapshot.admin()
+    if r.info("persistence")["aof_enabled"]:
+        return {"aof": "already on", "next": "FALKORDB_APPENDONLY=yes in .env keeps it on"}
+    graphs = [g.decode() if isinstance(g, bytes) else g for g in r.execute_command("GRAPH.LIST")]
+    before = {g: snapshot.counts(r, g) for g in graphs}
+    t0 = time.perf_counter()
+    r.config_set("appendonly", "yes")  # starts a background rewrite of everything held
+    deadline = time.monotonic() + wait_s
+    while True:
+        p = r.info("persistence")
+        if not (p["aof_rewrite_in_progress"] or p["aof_rewrite_scheduled"]):
+            break
+        if time.monotonic() > deadline:
+            raise BackupError(f"the AOF rewrite still runs after {wait_s:g} s: check INFO")
+        time.sleep(0.2)
+    if p["aof_last_bgrewrite_status"] != "ok":
+        r.config_set("appendonly", "no")
+        raise BackupError("the AOF rewrite failed (see the FalkorDB log); AOF is off again")
+    after = {g: snapshot.counts(r, g) for g in graphs}
+    if after != before:
+        raise BackupError(f"graph counts moved during the switch: {before} -> {after}")
+    return {
+        "aof": "on",
+        "graphs": after,
+        "ms": round((time.perf_counter() - t0) * 1000),
+        "next": "now set FALKORDB_APPENDONLY=yes (and FALKORDB_SAVE='3600 1') in .env, so the "
+        "next start loads the AOF; until then a restart goes back to snapshots",
+    }
+
+
 def _checked(source: Path, unpinned: bool) -> bytes:
     if not source.is_file():
         raise BackupError(f"no backup at {source}")

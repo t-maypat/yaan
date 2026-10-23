@@ -39,7 +39,15 @@ export function AdminPage() {
     );
   if (!data) return <p className="mt-10 text-muted">Reading Yaan's state…</p>;
 
-  const { worker, spend } = data;
+  const { worker, spend, storage } = data;
+  const memory = storage.error
+    ? "unknown"
+    : storage.cap_mb
+      ? `${storage.used_mb} / ${storage.cap_mb} MB`
+      : `${storage.used_mb} MB, no cap`;
+  const disk = storage.error
+    ? storage.error
+    : `${storage.aof ? "append-only file + snapshots" : "snapshots"}; last saved ${day(storage.last_save_utc)}${storage.last_save_ok ? "" : ", the last save FAILED"}`;
   const people = Object.entries(spend.by_person);
   const snippet = data.unlisted.length
     ? "people:\n" +
@@ -72,6 +80,7 @@ export function AdminPage() {
         <Tile label="Connector worker" value={worker.status} note={worker.why ?? worker.warning ?? "every round on time"} />
         <Tile label="Spent today" value={`${usd(spend.spent_usd)} / ${usd(spend.cap_usd)}`} note={`answers ${usd(spend.answers_usd)} of ${usd(spend.answer_cap_usd)}`} />
         <Tile label="Dead letters" value={String(data.dead_letters.length)} note="items a connector couldn't ingest" />
+        <Tile label="Graph memory" value={memory} note={storage.warning ?? disk} />
       </dl>
 
       <h2 className="font-semibold mt-10 mb-2">Dead letters</h2>

@@ -143,12 +143,19 @@ def test_a_sync_round_ingests_new_and_newer_items_once(offline, monkeypatch):
     assert runner.load_state("lore_demo")["slack"]["since_ms"] == 20
 
 
-def test_an_item_that_may_still_go_in_waits_and_holds_the_cursor(offline, monkeypatch):
-    """The spend cap, FalkorDB down, the lock busy: not the item's fault. It isn't counted,
-    isn't marked seen, and the cursor stays below it, so the next round fetches it again."""
+@pytest.mark.parametrize("cause", ["spend cap", "graph full"])
+def test_an_item_that_may_still_go_in_waits_and_holds_the_cursor(offline, monkeypatch, cause):
+    """The spend cap, FalkorDB down or at its memory cap, the lock busy: not the item's fault.
+    It isn't counted, isn't marked seen, and the cursor stays below it, so the next round
+    fetches it again."""
     from app import llm
 
-    outcome = {msg(2).id: llm.SpendCapReached("cap")}
+    error = (
+        llm.SpendCapReached("cap")
+        if cause == "spend cap"
+        else db.GraphFull("upsert", "g", "command not allowed when used memory > 'maxmemory'.")
+    )
+    outcome = {msg(2).id: error}
 
     def ingest(a, graph, events=None, replace=False):
         if a.id in outcome:

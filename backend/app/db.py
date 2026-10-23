@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from falkordb import FalkorDB
-from redis.exceptions import ResponseError
+from redis.exceptions import OutOfMemoryError, ResponseError
 
 from app.config import get_settings
 
@@ -367,7 +367,50 @@ def _execute(name: str, graph: str, batch: str | None, call):
     except ResponseError as e:
         message = str(e)
         error = QueryTimeout if message == "Query timed out" else QueryError
+        if isinstance(e, OutOfMemoryError):
+            error = GraphFull
         raise error(name, graph, message, batch) from e
+
+
+class GraphFull(QueryError):
+    """FalkorDB is at its memory cap (maxmemory, noeviction): it refuses every write, deletes
+    included, until the cap is raised; reads still work (verified on 6.0.1, D136)."""
+
+
+MEMORY_WARN_PCT = 80  # FalkorDB refuses all writes at 100%: warn while there is room to act
+
+
+def storage() -> dict[str, Any]:
+    """The server's memory against its cap and how it persists (22.3), from INFO as the
+    reader. The cap is the server's, for every graph on it."""
+    conn = client(readonly=True).connection
+    mem, disk = conn.info("memory"), conn.info("persistence")
+    used, cap = mem["used_memory"], mem["maxmemory"]
+    return {
+        "used_mb": round(used / 2**20),
+        "cap_mb": round(cap / 2**20) if cap else None,
+        "used_pct": round(100 * used / cap, 1) if cap else None,
+        "aof": bool(disk["aof_enabled"]),
+        "last_save_utc": time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime(disk["rdb_last_save_time"])
+        ),
+        "last_save_ok": disk["rdb_last_bgsave_status"] == "ok"
+        and disk.get("aof_last_bgrewrite_status", "ok") == "ok"
+        and disk.get("aof_last_write_status", "ok") == "ok",
+    }
+
+
+def memory_warning(found: dict[str, Any] | None = None) -> str | None:
+    """A warning from MEMORY_WARN_PCT of the cap, or with no cap at all, else None."""
+    found = found or storage()
+    if found["cap_mb"] is None:
+        return "FalkorDB has no memory cap: set FALKORDB_MAXMEMORY (review F16)"
+    if found["used_pct"] >= MEMORY_WARN_PCT:
+        return (
+            f"graph memory at {found['used_pct']:.0f}% of its {found['cap_mb']} MB cap: at 100% "
+            "FalkorDB refuses every write, forget included: raise FALKORDB_MAXMEMORY"
+        )
+    return None
 
 
 def _collect(results: list) -> Result:
