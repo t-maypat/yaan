@@ -392,3 +392,86 @@ def test_parity_compares_events_and_folded_outcomes(base):
     fewer = parity.compare("W", EVENTS[:2], EVENTS, base)
     assert fewer["precision"] == 1.0 and fewer["recall"] < 1.0
     assert fewer["final_state_agreement"] < 1.0  # without the re-report the issue stays resolved
+
+
+MORE_MESSAGES = """
+MATCH (w:Product {id: 'W'}), (ch:Channel {id: 'ch-bug'}), (bo:Person {id: 'eid_b2'})
+UNWIND range(7, 60) AS i
+CREATE (m:Message:Artifact {id: 'msg:m' + toString(i), kind: 'message', text: 'm',
+        ts_ms: i * 1000, product_id: 'W', channel_id: 'ch-bug'})
+CREATE (m)-[:IN_PRODUCT]->(w), (m)-[:IN_CHANNEL]->(ch), (bo)-[:AUTHORED]->(m)
+"""
+
+
+def history(seed: int) -> list[dict]:
+    """Reports of six issues, then fixes, reopenings, dismissals and PR intents, by people of
+    different authority, in random order of arrival (the ts stays each message's own)."""
+    rnd = random.Random(seed)
+    titles = ["Slow export", "Login loop", "Chart blank", "Sync stalls", "Token expiry",
+              "Upload fails"]  # fmt: skip
+    pool, i = [], 7
+    for t in titles:
+        pool.append(ev(i, "issue_reported", rnd.choice(["eid_a1", "eid_b2"]),
+                       f"Issue '{t}' for CUST-0001", issue=t, customer="CUST-0001",
+                       person=rnd.choice(["eid_b2", "eid_c3"])))  # fmt: skip
+        i += 1
+    while i < 60:
+        kind = rnd.choice(["issue_resolved", "issue_reopened", "issue_dismissed", "pr_to_merge",
+                           "pr_on_hold", "pr_reverted"])  # fmt: skip
+        speaker = rnd.choice(["eid_a1", "eid_b2", "eid_c3"])
+        if kind.startswith("pr_"):
+            pool.append(ev(i, kind, speaker, f"PR#1 {kind}", pr="PR#1"))
+        else:
+            t = rnd.choice(titles)
+            pool.append(ev(i, kind, speaker, f"{t} {kind}", issue=t))
+        i += 1
+    return pool
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_writing_only_the_changed_topics_ends_where_a_full_write_does(base, second, seed):
+    """22.7 (D142): a fold that remembers its last write compares and writes only the topics
+    whose inputs moved. Over random arrivals, late events and retractions, its layer equals
+    a full write's after every step, and most steps compare far fewer nodes."""
+    for g in (base, second):
+        db.run_text(MORE_MESSAGES, label="more", graph=g, readonly=False)
+    rnd = random.Random(seed)
+    pool, live, partial, step = history(seed), [], 0, 0
+    rnd.shuffle(pool)
+    while pool or step < 40:
+        step += 1
+        if pool and (not live or rnd.random() < 0.75):
+            batch = [pool.pop() for _ in range(min(len(pool), rnd.randint(1, 3)))]
+            for g in (base, second):
+                event_store.load(batch, g, observed_ms=step)
+            live += [e["artifact_id"] for e in batch]
+        elif live:
+            gone = live.pop(rnd.randrange(len(live)))
+            for g in (base, second):
+                event_store.retract(gone, [], g, now_ms=step)
+        else:
+            break
+        mine = fold.fold_product("W", base)["write"]  # remembers its last write
+        fold.forget_memo(second)
+        full = fold.fold_product("W", second)["write"]  # always in full
+        assert not full["partial"]
+        assert layer(base) == layer(second), f"step {step}"
+        if mine["partial"]:
+            partial += 1
+            assert mine["compared"] <= full["compared"]
+    assert partial >= step // 2  # the memory was used, not bypassed
+
+
+def test_a_layer_changed_behind_the_folds_back_is_written_in_full(base):
+    """The count guard: another path deleted derived nodes (a migration, a reset) without
+    touching events; the memo no longer matches the graph, so the next fold writes in full."""
+    event_store.load(EVENTS, base, observed_ms=1)
+    fold.fold_product("W", base)
+    assert fold.fold_product("W", base)["write"]["partial"]
+    db.run_text("MATCH (c:Claim) WITH c LIMIT 1 DETACH DELETE c", label="x", graph=base,
+                readonly=False)  # fmt: skip
+    again = fold.fold_product("W", base)["write"]
+    assert not again["partial"] and again["changed"] >= 1
+    before = layer(base)
+    fold.forget_memo(base)
+    assert layer(base) == before and fold.fold_product("W", base)["write"]["changed"] == 0

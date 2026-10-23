@@ -81,6 +81,7 @@ def reset_demo(graph: str | None = None) -> dict[str, Any]:
         writer.select_graph(graph).delete()
     writer.select_graph(get_settings().lore_graph).copy(graph)
     shutil.rmtree(live_dir(graph), ignore_errors=True)
+    fold.forget_memo(graph)  # a new derived layer: the next fold writes in full (D142)
     return {"graph": graph, "copied_from": get_settings().lore_graph, "ms": _ms(t0)}
 
 

@@ -276,6 +276,9 @@ def restore(
         db.run("release_lock", {"name": LOCK, "holder": manifest["lock_holder"]}, graph=graph,
                readonly=False)  # fmt: skip
     graph_ms = round((time.perf_counter() - t0) * 1000)
+    from app.ingest import fold
+
+    fold.forget_memo(graph)  # a restored layer: this process's next fold writes it in full
     if not as_graph:
         for d in GRAPH_DIRS:  # the graph's own folders become the backup's, not a mix of both
             shutil.rmtree(_home(d, graph), ignore_errors=True)

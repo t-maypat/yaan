@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "Yaan (formerly Lore): a time-aware company brain on FalkorDB"
 requires-python = ">=3.11"
 # Runtime deps arrive with the phase that first needs them (`uv add --project backend <pkg>`):
-# huggingface_hub (Phase 2), fastembed + diskcache (4), rapidfuzz (8), mcp (14).
+# huggingface_hub (Phase 2), fastembed + diskcache (4), rapidfuzz (8), mcp (14), hiredis (22.7:
+# redis-py parses replies in C when it is installed, D142).
 dependencies = [
     "anthropic>=1.0",
     "diskcache>=5.6",
@@ -13,6 +14,7 @@ dependencies = [
     "fastembed>=0.7",
     "filelock>=3.12",
     "httpx>=0.27",
+    "hiredis>=3.0",
     "huggingface-hub>=0.20,<2.0",
     "jsonschema>=4.26",
     "mcp>=2.3.0",

@@ -167,3 +167,23 @@ def test_holding_off_after_a_decision_not_to_merge_supports_it():
         res(ev("pr_to_close", 10, "eid_a1", **pr), ev("pr_on_hold", 20, "eid_b2", **pr)), ctx()
     )
     assert chain(rows, "pr:w1/action") == [("to_close", 10, None, "active")]
+
+
+def test_node_hashes_are_byte_for_byte_the_old_ones():
+    """22.7 (D142): the hashes' encoders are built once now. They must write the same bytes as
+    `json.dumps(..., sort_keys=True)`, or every stored hash would go stale and the first fold
+    after an upgrade would rewrite the whole derived layer."""
+    import hashlib
+    import json
+
+    events = [REPORT, ev("issue_resolved", 30, "eid_b2", quote="Fixed: exports ü 50% faster")]
+    rows, _ = fold.rebuild(res(*events), ctx())
+    rows["upsert_issues"][0]["odd"] = {"b": 1.5, "a": None, "set": {3}}  # default=str in the blob
+    found = fold.desired(rows)
+    assert len(found) > 3
+    for node in found.values():
+        links = {
+            q: sorted(json.dumps(x, sort_keys=True) for x in rs) for q, rs in node["links"].items()
+        }
+        blob = json.dumps({"row": node["row"], "links": links}, sort_keys=True, default=str)
+        assert node["hash"] == hashlib.sha1(blob.encode("utf-8")).hexdigest()

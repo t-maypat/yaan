@@ -28,6 +28,7 @@ Spec: docs/CONTEXT.md §9.3 (S8), §9.4; PLAN.md 7.5, 8.3-8.5.
 import hashlib
 import json
 import re
+import threading
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -417,8 +418,16 @@ STATE_CAP = 500_000
 WRITE_BATCH = 500  # rows per write statement
 
 
-def desired(rows: dict[str, list[dict[str, Any]]]) -> dict[tuple[str, str], dict[str, Any]]:
-    """(label, id) -> the node's row, the link rows it owns, and a hash over both."""
+def topic_of(key: tuple[str, str], row: dict[str, Any]) -> str:
+    """The decision topic a derived node belongs to: its own, or an issue's status topic."""
+    return row.get("topic") or f"{key[1]}/status"
+
+
+def desired(
+    rows: dict[str, list[dict[str, Any]]], only: set[str] | None = None
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """(label, id) -> the node's row, the link rows it owns, and a hash over both; with `only`,
+    hashed only for the nodes of those topics (the others keep no hash: not compared)."""
     nodes: dict[tuple[str, str], dict[str, Any]] = {}
     for label, query in NODES.items():
         for r in rows[query]:  # a repeated id: the last row wins, as MERGE + SET did
@@ -426,26 +435,47 @@ def desired(rows: dict[str, list[dict[str, Any]]]) -> dict[tuple[str, str], dict
     for query, (label, key) in OWNER.items():
         for r in rows[query]:
             nodes[(label, r[key])]["links"][query].append(r)
-    for node in nodes.values():
-        links = {
-            q: sorted(json.dumps(x, sort_keys=True) for x in rs) for q, rs in node["links"].items()
-        }
-        blob = json.dumps({"row": node["row"], "links": links}, sort_keys=True, default=str)
+    for key, node in nodes.items():
+        if only is not None and topic_of(key, node["row"]) not in only:
+            continue
+        links = {q: sorted(map(_LINK_JSON, rs)) for q, rs in node["links"].items()}
+        blob = _BLOB_JSON({"row": node["row"], "links": links})
         node["hash"] = hashlib.sha1(blob.encode("utf-8")).hexdigest()
     return nodes
 
 
-def write(rows: dict[str, list[dict[str, Any]]], product: str, graph: str | None) -> dict:
+# The hashes' JSON, built once (22.7, D142): `json.dumps(..., sort_keys=True)` builds a new
+# encoder on every call, ~430k a fold at a year's volume. The same options write the same
+# bytes, so every stored hash stays valid; skipping the circular-reference check changes no
+# output for these plain rows.
+_LINK_JSON = json.JSONEncoder(sort_keys=True, check_circular=False).encode
+_BLOB_JSON = json.JSONEncoder(sort_keys=True, default=str, check_circular=False).encode
+
+
+def write(
+    rows: dict[str, list[dict[str, Any]]],
+    product: str,
+    graph: str | None,
+    only: set[str] | None = None,
+) -> dict:
     """Bring one product's derived layer to `rows`: rewrite the nodes whose rows or owned edges
-    changed, delete the ones no longer derived, leave the rest alone."""
-    want = desired(rows)
-    state = db.run_all(
-        "derived_state", {"product_id": product}, cap=STATE_CAP, graph=graph, timeout_ms=30_000
-    )
+    changed, delete the ones no longer derived, leave the rest alone. `only` (22.7): the
+    topics whose inputs changed since this process last wrote them; the others are left
+    unread and unhashed (fold_product decides when that is safe)."""
+    want = desired(rows, only)
+    if only is None:
+        params: dict[str, Any] = {"product_id": product}
+        name = "derived_state"
+    else:
+        topics = sorted(only)
+        issues = [t.removesuffix("/status") for t in topics if t.endswith("/status")]
+        params = {"product_id": product, "topics": topics, "issue_ids": issues}
+        name = "derived_state_topics"
+    state = db.run_all(name, params, cap=STATE_CAP, graph=graph, timeout_ms=30_000)
     state = [json.loads(r["row"]) for r in state]  # [id, label, hash, topic] (A23)
     have = {(label, i): h for i, label, h, _ in state}
     topic_was = {(label, i): topic for i, label, _, topic in state}
-    changed = {k for k, v in want.items() if have.get(k) != v["hash"]}
+    changed = {k for k, v in want.items() if "hash" in v and have.get(k) != v["hash"]}
     stale = sorted(k for k in have if k not in want)
     # the decision chains this write moved: the live Sentinel judges only these (D112)
     topics = {topic_was.get(k) for k in stale} | {
@@ -470,8 +500,8 @@ def write(rows: dict[str, list[dict[str, Any]]], product: str, graph: str | None
         if query in OWNER:
             run(query, [r for k in sorted(changed) for r in want[k]["links"].get(query, [])])
     actions = rows["set_pr_action"]
-    run("set_pr_action", actions)
-    keep = [r["pr_id"] for r in actions]
+    run("set_pr_action", [r for r in actions if only is None or f"{r['pr_id']}/action" in only])
+    keep = [r["pr_id"] for r in actions]  # every PR's: the clean ones keep their action
     cleared = db.run(
         "clear_pr_actions", {"product_id": product, "keep": keep}, graph=graph, readonly=False
     ).rows[0]["cleared"]
@@ -492,7 +522,101 @@ def write(rows: dict[str, list[dict[str, Any]]], product: str, graph: str | None
         "unchanged": len(want) - len(changed),
         "pr_actions_cleared": cleared,
         "topics": sorted(t for t in topics if t),
+        "partial": only is not None,  # only the topics whose inputs changed were compared
+        "compared": len(want) if only is None else sum("hash" in v for v in want.values()),
     }
+
+
+# --- writing only what changed (22.7, D142) --------------------------------------------------
+# A topic's rows are a function of its events (as resolved), its issue, and the context every
+# topic reads. Each process remembers, per product, a fingerprint of those inputs from its last
+# write; the next fold hashes, reads and writes only the topics whose fingerprint moved. A
+# write by another process changes events too, so its topics move here as well. The memo is
+# trusted only when the context and code are the same, the product's derived node count is
+# what this process left, and a full write happened within FULL_EVERY_MS; else a full write.
+MEMO_VERSION = 1  # bump when a topic's rows come to depend on anything new
+FULL_EVERY_MS = 3_600_000
+
+
+@dataclass
+class Memo:
+    version: str
+    context: str
+    topics: dict[str, str]
+    nodes: int
+    full_ms: int
+
+
+_memo: dict[tuple[str, str], Memo] = {}
+_memo_lock = threading.Lock()
+
+
+def forget_memo(graph: str | None = None) -> None:
+    """The derived layer changed without its events (a migration, a demo reset, a restore):
+    the next fold of `graph` (None: every graph) writes in full."""
+    with _memo_lock:
+        for k in [k for k in _memo if graph is None or k[0] == (graph or "")]:
+            del _memo[k]
+
+
+def fingerprints(res: Resolution, ctx: Context, product: str) -> tuple[str, dict[str, str]]:
+    """(the context's hash, {topic: hash of its inputs}): its events as this pass resolved them
+    (their stored matches left out: rewritten after every write), and an issue's own fields."""
+
+    def h(value: Any) -> str:
+        return hashlib.sha1(_BLOB_JSON(value).encode("utf-8")).hexdigest()
+
+    prs = sorted(
+        [p.id, p.author_eid, p.ts_ms, p.ts_iso, p.external, p.meta] for p in ctx.prs.values()
+    )
+    active = sorted(ctx.active.get(product) or ())
+    context = h([ctx.roles, ctx.authority, ctx.unknown, sorted(ctx.customers), active, prs])
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for e in res.events:  # the topics rebuild makes, the same way
+        if e["type"] in ISSUE_VALUE and e.get("issue_id"):
+            groups[f"{e['issue_id']}/status"].append(e)
+        elif e["type"] in PR_VALUE and e.get("pr_id"):
+            groups[f"{e['pr_id']}/action"].append(e)
+    issues = {f"{i.id}/status": i for i in res.issues.values()}
+    out = {}
+    for topic in groups.keys() | issues.keys():
+        evs = sorted(groups.get(topic, []), key=lambda e: (e["ts_ms"] or 0, e["artifact_id"]))
+        evs = [{k: v for k, v in e.items() if not k.startswith("res_")} for e in evs]
+        issue = issues.get(topic)
+        doc = None if issue is None else {**vars(issue), "aliases": sorted(issue.aliases)}
+        out[topic] = h([evs, doc])
+    return context, out
+
+
+def dirty(
+    key: tuple[str, str], context: str, topics: dict[str, str], product: str, graph: str | None
+) -> set[str] | None:
+    """The topics to write, or None for a full write (no memo here, or it can't be trusted)."""
+    with _memo_lock:
+        memo = _memo.get(key)
+    now = int(time.time() * 1000)
+    if memo is None or memo.version != memo_version() or memo.context != context:
+        return None
+    if now - memo.full_ms >= FULL_EVERY_MS:
+        return None
+    rows = db.run("derived_count", {"product_id": product}, graph=graph).rows
+    if sum(r["n"] for r in rows) != memo.nodes:  # someone else changed the layer: start over
+        return None
+    return {t for t in topics.keys() | memo.topics.keys() if topics.get(t) != memo.topics.get(t)}
+
+
+def keep_memo(
+    key: tuple[str, str], context: str, topics: dict[str, str], nodes: int, full: bool
+) -> None:
+    now = int(time.time() * 1000)
+    with _memo_lock:
+        last = _memo.get(key)
+        full_ms = now if full or last is None else last.full_ms
+        _memo[key] = Memo(memo_version(), context, topics, nodes, full_ms)
+
+
+def memo_version() -> str:
+    return f"{resolve.VERSION}:{MEMO_VERSION}"
 
 
 def migrate_legacy(graph: str | None) -> int:
@@ -502,6 +626,7 @@ def migrate_legacy(graph: str | None) -> int:
     n = db.run("legacy_derived", {}, graph=graph).rows[0]["n"]
     if not n:
         return 0
+    forget_memo(graph)
     found = db.run_all("all_derived", {}, cap=STATE_CAP, graph=graph, timeout_ms=60_000)
     for label, query in DELETE.items():
         rows = [{"id": r["id"]} for r in found if r["label"] == label]
@@ -597,8 +722,12 @@ def fold_product(
     out: dict[str, Any] = {"rows": rows, "stats": stats, "unresolved": len(res.unresolved)}
     out["matched"] = res.matched  # issue events matched afresh; the rest reused (D129)
     if apply and known_at_ms is None:
-        out["write"] = write(rows, product, graph)
+        key = (graph or "", product)
+        context, topics = fingerprints(res, ctx, product)
+        only = dirty(key, context, topics, product, graph)
+        out["write"] = write(rows, product, graph, only=only)
         remember(res, retracted, graph)  # after the layer: an interrupted fold redoes the work
+        keep_memo(key, context, topics, out["write"]["nodes"], full=only is None)
         lap("write")
     out["ms"] = ms
     return out

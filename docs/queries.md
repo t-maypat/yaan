@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-251 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+253 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -153,7 +153,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
 | [`upsert_tombstones.cypher`](../backend/queries/upsert_tombstones.cypher) | a content-free record of each forgotten item (id, kind, when, why), so a sync, sweep or backfill doesn't bring it back (F2, D125) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (125)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (127)
 
 | Query | Purpose |
 |---|---|
@@ -188,8 +188,10 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`count_linked_chunks.cypher`](../backend/queries/count_linked_chunks.cypher) | how many of the given chunk ids exist and hang off an artifact |
 | [`decision_chain.cypher`](../backend/queries/decision_chain.cypher) | every state in the given decision topics: value, validity window, origin, who decided it, the evidence quotes, the claims behind it with the policy's verdict, refused claims, alerts that flagged it, the responses it caused and similar earlier cases; oldest first (tool 6 decision_lineage, R2) |
 | [`decision_precedents.cypher`](../backend/queries/decision_precedents.cypher) | the earlier decisions that are precedents for the given one (similar subject, same kind of decision), most similar first, with who decided and the evidence quote (10.6, D066) |
+| [`derived_count.cypher`](../backend/queries/derived_count.cypher) | how many derived nodes a product has (claims, issues, extracted decisions), one row each: the fold trusts its memory of the last write only when the count is what it left (22.7, D142) |
 | [`derived_sources.cypher`](../backend/queries/derived_sources.cypher) | the source artifacts of derived nodes (issues, claims, decisions, alerts): a viewer may see a derived node only if they may see one of its sources (D100). A decision's source is its evidence; what it AFFECTS is its subject, and counts only for a structural decision read from that record. Each branch binds its node by id, then WITH, then traverses: without the WITH the planner folds the MATCHes into an edge scan per id (60x slower) |
 | [`derived_state.cypher`](../backend/queries/derived_state.cypher) | a product's derived nodes now in the graph with the hash of the rows that wrote them and the topic they belong to: the fold writes only what changed, removes only what went stale, and tells the Sentinel which topics moved (D101, D112); one JSON row each, [id, label, hash, topic] (A23, D129) |
+| [`derived_state_topics.cypher`](../backend/queries/derived_state_topics.cypher) | derived_state for some topics only: the nodes of the topics whose inputs changed, with their row hash (22.7, D142); one JSON row each, [id, label, hash, topic] (A23) |
 | [`directory_entries.cypher`](../backend/queries/directory_entries.cypher) | customers and people by id, with a customer's company and a person's role: the "metadata as documents" baseline's directory (D103), the joins the graph makes, handed to plain RAG as text |
 | [`doc_discussion.cypher`](../backend/queries/doc_discussion.cypher) | the Slack discussion of a document: messages in the channel where it was first shared, until a newer version is shared there (or $window_ms) |
 | [`doc_meetings.cypher`](../backend/queries/doc_meetings.cypher) | the product's meetings whose transcript names the document's type, with who spoke in each |

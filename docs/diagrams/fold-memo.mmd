@@ -1,0 +1,8 @@
+%% How a batch decides what to write (Phase 22.7, D142): fingerprints of each topic's inputs, compared with this process's memory of its last write; a full write whenever the memory can't be trusted.
+flowchart TB
+  A["A batch's fold: rebuild every topic's rows<br/>(as before, ~1.3 s)"]:::code --> F["Fingerprint each topic's inputs:<br/>its events, its issue; and the shared context"]:::code
+  F --> T["Trust this process's memory?<br/>same code and context · a full write within the hour<br/>· the product's node count as it left it"]:::guard
+  T -->|"no: a restart, a role change,<br/>someone else changed the layer"| FULL["Full write: hash all 93,000 nodes,<br/>compare, write what changed<br/>(write stage ~7 s)"]:::code
+  T -->|"yes"| D["Only the topics whose fingerprint moved:<br/>hash, read and write just those<br/>(write stage ~2 s, fingerprints included)"]:::code
+  FULL --> M["Remember the fingerprints"]:::store
+  D --> M

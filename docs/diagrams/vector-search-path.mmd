@@ -1,0 +1,9 @@
+%% How a product's vector search chooses its path (Phase 22.6, D141): exact for graphs up to 300k chunks, the index first above, the exact scan again for a product the index can't fill.
+flowchart TB
+  Q["A search within one product"]:::human --> C{"Does the graph hold more<br/>than 300,000 chunks?<br/>(a cached count)"}:::guard
+  C -->|"no: HERB, a pilot"| S["Exact scan of the product's chunks<br/>(as before; ~1.5 µs a chunk)"]:::code
+  C -->|"yes: a big org"| I["Ask the vector index for 1,000<br/>near chunks, keep the product's<br/>(~20 ms)"]:::code
+  I --> F{"Enough to fill the list?"}:::guard
+  F -->|"yes: the product is much of the graph"| R["Results"]:::store
+  F -->|"no: the product holds few chunks"| S
+  S --> R
