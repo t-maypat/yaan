@@ -4,6 +4,11 @@ What changed between versions, newest first. Yaan is 0.x: settings and the graph
 
 ## Unreleased
 
+### Operating Yaan (Phase 22)
+
+#### Added
+- `yaan backup` writes one file with the graph and every state file beside it (sign-in tokens, connector cursors, the people met in your tools, synced access lists, the spend ledger), plus the config files, with a `.sha256` beside it; `--keep N` deletes older ones. `yaan restore` brings it back, refusing a damaged file, another FalkorDB version, an existing graph or a running worker unless `--force`; `--as <graph>` is a trial restore of the graph alone.
+
 ### Running Yaan at an organisation's scale (23 Oct)
 
 #### Added

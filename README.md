@@ -87,6 +87,14 @@ docker compose --profile app exec api yaan token revoke "Priya Shah"
 
 Linear, GitLab, Confluence, Google Drive, Gmail, Google Meet, Zoom and Discord have experimental connectors. Step-by-step setup: [connectors guide](backend/app/connectors/README.md).
 
+6. Back it up. One file holds the graph and everything kept beside it (tokens, connector cursors, the people met in your tools, the spend ledger, the audit log), taken so that a restore loses no item and reads none twice. `--as` checks a backup by restoring its graph under another name:
+
+```sh
+docker compose --profile app exec api yaan backup --keep 7        # data/backups/<graph>-<time>.tar.gz and its .sha256
+docker compose --profile app exec api yaan restore data/backups/<file> --as yaan_check   # a trial: graph only
+docker compose --profile app exec api yaan restore data/backups/<file> --force           # stop the worker first
+```
+
 ## Use it from your AI client
 
 Yaan is an MCP server: Claude Code, Codex, Cursor or any MCP client gets its 16 read-only graph tools plus `ask`.

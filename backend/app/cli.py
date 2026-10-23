@@ -611,6 +611,39 @@ def cmd_snapshot(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_backup(args: argparse.Namespace) -> int:
+    """The graph and every state file of a deployment in one checked file (22.2, F16)."""
+    import json
+    from pathlib import Path
+
+    from app import backup, db, snapshot
+
+    try:
+        out = backup.backup(args.graph, Path(args.out) if args.out else None, keep=args.keep)
+    except (backup.BackupError, snapshot.SnapshotError, db.LockBusy, OSError) as e:
+        print(f"yaan backup: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(out, indent=1))
+    return 0
+
+
+def cmd_restore(args: argparse.Namespace) -> int:
+    import json
+    from pathlib import Path
+
+    from app import backup, snapshot
+
+    try:
+        out = backup.restore(
+            Path(args.path), force=args.force, unpinned=args.unpinned, as_graph=args.as_graph
+        )
+    except (backup.BackupError, snapshot.SnapshotError, OSError) as e:
+        print(f"yaan restore: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(out, indent=1))
+    return 0
+
+
 def cmd_seed(args: argparse.Namespace) -> int:
     import json
 
@@ -839,6 +872,8 @@ COMMANDS = {
     "mcp": ("serve Yaan's read-only tools (and ask) over MCP on stdio (17.1)", cmd_mcp),
     "snapshot": ("save the graph + live-path data to snapshots/ (no LLM; 15.2)", cmd_snapshot),
     "seed": ("restore a snapshot (file or URL) and the demo graph, no API key (15.2)", cmd_seed),
+    "backup": ("the graph + tokens, cursors, people, ledger: one checked file (22.2)", cmd_backup),
+    "restore": ("bring a `yaan backup` file back: graph, then state files (22.2)", cmd_restore),
     "export": ("write a graph to plain JSONL, readable anywhere (D120)", cmd_export),
     "import": ("load a JSONL export into a new graph (D120)", cmd_import),
     "connectors": (
@@ -921,6 +956,20 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--out", {"required": True, "help": "file to write: .jsonl, or .jsonl.gz"}),
         ("--graph", {"help": "default: the graph the API serves"}),
         ("--with-embeddings", {"action": "store_true", "help": "keep chunk vectors (1.5 KB each)"}),
+    ],
+    "backup": [
+        ("--graph", {"help": "default: the graph the API serves"}),
+        ("--out", {"help": "file to write (default: data/backups/<graph>-<UTC time>.tar.gz)"}),
+        ("--keep", {"type": int, "help": "then keep only the newest N of this graph's backups"}),
+    ],
+    "restore": [
+        ("path", {"help": "a backup file (its .sha256 beside it)"}),
+        ("--force", {"action": "store_true", "help": "replace an existing graph and files"}),
+        ("--unpinned", {"action": "store_true", "help": "no .sha256 beside it: skip that check"}),
+        (
+            "--as",
+            {"dest": "as_graph", "help": "a trial: the graph alone under this new name, no files"},
+        ),
     ],
     "import": [
         ("path", {"help": "an export file (.jsonl or .jsonl.gz)"}),
