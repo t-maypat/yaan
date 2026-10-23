@@ -173,6 +173,10 @@ Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.
 
 Code: [Apache-2.0](LICENSE). Data: [HERB](https://huggingface.co/datasets/Salesforce/HERB) by Salesforce AI Research, a public, **synthetic** enterprise dataset under **CC BY-NC 4.0** ([paper](https://arxiv.org/abs/2506.23139)); the demo snapshot redistributes HERB-derived data under the same license, with attribution. The demo uses no real company's or person's data, and its items are labelled `[synthetic demo …]`.
 
+**Commercial use:** the code may be used commercially; the demo graph may not (CC BY-NC). A company running Yaan for its business uses org mode on its own data and doesn't load the demo snapshot (`yaan seed`). Org mode never copies anything from it.
+
+**Slack:** in a self-hosted install, each organisation creates its own Slack app in its own workspace, and its data stays on its own servers. Our reading of Slack's [API terms](https://slack.com/terms-of-service/api) and its [2025 rate-limit change](https://docs.slack.dev/changelog/2025/05/29/rate-limit-changes-for-non-marketplace-apps): that is an internal app, not a commercially distributed one. Offering Yaan to other organisations as a service would need Slack's Marketplace approval and its third-party data terms. This is not legal advice.
+
 <details>
 <summary><b>Graph Hacks submission notes</b></summary>
 
