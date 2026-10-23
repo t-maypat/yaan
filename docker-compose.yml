@@ -29,6 +29,11 @@ x-yaan: &yaan
   cap_drop: [ALL]
   security_opt: ["no-new-privileges:true"]
   restart: unless-stopped
+  # JSON log lines (22.4), rotated: at most 5 x 10 MB per container, so what the logs hold of
+  # a person (ids, paths) ages out instead of growing forever
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
 
 services:
   falkordb:

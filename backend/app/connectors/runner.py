@@ -77,6 +77,10 @@ BACKOFF_FIRST_S = 30  # a failing tool's first wait, doubling per failure up to 
 FOLD_WARN_MS = 15_000
 SWEEP_EVERY_MS = 86_400_000  # a connector's reconciliation sweep, besides each process's first
 _swept: set[str] = set()  # the connectors this process has swept (its first round sweeps)
+# what this worker process has done since it started, written onto each heartbeat for the
+# API's /metrics (22.4): Prometheus counters, so a restart starting again at 0 is fine
+TOTALS: dict[str, Any] = {"rounds_total": 0, "items": {}}
+OUTCOMES = ("ingested", "refused", "dead", "waiting", "sent", "unsent")
 
 
 def load_state(graph: str) -> dict[str, Any]:
@@ -561,13 +565,17 @@ def wait(wake: Any, pause_s: float, graph: str, since_ms: int) -> None:
         wake.wait(min(1.0, left))
 
 
-def run_forever(graph: str | None = None, every_s: float = 30, say=print) -> None:
+def run_forever(graph: str | None = None, every_s: float = 30, say=None) -> None:
     """`lore connectors run`: sync every `every_s` seconds, or at once when Slack reports a
-    message; post each new alert a connector caused as a Slack card."""
+    message; post each new alert a connector caused as a Slack card. Every line it says is a
+    log record (22.4), and each round ends with one carrying its numbers."""
     import threading
 
+    from app import obs
     from app.config import get_settings
 
+    obs.setup_logging()
+    say = say or obs.say("worker")
     graph = live.demo_graph(graph)
     connectors = configured(graph)
     if connectors and org.active():
@@ -597,7 +605,10 @@ def run_forever(graph: str | None = None, every_s: float = 30, say=print) -> Non
         # a tool that fails backs off on its own (D132); the loop slows only when items wait
         # (the lock, the spend cap) or every tool is down
         pause = min(pause * 2, MAX_PAUSE_S) if stalled else every_s
-        beat(graph, healthy, pause, waiting[0] if waiting else None, slow)
+        TOTALS["round_seconds"] = round(time.time() - started_ms / 1000, 3)
+        obs.event("worker", "round", healthy=healthy, waiting=len(waiting), warning=slow,
+                  pause_s=pause, **TOTALS)  # fmt: skip
+        beat(graph, healthy, pause, waiting[0] if waiting else None, slow, metrics=TOTALS)
         if not healthy:
             say(f"next round in {pause:g} s")
         wait(wake, pause, graph, started_ms)
@@ -618,6 +629,7 @@ def one_round(
     for alert_id in approve.complete_stuck(graph):  # responses a stopped process left (D110)
         say(f"finished the response to {alert_id}")
     report = sync(connectors, graph)
+    count_round(report)
     for r in report["ingested"]:
         say(f"in  {r['id']} ({r['freshness_lag_ms']:.0f} ms) alerts={r['alerts']}")
     for r in report["refused"]:
@@ -654,6 +666,19 @@ def one_round(
     return sorted({f"{r['source']}: {r['why']}" for r in report["waiting"]}), slow, stalled
 
 
+def count_round(report: dict[str, Any]) -> None:
+    """Add one round's outcomes to TOTALS (items by outcome; deletions forgotten), and keep
+    the round's slowest fold."""
+    TOTALS["rounds_total"] += 1
+    items = TOTALS["items"]
+    for outcome in OUTCOMES:
+        items[outcome] = items.get(outcome, 0) + len(report.get(outcome) or [])
+    gone = sum(r["items"] for r in report.get("forgotten") or [])
+    items["forgotten"] = items.get("forgotten", 0) + gone
+    folds = [r.get("fold_ms") or 0 for r in report.get("ingested") or []]
+    TOTALS["fold_seconds_max"] = round(max(folds, default=0) / 1000, 3)
+
+
 HEARTBEAT = "heartbeat.json"
 HEARTBEAT_GRACE_MS = 120_000  # a round may run this long past its announced time
 
@@ -664,17 +689,28 @@ def beat(
     pause_s: float,
     waiting: str | None = None,
     warning: str | None = None,
+    metrics: dict[str, Any] | None = None,
 ) -> None:
     """After every round: when it ended, whether it was clean (else why something waited),
     and when the next one is due. `yaan connectors health` (the worker's healthcheck) and the
-    API's /health read it."""
+    API's /health read it; /metrics reads the worker's counters from it (22.4)."""
     now = int(time.time() * 1000)
-    body = {"at_ms": now, "healthy": healthy, "next_by_ms": now + int(pause_s * 1000)}
+    next_ms = now + int(pause_s * 1000)
+    body: dict[str, Any] = {"at_ms": now, "healthy": healthy, "next_by_ms": next_ms}
     if waiting:
         body["waiting"] = waiting[:300]
-    if warning:  # healthy, but heading for trouble (a slow fold)
+    if warning:  # healthy, but heading for trouble (a slow fold, memory near its cap)
         body["warning"] = warning[:300]
+    if metrics:
+        body["metrics"] = metrics
     filestate.write(live.live_dir(graph) / HEARTBEAT, body)
+
+
+def heartbeat_metrics(graph: str) -> dict[str, Any]:
+    """The worker's counters from its last heartbeat ({} before it wrote any)."""
+    path = live.live_dir(graph) / HEARTBEAT
+    found = filestate.read(path, {}) if path.is_file() else {}
+    return found.get("metrics") or {}
 
 
 def worker_health(graph: str, now_ms: int | None = None) -> dict[str, Any]:

@@ -186,7 +186,8 @@ def test_storage_reads_memory_and_persistence_and_warns_from_80_percent(monkeypa
 
     monkeypatch.setattr(db, "client", lambda readonly: type("C", (), {"connection": Conn()})())
     found = db.storage()
-    assert found == {"used_mb": 850, "cap_mb": 1000, "used_pct": 85.0, "aof": False,
+    assert found == {"used_bytes": 850 * mb, "cap_bytes": 1000 * mb, "last_save_ts": 0,
+                     "used_mb": 850, "cap_mb": 1000, "used_pct": 85.0, "aof": False,
                      "last_save_utc": "1970-01-01T00:00:00Z", "last_save_ok": True}  # fmt: skip
     assert "85% of its 1000 MB cap" in db.memory_warning(found)
     assert db.memory_warning(found | {"used_pct": 79.9}) is None

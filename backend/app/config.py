@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     discord_bot_token: str | None = None
     discord_channel_id: str | None = None
     query_timeout_ms: int = 2000  # default timeout for reads (agent tools); writes can't take one
+    # Logs and metrics (22.4): JSON lines on stderr, or plain text for people; /metrics answers
+    # admins, and a scraper (Prometheus) that sends this as a bearer token
+    lore_log_format: Literal["json", "text"] = "json"
+    lore_metrics_token: str | None = None
     # Redis ACL users (Phase 1.4, D018), created by docker-compose.yml from the same .env.
     falkordb_writer_user: str = "lore_writer"
     falkordb_writer_password: str | None = None

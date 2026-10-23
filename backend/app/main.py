@@ -22,8 +22,12 @@ exports/inject/, rate-limited per IP and serialized by one lock (D058).
 import hashlib
 import hmac
 import json
+import logging
 import queue
+import re
 import threading
+import time
+import uuid
 from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -35,7 +39,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from app import __version__, auth, db, mcp_server
+from app import __version__, auth, db, mcp_server, obs
 from app.config import REPO_ROOT, get_settings
 from app.limits import RateLimiter, person_limits
 
@@ -56,11 +60,13 @@ def finish_stuck_responses() -> None:
 
     try:
         for alert_id in approve.complete_stuck(get_settings().api_graph()):
-            print(f"yaan: finished the response to {alert_id}", flush=True)
+            obs.event("api", f"finished the response to {alert_id}", alert=alert_id)
     except Exception as e:
-        print(f"yaan: couldn't check for unfinished responses: {type(e).__name__}: {e}", flush=True)
+        obs.event("api", f"couldn't check for unfinished responses: {type(e).__name__}: {e}",
+                  logging.WARNING)  # fmt: skip
 
 
+obs.setup_logging()
 app = FastAPI(title="Lore", version=__version__, lifespan=lifespan)
 app.router.add_route("/mcp", mcp_http, include_in_schema=False)
 ASK_PER_MINUTE = 6  # per IP when nobody is signed in; the daily spend caps are the second guard
@@ -96,7 +102,7 @@ API_PREFIXES = (
 )
 # What the request budget counts: the API, sign-in (token guessing) and the ingest endpoint.
 # /health and the web UI's own files aren't counted: a page load is dozens of them.
-LIMITED_PREFIXES = (*API_PREFIXES, "/auth", "/ingest", "/hooks")
+LIMITED_PREFIXES = (*API_PREFIXES, "/auth", "/ingest", "/hooks", "/metrics")
 
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -125,7 +131,9 @@ async def identify(request: Request, call_next):
     request.state.principal = None
     path = request.url.path
     who = how = refused = None
-    if path.startswith(API_PREFIXES):
+    # /metrics signs in on its own: a scraper's token is not a person's ("/metrics" also
+    # starts with "/me", so it must be named)
+    if path.startswith(API_PREFIXES) and path != "/metrics":
         try:  # in a thread: a token's last-use stamp may wait briefly for the token file
             who, how = await run_in_threadpool(auth.identify, request.headers, request.cookies)
         except auth.AuthError as e:
@@ -164,6 +172,39 @@ async def security_headers(request: Request, call_next):
     for name, value in SECURITY_HEADERS.items():
         response.headers.setdefault(name, value)
     return response
+
+
+REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")  # a caller's id is kept only when plain
+
+
+@app.middleware("http")
+async def observe(request: Request, call_next):
+    """Outermost (added last): a request id on the response and in every log line it causes,
+    then one access line and the request counters (22.4). Routes are labelled by their
+    template (`/artifact/{id}`), so the counters stay a fixed set; paths without a route (the
+    UI's files) count as `static`. Logged: the path, never its query string or a body."""
+    given = request.headers.get("x-request-id") or ""
+    rid = given if REQUEST_ID.match(given) else uuid.uuid4().hex[:16]
+    token = obs.request_id.set(rid)
+    t0 = time.perf_counter()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        response.headers["X-Request-ID"] = rid
+        return response
+    finally:
+        seconds = time.perf_counter() - t0
+        found = request.scope.get("route")
+        route = getattr(found, "path", None) or "static"
+        obs.METRICS.inc("yaan_http_requests_total", route=route, method=request.method,
+                        status=str(status))  # fmt: skip
+        obs.METRICS.observe("yaan_http_request_seconds", seconds, route=route)
+        if route != "static":  # page loads are dozens of files: not worth a line each
+            obs.event("api", f"{request.method} {request.url.path} {status}",
+                      method=request.method, path=request.url.path, route=route, status=status,
+                      ms=round(seconds * 1000, 1), person=principal(request))  # fmt: skip
+        obs.request_id.reset(token)
 
 
 @app.post("/auth/session")
@@ -257,7 +298,8 @@ def refresh_derived(target: str) -> None:
         live.derive_if_due(target)
         live.algorithms_if_due(target)  # org mode's collaboration graph, hourly (D127)
     except Exception as e:
-        print(f"yaan: the derived layer wasn't refreshed: {type(e).__name__}: {e}", flush=True)
+        obs.event("api", f"the derived layer wasn't refreshed: {type(e).__name__}: {e}",
+                  logging.WARNING, graph=target)  # fmt: skip
 
 
 def demo_write(request: Request, work):
@@ -744,6 +786,89 @@ async def hook(source: str, request: Request) -> dict:
         raise HTTPException(401, "bad or missing signature")
     await run_in_threadpool(runner.poke, live.demo_graph(None), source)
     return {"woke": source}
+
+
+METRIC_HELP = {
+    "yaan_build_info": ("gauge", "Yaan's version, as a label"),
+    "yaan_graph_memory_bytes": ("gauge", "FalkorDB used memory, every graph on the server"),
+    "yaan_graph_memory_cap_bytes": ("gauge", "FalkorDB maxmemory (absent: no cap)"),
+    "yaan_persistence_aof": ("gauge", "1 when FalkorDB keeps an append-only file"),
+    "yaan_persistence_last_save_ok": ("gauge", "1 when FalkorDB's last save succeeded"),
+    "yaan_persistence_last_save_timestamp_seconds": ("gauge", "when FalkorDB last saved"),
+    "yaan_falkordb_up": ("gauge", "1 when FalkorDB answered INFO for this scrape"),
+    "yaan_llm_spend_usd": ("gauge", "model spend today (UTC), by kind"),
+    "yaan_llm_spend_cap_usd": ("gauge", "the daily spend cap"),
+    "yaan_worker_up": ("gauge", "1 while the connector worker's rounds come on time"),
+    "yaan_worker_healthy": ("gauge", "1 when the worker's last round had nothing waiting"),
+    "yaan_worker_last_round_timestamp_seconds": ("gauge", "when the worker's last round ended"),
+    "yaan_worker_rounds_total": ("counter", "worker rounds since it started"),
+    "yaan_worker_items_total": ("counter", "items the worker handled since it started, by outcome"),
+    "yaan_worker_round_seconds": ("gauge", "how long the worker's last round took"),
+    "yaan_worker_fold_seconds_max": ("gauge", "the slowest fold in the worker's last round"),
+    "yaan_dead_letters": ("gauge", "items a connector couldn't ingest (listing caps at 200)"),
+    "yaan_connector_backoff": ("gauge", "1 while a tool is backed off after failing, by source"),
+}
+
+
+@app.get("/metrics")
+def metrics(request: Request) -> Response:
+    """Prometheus text (22.4): what this process counted, plus the graph's memory and disk,
+    today's spend, and the connector worker's counters from its heartbeat. For admins, or a
+    scraper sending LORE_METRICS_TOKEN as a bearer token (not a person's token)."""
+    from app import llm
+    from app.connectors import runner
+
+    s = get_settings()
+    scheme, _, sent = (request.headers.get("authorization") or "").partition(" ")
+    scraper = bool(s.lore_metrics_token) and scheme.lower() == "bearer"
+    if not (scraper and hmac.compare_digest(sent.strip(), s.lore_metrics_token or "")):
+        try:
+            who, _ = auth.identify(request.headers, request.cookies)
+        except auth.AuthError as e:
+            raise HTTPException(401, str(e), {"WWW-Authenticate": "Bearer"}) from e
+        if not auth.is_admin(who):
+            raise HTTPException(403, "for Yaan's admins, or LORE_METRICS_TOKEN")
+    g = graph()
+    out = [*obs.METRICS.samples(), ("yaan_build_info", {"version": __version__}, 1)]
+    try:
+        st = db.storage()
+        out += [
+            ("yaan_falkordb_up", {}, 1),
+            ("yaan_graph_memory_bytes", {}, st["used_bytes"]),
+            ("yaan_persistence_aof", {}, int(st["aof"])),
+            ("yaan_persistence_last_save_ok", {}, int(st["last_save_ok"])),
+            ("yaan_persistence_last_save_timestamp_seconds", {}, st["last_save_ts"]),
+        ]
+        if st["cap_bytes"]:
+            out.append(("yaan_graph_memory_cap_bytes", {}, st["cap_bytes"]))
+        out.append(("yaan_dead_letters", {}, len(runner.dead_letters(g))))
+    except Exception:  # FalkorDB down: said by this gauge, and /health
+        out.append(("yaan_falkordb_up", {}, 0))
+    spend = llm.spending()
+    out += [
+        ("yaan_llm_spend_usd", {"kind": "all"}, spend["spent_usd"]),
+        ("yaan_llm_spend_usd", {"kind": "answers"}, spend["answers_usd"]),
+        ("yaan_llm_spend_cap_usd", {}, spend["cap_usd"]),
+    ]
+    beat = runner.worker_health(g)
+    if beat["status"] != "absent":
+        out += [
+            ("yaan_worker_up", {}, int(beat["status"] in ("ok", "waiting"))),
+            ("yaan_worker_healthy", {}, int(beat["status"] == "ok")),
+            ("yaan_worker_last_round_timestamp_seconds", {}, beat["last_round_ms"] / 1000),
+        ]
+        counted = runner.heartbeat_metrics(g)
+        for outcome, n in sorted(counted.get("items", {}).items()):
+            out.append(("yaan_worker_items_total", {"outcome": outcome}, n))
+        for name in ("rounds_total", "round_seconds", "fold_seconds_max"):
+            if name in counted:
+                out.append((f"yaan_worker_{name}", {}, counted[name]))
+    now_ms = time.time() * 1000
+    for source, mine in sorted(runner.load_state(g).items()):
+        if isinstance(mine, dict) and "since_ms" in mine:
+            out.append(("yaan_connector_backoff", {"source": source},
+                        int(mine.get("retry_ms", 0) > now_ms)))  # fmt: skip
+    return Response(obs.render(out, METRIC_HELP), media_type="text/plain; version=0.0.4")
 
 
 @app.get("/health")

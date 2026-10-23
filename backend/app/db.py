@@ -387,6 +387,9 @@ def storage() -> dict[str, Any]:
     mem, disk = conn.info("memory"), conn.info("persistence")
     used, cap = mem["used_memory"], mem["maxmemory"]
     return {
+        "used_bytes": used,
+        "cap_bytes": cap or None,
+        "last_save_ts": disk["rdb_last_save_time"],
         "used_mb": round(used / 2**20),
         "cap_mb": round(cap / 2**20) if cap else None,
         "used_pct": round(100 * used / cap, 1) if cap else None,
