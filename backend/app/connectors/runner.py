@@ -32,7 +32,7 @@ from typing import Any
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
-from app import db, filestate, forget, llm, org
+from app import db, filestate, forget, llm, org, retention
 from app.connectors import base, render
 from app.connectors.base import Connector, ConnectorError, Item, labeled
 from app.ingest.normalize import Artifact
@@ -173,6 +173,9 @@ def sync(
         # forgotten, or by an erased person: skipped before the live path, so no dead letter
         # ever keeps their words (D125)
         stop = forget.blocked([i.artifact for i in items], graph) if items else {}
+        # past the tool's retention (org mode, 22.5): never in, whatever brought it (an edit
+        # of an old message, a sweep, a backfill)
+        expired = retention.cutoff_ms(c.name, maps=getattr(c, "maps", None))
         hold: int | None = None  # the cursor may not pass a version that will be retried
         latest: dict[str, Item] = {}  # the newest version of each item: one batch (D112)
         for item in items:
@@ -182,6 +185,11 @@ def sync(
                 continue
             if a.id in stop:
                 report["refused"].append({"id": a.id, "why": stop[a.id]})
+                mine["seen"][a.id] = item.updated_ms
+                mine["since_ms"] = max(mine["since_ms"], item.updated_ms)
+                continue
+            if expired is not None and a.ts_ms is not None and a.ts_ms < expired:
+                report["refused"].append({"id": a.id, "why": f"older than {c.name}'s retention"})
                 mine["seen"][a.id] = item.updated_ms
                 mine["since_ms"] = max(mine["since_ms"], item.updated_ms)
                 continue
@@ -244,6 +252,7 @@ def sync(
     report["sent"], report["unsent"] = deliver(connectors, graph)
     report["derived"] = live.derive_if_due(graph)  # the derived layer, if a write made it due
     report["algorithms"] = live.algorithms_if_due(graph)  # org mode, hourly (D127)
+    report["retention"] = retention.run_if_due(graph)  # org mode, daily (22.5)
     return report
 
 
@@ -284,11 +293,16 @@ def backfill(
     since = int(time.time() * 1000) - int(days * 86_400_000)
     report: dict[str, Any] = {"graph": graph, "since_ms": since, "sources": {}}
     products: set[str] = set()
+    reach: dict[str, int] = {}  # a tool's retention is as far back as its backfill goes (22.5)
     for c in connectors:
-        items = c.fetch(since)
+        cut = retention.cutoff_ms(c.name, maps=getattr(c, "maps", None))
+        reach[c.name] = max(since, cut) if cut is not None else since
+        items = c.fetch(reach[c.name])
         products |= {i.artifact.product_hint for i in items}
         arts = sorted((i.artifact for i in items if i.events is None), key=lambda a: a.ts_ms or 0)
         report["sources"][c.name] = {"items": len(items), **live.estimate_extraction(arts, graph)}
+        if reach[c.name] > since:
+            report["sources"][c.name]["since_ms"] = reach[c.name]  # stopped at its retention
     totals = report["sources"].values()
     report["expected_usd"] = round(sum(s["expected_usd"] for s in totals), 4)
     report["worst_case_usd"] = round(sum(s["worst_case_usd"] for s in totals), 4)
@@ -297,8 +311,9 @@ def backfill(
         return report
     state = load_state(graph)
     for c in connectors:
-        mine = state.setdefault(c.name, {"since_ms": since, "seen": {}})
-        mine["since_ms"] = min(mine["since_ms"] or since, since)
+        start = reach[c.name]
+        mine = state.setdefault(c.name, {"since_ms": start, "seen": {}})
+        mine["since_ms"] = min(mine["since_ms"] or start, start)
     save_state(graph, state)
     report["sync"] = sync(connectors, graph)
     return report

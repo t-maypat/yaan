@@ -99,6 +99,8 @@ docker compose --profile app exec api yaan restore data/backups/<file> --force  
 
    Logs are JSON lines (`docker compose logs api worker`), one per request with its `X-Request-ID`, and one per connector round with its numbers. `/metrics` serves Prometheus text to admins, or to a scraper holding `LORE_METRICS_TOKEN`: requests by route and status, graph memory, today's spend, the worker's rounds and items, dead letters, tools backing off.
 
+7. Decide what Yaan keeps. `retention_days` in `connectors.yaml` (for every tool, or per tool) makes the worker forget older items daily, as if the tool had deleted them; a decision only they supported goes too, since Yaan states nothing it can't quote. An audit log records who was shown which items, by id, never their words: `yaan audit --person <id>` or the Admin page. It keeps 13 months (`LORE_AUDIT_MONTHS`), and `yaan erase` removes a person from it.
+
 ## Use it from your AI client
 
 Yaan is an MCP server: Claude Code, Codex, Cursor or any MCP client gets its 16 read-only graph tools plus `ask`.
@@ -142,7 +144,7 @@ FalkorDB features Yaan depends on: Cypher over a property graph, a **full-text i
 | [`connection_path`](backend/queries/connection_path.cypher) | the shortest chain of collaborators between two people |
 | [`find_missing`](backend/queries/find_missing.cypher) | what isn't there: unfixed issues, unreviewed PRs, single-author areas |
 
-All 249 queries, one parameterized statement per file, each with a fixture test: **[docs/queries.md](docs/queries.md)**.
+All 250 queries, one parameterized statement per file, each with a fixture test: **[docs/queries.md](docs/queries.md)**.
 
 ## Results
 

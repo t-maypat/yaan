@@ -33,7 +33,7 @@ from typing import Any
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from app import db, limits, org
+from app import audit, db, limits, org
 from app.connectors import base, render
 from app.connectors.base import ConnectorError, Item, Maps
 from app.ingest.normalize import Artifact
@@ -656,6 +656,10 @@ class SlackBot:
                 audience=scope,
                 payer=self.payer(event.get("user")),
             )
+            asker = self.connector.who(event.get("user"))
+            audit.safely(  # posted in the channel: everyone there was shown it
+                lambda: audit.answered(self.graph, out, asker, "slack-channel", channel=channel)
+            )
         except Exception as e:  # shown in the thread, never a made-up answer
             say(text=f"I couldn't answer: {type(e).__name__}: {e}", thread_ts=thread)
             return
@@ -683,6 +687,7 @@ class SlackBot:
                 viewer_id=viewer,
                 payer=self.payer(event.get("user")),
             )
+            audit.safely(lambda: audit.answered(self.graph, out, viewer, "slack-dm"))
         except Exception as e:  # shown to the asker, never a made-up answer
             say(text=f"I couldn't answer: {type(e).__name__}: {e}")
             return

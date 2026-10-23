@@ -245,6 +245,14 @@ class Access:
         return out, hidden
 
 
+def ids(value: Any) -> set[str]:
+    """Every artifact or derived-node id in a result: what redaction checks, and what the
+    audit log records as shown (22.5)."""
+    found: set[str] = set()
+    _ids(value, found)
+    return found
+
+
 def _ids(value: Any, found: set[str]) -> None:
     if isinstance(value, dict):
         for v in value.values():

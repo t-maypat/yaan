@@ -860,6 +860,32 @@ def cmd_erase(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_retention(args: argparse.Namespace) -> int:
+    """Forget what is past each tool's retention now (22.5); the worker does it daily. A dry
+    run unless --yes."""
+    from app import db, retention
+    from app.config import get_settings
+
+    try:
+        graph = args.graph or get_settings().lore_org_graph
+        print(json.dumps(retention.run(graph, apply=args.yes), indent=1))
+        return 0
+    except (retention.RetentionError, db.LockBusy) as e:
+        print(f"yaan retention: {e}", file=sys.stderr)
+        return 1
+
+
+def cmd_audit(args: argparse.Namespace) -> int:
+    """Who was shown what (22.5): the newest lines of the access audit log first."""
+    from app import audit
+    from app.config import get_settings
+
+    graph = args.graph or get_settings().api_graph()
+    for row in audit.read(graph, viewer=args.person, item=args.item, limit=args.limit):
+        print(json.dumps(row, ensure_ascii=False))
+    return 0
+
+
 # command -> (help text, handler)
 COMMANDS = {
     "schema": ("create and verify the indexes for a graph (queries/00_schema.cypher)", cmd_schema),
@@ -868,6 +894,8 @@ COMMANDS = {
     "people": ("org mode: people met in your tools, not yet in people.yaml (D130)", cmd_people),
     "forget": ("remove items for good: every copy of their words, no re-sync (D125)", cmd_forget),
     "erase": ("erase a person: what they wrote, their mentions, their account (D125)", cmd_erase),
+    "retention": ("org mode: forget what is past each tool's retention (22.5)", cmd_retention),
+    "audit": ("who was shown what: the access audit log, newest first (22.5)", cmd_audit),
     "belief": ("what Lore believed about an issue or PR at a moment (D101)", cmd_belief),
     "fetch-herb": ("download the HERB dataset (pinned revision) into data/herb", cmd_fetch_herb),
     "rank-dev": ("rank products by change signals to pick the dev products (D017)", cmd_rank_dev),
@@ -922,6 +950,16 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--graph", {"help": "default: LORE_ORG_GRAPH in org mode, else LORE_DEMO_GRAPH"}),
     ],
     "people": [("--graph", {"help": "default: LORE_ORG_GRAPH"})],
+    "retention": [
+        ("--yes", {"action": "store_true", "help": "forget them (default: a dry run)"}),
+        ("--graph", {"help": "default: LORE_ORG_GRAPH"}),
+    ],
+    "audit": [
+        ("--person", {"help": "only what this person (an eid_ id) was shown"}),
+        ("--item", {"help": "only the lines that showed this item id"}),
+        ("--limit", {"type": int, "default": 50}),
+        ("--graph", {"help": "default: the graph the API serves"}),
+    ],
     "token": [
         ("action", {"choices": ("issue", "revoke", "list")}),
         (

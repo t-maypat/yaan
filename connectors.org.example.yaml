@@ -16,6 +16,12 @@
 product: Acme Platform              # the product everything below belongs to
 # A tool's first sync reads its last 30 days (`backfill_days: 90` under a tool reads more).
 # To reach further back later, price it first: yaan connectors backfill --days 365
+#
+# Retention (optional): Yaan forgets what a tool brought once it is older than this many days,
+# daily, as if the tool had deleted it: its words go, and so do the decisions only it supported
+# (Yaan states nothing it can no longer quote). Under a tool, `retention_days` overrides this;
+# `retention_days: null` there keeps that tool forever. `yaan retention` shows what is due.
+# retention_days: 730
 
 slack:
   channels:                         # Slack channel name -> the Yaan channel it feeds

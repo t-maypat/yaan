@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # admins, and a scraper (Prometheus) that sends this as a bearer token
     lore_log_format: Literal["json", "text"] = "json"
     lore_metrics_token: str | None = None
+    # The access audit log (22.5): whole months kept, this one included; older ones deleted.
+    # Its folder may live elsewhere (a volume of its own); default data/audit
+    lore_audit_months: int = 13
+    audit_dir: Path | None = None
     # Redis ACL users (Phase 1.4, D018), created by docker-compose.yml from the same .env.
     falkordb_writer_user: str = "lore_writer"
     falkordb_writer_password: str | None = None

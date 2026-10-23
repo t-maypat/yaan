@@ -14,9 +14,24 @@ from pathlib import Path
 import pytest
 
 from app import db, schema
+from app.config import get_settings
 
 TEST_GRAPH_PREFIX = "lore_test_"
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def own_caches(tmp_path_factory) -> Iterator[None]:
+    """No test reaches the real disk caches or audit log (D139). In org mode `forget` empties
+    the LLM cache, and the org fixtures moved DATA_DIR but not CACHE_DIR (a setting of its
+    own): every DB run of test_forget wiped data/cache/llm, the eval's free replay. API tests
+    would write audit lines into data/audit. A test that sets either itself still wins."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("CACHE_DIR", str(tmp_path_factory.mktemp("cache")))
+        mp.setenv("AUDIT_DIR", str(tmp_path_factory.mktemp("audit")))
+        get_settings.cache_clear()
+        yield
+    get_settings.cache_clear()
 
 
 def require_falkordb() -> None:

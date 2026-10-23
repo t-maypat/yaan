@@ -5,7 +5,7 @@ Every query Yaan runs is one parameterized statement in its own file under [`bac
 FalkorDB features these queries rely on: Cypher over a property graph, range indexes on ids, a full-text index (English stemming) and an HNSW vector index on chunks, native `algo.pageRank`, `algo.betweenness`, `algo.labelPropagation` and `shortestPath`, `GRAPH.RO_QUERY` with a read-only ACL user, per-query timeouts, and `GRAPH.COPY` for the resettable demo graph.
 
 <!-- queries -->
-249 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
+250 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
 **Schema (indexes, applied and verified by `lore schema`)** (1)
 
@@ -153,7 +153,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_teams.cypher`](../backend/queries/upsert_teams.cypher) | team nodes, one per VP group in the hierarchy (D026) |
 | [`upsert_tombstones.cypher`](../backend/queries/upsert_tombstones.cypher) | a content-free record of each forgotten item (id, kind, when, why), so a sync, sweep or backfill doesn't bring it back (F2, D125) |
 
-**Reads: agent tools, the API, the Sentinel, connectors, permissions** (123)
+**Reads: agent tools, the API, the Sentinel, connectors, permissions** (124)
 
 | Query | Purpose |
 |---|---|
@@ -265,6 +265,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`renew_lock.cypher`](../backend/queries/renew_lock.cypher) | extend a graph's writer lock, only while this holder still has it: a long write keeps its lease, a lost one stays lost (H2, D110) |
 | [`resolve_names.cypher`](../backend/queries/resolve_names.cypher) | people, products, customers or companies whose name matches the words (full-text on Entity.name), most active in the product first |
 | [`resolve_product.cypher`](../backend/queries/resolve_product.cypher) | products whose id, name or codename equals the text (codenames come from renamed channels, D029) |
+| [`retention_due.cypher`](../backend/queries/retention_due.cypher) | items a tool's retention has passed: ids under its prefixes, older than the cutoff, oldest first (22.5, D138) |
 | [`retract_events.cypher`](../backend/queries/retract_events.cypher) | a newer version of an artifact no longer states these events: close them (retracted_ms), never delete them, so the belief at an earlier moment can be replayed (D101) |
 | [`retracted_resolved.cypher`](../backend/queries/retracted_resolved.cypher) | a product's retracted events that still carry the last pass's resolution: what they made is gone unless another event makes it, and their results are cleared after the next pass (D129) |
 | [`sentinel_changes.cypher`](../backend/queries/sentinel_changes.cypher) | the decision changes the Sentinel judges (11.1): every extracted supersession (old and new value, subject, evidence quote, decider) and every claim that CONFLICTS_WITH an active decision (§9.4 rule 5) |

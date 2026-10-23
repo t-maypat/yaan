@@ -39,7 +39,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from app import __version__, auth, db, mcp_server, obs
+from app import __version__, audit, auth, db, mcp_server, obs
 from app.config import REPO_ROOT, get_settings
 from app.limits import RateLimiter, person_limits
 
@@ -279,13 +279,16 @@ def admin_only(request: Request) -> str | None:
 
 
 def for_viewer(request: Request, value: dict) -> dict:
-    """`value` as the signed-in person may see it (agent/access.py); unchanged in the demo."""
-    who = principal(request)
-    if who is None:
-        return value
+    """`value` as the signed-in person may see it (agent/access.py); unchanged in the demo.
+    What they were shown goes into the audit log (22.5)."""
     from app.agent import access
 
-    return access.Access(who, graph()).redact(value)[0]
+    who = principal(request)
+    if who is not None:
+        value = access.Access(who, graph()).redact(value)[0]
+    found = getattr(request.scope.get("route"), "path", request.url.path)
+    audit.safely(lambda: audit.record(graph(), found, who, "api", access.ids(value)))
+    return value
 
 
 def refresh_derived(target: str) -> None:
@@ -366,7 +369,7 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
 
     def work() -> None:
         try:
-            loop.answer(
+            out = loop.answer(
                 body.question,
                 body.product_id,
                 graph=graph(),
@@ -376,6 +379,7 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
                 cancel=cancel,
                 payer=who,
             )
+            audit.safely(lambda: audit.answered(graph(), out, who, "web"))
         except Exception as e:  # shown to the viewer as an error event, never a fake answer
             events.put(("error", {"error": type(e).__name__, "message": str(e)[:500]}))
         finally:
@@ -577,6 +581,18 @@ def admin_overview(request: Request) -> dict:
         "spend": llm.spending(),
         "unlisted": org.unlisted(g) if org.active() else [],
     }
+
+
+@app.get("/admin/audit")
+def admin_audit(
+    request: Request,
+    person: Annotated[str | None, Query(max_length=100)] = None,
+    item: Annotated[str | None, Query(max_length=300)] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
+) -> dict:
+    """The access audit log (22.5), newest first: who was shown which items, through what."""
+    admin_only(request)
+    return {"lines": audit.read(graph(), viewer=person, item=item, limit=limit)}
 
 
 @app.post("/admin/dead/retry")

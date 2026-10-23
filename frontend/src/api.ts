@@ -304,6 +304,19 @@ export type AdminOverview = {
   unlisted: { name: string; id: string; email?: string; accounts?: Record<string, string> }[];
 };
 export const getAdmin = () => getJson<AdminOverview>("/admin/overview");
+// The access audit log (22.5): who was shown which items, through which door, newest first
+export type AuditLine = {
+  ts: string;
+  viewer: string | null;
+  via: string;
+  what: string;
+  ids: string[];
+  ids_more?: number;
+  cited?: string[];
+  abstained?: boolean;
+};
+export const getAudit = (person?: string) =>
+  getJson<{ lines: AuditLine[] }>(`/admin/audit?limit=50${person ? `&person=${encodeURIComponent(person)}` : ""}`);
 export const retryDead = (id?: string) =>
   send<{ ingested: { id: string }[]; failed: { id: string; why: string }[] }>("POST", "/admin/dead/retry", { id: id ?? null });
 export const revokeToken = (id: string) => send<{ revoked: number }>("POST", "/admin/tokens/revoke", { id });

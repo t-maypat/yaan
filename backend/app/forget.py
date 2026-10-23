@@ -13,8 +13,9 @@ the LLM and embedding disk caches. `forget(ids)` removes every copy and leaves a
 
 `erase_person(eid)` forgets everything a person wrote, deletes their Person node, tokens and
 directory entry, replaces their @-mentions in what others wrote with a placeholder of the same
-length, takes their name off alerts and drafts, and records a hash of their id so their items
-stay out while a source still holds them. Plain-text mentions of their name in others' words
+length, takes their name off alerts and drafts, drops their lines from the access audit log
+(app/audit.py), and records a hash of their id so their items stay out while a source still
+holds them. Plain-text mentions of their name in others' words
 are listed for a human, never rewritten: a name can be a namesake's.
 
 COVERS says what happens to each property that can hold someone's words; test_forget fails
@@ -27,7 +28,7 @@ import time
 from collections.abc import Iterable
 from typing import Any
 
-from app import db, filestate, org
+from app import audit, db, filestate, org
 from app.config import get_settings
 from app.ingest import events as event_store
 
@@ -199,6 +200,7 @@ def erase_person(person: str, graph: str | None = None, now_ms: int | None = Non
         "tokens_revoked": auth.revoke(person),
         "named_in": by_name,  # plain-text mentions of the name: for a human to review
         "llm_cache": clear_llm_cache(),
+        "audit_lines_removed": audit.scrub(graph, person),  # what they were shown (22.5)
     }
 
 

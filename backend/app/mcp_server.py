@@ -23,7 +23,7 @@ from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
 
-from app import __version__, db, llm
+from app import __version__, audit, db, llm
 from app.agent import loop, tools
 from app.config import get_settings
 from app.limits import RateLimiter, person_limits
@@ -158,6 +158,7 @@ def ask(args: dict[str, Any], graph_name: str, principal: str | None = None) -> 
         viewer_id=viewer,
         payer=principal,
     )
+    audit.safely(lambda: audit.answered(graph_name, out, principal, "mcp"))
     return {
         "answer_markdown": out["answer_markdown"],
         "abstain": out["abstain"],
@@ -185,14 +186,17 @@ def run(
                 raise loop.ToolError(f"signed in as {viewer}: answers are for you")
             args = {**args, "viewer_id": viewer}
         return ask(args, graph_name, viewer)
-    allowed = frozenset(tools.REGISTRY) - EXCLUDED
-    if not viewer:
-        return loop.call_tool(name, args, tools.Scope(None, None, graph_name), allowed)
     from app.agent import access
 
-    seen = access.Access(viewer, graph_name)
-    out = loop.call_tool(name, args, tools.Scope(None, None, graph_name, seen.reach()), allowed)
-    return seen.redact(out)[0]
+    allowed = frozenset(tools.REGISTRY) - EXCLUDED
+    if not viewer:
+        out = loop.call_tool(name, args, tools.Scope(None, None, graph_name), allowed)
+    else:
+        seen = access.Access(viewer, graph_name)
+        scope = tools.Scope(None, None, graph_name, seen.reach())
+        out = seen.redact(loop.call_tool(name, args, scope, allowed))[0]
+    audit.safely(lambda: audit.record(graph_name, name, viewer, "mcp", access.ids(out)))
+    return out
 
 
 def viewer_of(ctx: Any) -> str | None:

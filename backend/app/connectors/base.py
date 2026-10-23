@@ -92,6 +92,8 @@ class Maps:
     product: str
     default_person: str | None  # demo only: who an unmapped sandbox account plays
     sources: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # org mode: how long Yaan keeps what every tool brought, unless a tool says (22.5)
+    retention_days: Any = None
 
     def source(self, name: str) -> dict[str, Any]:
         return self.sources.get(name) or {}
@@ -149,6 +151,7 @@ def maps() -> Maps:
             product=raw["product"],
             default_person=raw.get("default_person") if org.active() else raw["default_person"],
             sources={k: v for k, v in raw.items() if isinstance(v, dict)},
+            retention_days=raw.get("retention_days"),
         )
     except KeyError as e:
         raise ConnectorError(f"{CONFIG.name} needs {e.args[0]!r}") from e

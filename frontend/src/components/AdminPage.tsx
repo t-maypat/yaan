@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { type AdminOverview, getAdmin, retryDead, revokeToken } from "../api";
+import { type AdminOverview, type AuditLine, getAdmin, getAudit, retryDead, revokeToken } from "../api";
 
 // Admin (21.7, D133): what someone running Yaan checks, for people.yaml's `admin: true` (everyone
 // in the demo, which has no sign-in). The same facts as `yaan connectors status | dead`,
@@ -181,7 +181,63 @@ export function AdminPage() {
       ) : (
         <p className="text-muted">Nobody: everyone Yaan met is listed (or this is the demo).</p>
       )}
+
+      <AuditLog />
     </section>
+  );
+}
+
+// The access audit log (22.5): item ids only, never words; `yaan audit` reads the same lines.
+function AuditLog() {
+  const [person, setPerson] = useState("");
+  const [lines, setLines] = useState<AuditLine[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback((who: string) => {
+    getAudit(who.trim() || undefined).then((r) => { setLines(r.lines); setError(null); }, (e: Error) => setError(e.message));
+  }, []);
+  useEffect(() => load(""), [load]);
+
+  return (
+    <>
+      <h2 className="font-semibold mt-10 mb-2">Who was shown what</h2>
+      <form className="flex gap-2 mb-3 max-w-lg" onSubmit={(e) => { e.preventDefault(); load(person); }}>
+        <input className="flex-1 min-w-0 bg-transparent border-0 border-b-2 border-ink py-1 font-mono text-sm" placeholder="a person's eid_ id (empty: everyone)" value={person}
+          onChange={(e) => setPerson(e.target.value)} aria-label="Filter by person" />
+        <button type="submit" className="btn btn-line btn-sm">Show</button>
+      </form>
+      {error ? (
+        <p className="text-muted">The audit log failed: {error}</p>
+      ) : !lines ? (
+        <p className="text-muted">Reading the audit log…</p>
+      ) : lines.length ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[0.92rem]">
+            <thead>
+              <tr className="border-b border-ink text-left">
+                <th className="font-medium py-1">When (UTC)</th>
+                <th className="font-medium py-1">Who</th>
+                <th className="font-medium py-1">Through</th>
+                <th className="font-medium py-1">What</th>
+                <th className="font-medium py-1 text-right">Items shown</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l, i) => (
+                <tr key={`${l.ts}-${i}`} className="border-b border-rule align-top">
+                  <td className="py-1 whitespace-nowrap">{day(l.ts)}</td>
+                  <td className="py-1 font-mono text-[0.85em]">{l.viewer ?? "–"}</td>
+                  <td className="py-1">{l.via}</td>
+                  <td className="py-1 font-mono text-[0.85em] break-all">{l.what}{l.abstained ? " (abstained)" : ""}</td>
+                  <td className="py-1 text-right" title={l.ids.slice(0, 20).join("\n")}>{l.ids.length + (l.ids_more ?? 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-muted">Nothing recorded yet.</p>
+      )}
+    </>
   );
 }
 

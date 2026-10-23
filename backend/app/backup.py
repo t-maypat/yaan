@@ -61,16 +61,19 @@ def default_out(graph: str) -> Path:
 
 
 def state_files(graph: str) -> dict[str, Path]:
-    """Archive name -> path of every state file the graph's deployment has now."""
+    """Archive name -> path of every state file the graph's deployment has now. The audit
+    log is archived as data/audit/<graph>/ wherever AUDIT_DIR keeps it."""
+    from app import audit
+
     data = get_settings().data_dir
     found = {f"data/{name}": data / name for name in FILES if (data / name).is_file()}
     for d in GRAPH_DIRS:
-        folder = data / d / graph
+        folder = audit.folder(graph) if d == "audit" else data / d / graph
         if not folder.is_dir():
             continue
         for path in sorted(folder.rglob("*")):
             if path.is_file() and not _transient(path):
-                found[f"data/{path.relative_to(data).as_posix()}"] = path
+                found[f"data/{d}/{graph}/{path.relative_to(folder).as_posix()}"] = path
     return found
 
 
@@ -167,7 +170,6 @@ def restore(
             "upgrade (or move the data with `yaan export` / `yaan import`)."
         )
     graph = as_graph or manifest["graph"]
-    s = get_settings()
     r = snapshot.admin()
     if as_graph:
         if r.exists(graph):
@@ -185,7 +187,7 @@ def restore(
             n
             for n, body in files.items()
             if n.startswith("data/")
-            and (t := s.data_dir / n.removeprefix("data/")).is_file()
+            and (t := _target(n, graph)).is_file()
             and t.read_bytes() != body
         ]
         if clash:
@@ -202,11 +204,11 @@ def restore(
     graph_ms = round((time.perf_counter() - t0) * 1000)
     if not as_graph:
         for d in GRAPH_DIRS:  # the graph's own folders become the backup's, not a mix of both
-            shutil.rmtree(s.data_dir / d / graph, ignore_errors=True)
+            shutil.rmtree(_home(d, graph), ignore_errors=True)
     written, config = 0, {}
     for name, body in sorted(files.items()):
         if name.startswith("data/"):
-            target = _inside(s.data_dir, name.removeprefix("data/"))
+            target = _target(name, graph)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(body)
             written += 1
@@ -278,6 +280,22 @@ def _checked(source: Path, unpinned: bool) -> bytes:
             f"{pin.name} is missing beside the backup: copy it along, or pass --unpinned"
         )
     return blob
+
+
+def _home(d: str, graph: str) -> Path:
+    """Where a graph's own folder lives: live/ under data/, the audit log under AUDIT_DIR."""
+    from app import audit
+
+    return audit.folder(graph) if d == "audit" else get_settings().data_dir / d / graph
+
+
+def _target(name: str, graph: str) -> Path:
+    """Where an archived `data/...` file goes back to (the audit log to AUDIT_DIR)."""
+    rel = name.removeprefix("data/")
+    head = f"audit/{graph}/"
+    if rel.startswith(head):
+        return _inside(_home("audit", graph), rel.removeprefix(head))
+    return _inside(get_settings().data_dir, rel)
 
 
 def _inside(root: Path, rel: str) -> Path:

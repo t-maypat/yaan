@@ -25,6 +25,7 @@ def deployment(empty_graph, tmp_path, monkeypatch):
     db.run_text(FIXTURE.read_text(encoding="utf-8"), label="f", graph=empty_graph, readonly=False)
     data, conf = tmp_path / "data", tmp_path / "repo"
     monkeypatch.setattr(get_settings(), "data_dir", data)
+    monkeypatch.setattr(get_settings(), "audit_dir", None)  # the audit log under data/ here
     monkeypatch.setattr(backup, "REPO_ROOT", conf)
     live = data / "live" / empty_graph
     files = {

@@ -12,6 +12,11 @@ What changed between versions, newest first. Yaan is 0.x: settings and the graph
 - Optional append-only persistence (`FALKORDB_APPENDONLY=yes`, `FALKORDB_SAVE`): at most about a second of writes lost in a crash instead of up to a minute. `yaan persistence aof` switches a running server over without losing its data.
 - Logs are JSON lines (`LORE_LOG_FORMAT=text` for plain): one per API request with a request id (also sent back as `X-Request-ID`), one per connector round with its counts. Paths only: no query string or question text is logged. Docker rotates them (5 × 10 MB per container).
 - `/metrics`: Prometheus text for admins, or a scraper with `LORE_METRICS_TOKEN`.
+- Retention: `retention_days` in `connectors.yaml`, for every tool or per tool (org mode). The worker forgets older items daily, through `yaan forget`, and refuses them at the door; a backfill stops at the retention. `yaan retention` shows what is due (and forgets it with `--yes`).
+- An access audit log: each answer (web, MCP, Slack), MCP tool call and item read is one line in `data/audit/<graph>/<month>.jsonl` (or `AUDIT_DIR`) naming who was shown which items, by id only. `yaan audit` and the Admin page read it; 13 months are kept (`LORE_AUDIT_MONTHS`); `yaan erase` removes the person from it; `yaan backup` carries it.
+
+#### Fixed
+- Running the database tests emptied the real LLM disk cache (the eval's free replay): an org-mode test of `forget` reached `data/cache` because its fixture moved `DATA_DIR` but not `CACHE_DIR`. Every test now gets its own cache and audit folders.
 
 #### Upgrading
 - FalkorDB now starts with a 2 GB memory cap: if `yaan persistence` (or `INFO memory`) shows more in use, set `FALKORDB_MAXMEMORY` higher before `docker compose up -d`, or writes stop at once.
