@@ -44,7 +44,7 @@ REASON = {  # blast-radius reasons, short, for a card's "notifies" line
     "authored_pr": "authored the PR",
     "reviewed_pr": "reviewed the PR",
 }
-FOOTER = "Sent by Lore after a person approved it. Every quote is checked word for word."
+FOOTER = "Sent by Yaan after a person approved it. Every quote is checked word for word."
 
 
 def marker(action: dict[str, Any]) -> str:
@@ -122,7 +122,7 @@ def slack_notify(action: dict[str, Any], resolve: Resolve | None) -> tuple[str, 
         name = action.get("target_name") or action.get("target_id") or "someone"
         return f"For {name}", [
             section(f":bell: *For {name}*\n{slack_lines(draft, resolve)}"),
-            context("Lore Sentinel · approved follow-up"),
+            context("Yaan Sentinel · approved follow-up"),
         ]
     title, when = m["title"], nice_date(m["when"])
     blocks = [
@@ -135,7 +135,7 @@ def slack_notify(action: dict[str, Any], resolve: Resolve | None) -> tuple[str, 
 
 def slack_correction(action: dict[str, Any], resolve: Resolve | None) -> list[dict]:
     return [
-        section(f":pencil2: *Correction from Lore*\n{slack_lines(action['draft'], resolve)}"),
+        section(f":pencil2: *Correction from Yaan*\n{slack_lines(action['draft'], resolve)}"),
         context(FOOTER),
     ]
 
@@ -195,13 +195,13 @@ def alert_blocks(
                     "type": "button",
                     "style": "primary",
                     "text": {"type": "plain_text", "text": "Approve and send"},
-                    "action_id": "lore_approve",
+                    "action_id": "yaan_approve",
                     "value": alert["id"],
                     "confirm": {
                         "title": {"type": "plain_text", "text": "Send the follow-ups?"},
                         "text": {
                             "type": "mrkdwn",
-                            "text": "Lore posts its drafted comments and notifications to the "
+                            "text": "Yaan posts its drafted comments and notifications to the "
                             "tools that hold them, and records your approval as a decision.",
                         },
                         "confirm": {"type": "plain_text", "text": "Approve and send"},
@@ -211,14 +211,14 @@ def alert_blocks(
                 {
                     "type": "button",
                     "text": {"type": "plain_text", "text": "Dismiss"},
-                    "action_id": "lore_dismiss",
+                    "action_id": "yaan_dismiss",
                     "value": alert["id"],
                 },
             ],
         }
     )
     stamp = (alert.get("created_iso") or alert.get("ts_iso") or "")[:16].replace("T", " ")
-    blocks.append(context(f"Lore Sentinel · {words.lower()} · {stamp} UTC".strip()))
+    blocks.append(context(f"Yaan Sentinel · {words.lower()} · {stamp} UTC".strip()))
     return blocks
 
 
@@ -232,7 +232,7 @@ def md_link(artifact_id: str, resolve: Resolve | None) -> str:
 
 def markdown(action: dict[str, Any], resolve: Resolve | None) -> str:
     title = "Correction" if action["kind"] == "doc_fix" else "Follow-up"
-    out = [f"### Lore Sentinel · {title}", ""]
+    out = [f"### Yaan Sentinel · {title}", ""]
     for line in filter(str.strip, action["draft"].split("\n")):
         lead, quote, aid, tail = split(line)
         lead = REF.sub(lambda m: f"({md_link(m['id'], resolve)}{m['extra']})", lead)
@@ -279,7 +279,7 @@ def adf_inline(text: str, resolve: Resolve | None, strong: bool = False) -> list
 
 
 def jira_adf(action: dict[str, Any], resolve: Resolve | None) -> dict[str, Any]:
-    """A panel naming Lore, then one list item per draft line, each quote in italics with a
+    """A panel naming Yaan, then one list item per draft line, each quote in italics with a
     link to its source."""
     correction = action["kind"] == "doc_fix"
     items = []
@@ -311,7 +311,7 @@ def jira_adf(action: dict[str, Any], resolve: Resolve | None) -> dict[str, Any]:
                         "content": [
                             {
                                 "type": "text",
-                                "text": f"Lore Sentinel · {head}",
+                                "text": f"Yaan Sentinel · {head}",
                                 "marks": [{"type": "strong"}],
                             }
                         ],

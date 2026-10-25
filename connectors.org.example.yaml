@@ -1,4 +1,4 @@
-# connectors.yaml for your own tools (org mode, LORE_DATA_MODE=org). Copy it over the demo's:
+# connectors.yaml for your own tools (org mode, YAAN_DATA_MODE=org). Copy it over the demo's:
 #   cp connectors.org.example.yaml connectors.yaml
 # then run `yaan init`, which creates the product and the channels below in your graph.
 #

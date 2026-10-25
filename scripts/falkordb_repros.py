@@ -1,6 +1,6 @@
-"""Minimal repros of the four FalkorDB 6.x bugs Lore found (docs/falkordb-bugs.md, A18-A21).
+"""Minimal repros of the four FalkorDB 6.x bugs Yaan found (docs/falkordb-bugs.md, A18-A21).
 
-Run them against a throwaway server, never the Lore database (A19 crashes the server):
+Run them against a throwaway server, never the Yaan database (A19 crashes the server):
 
     docker run -d --rm --name fdb-test -p 127.0.0.1:6390:6379 falkordb/falkordb:6.0.2
     uv run --project backend python scripts/falkordb_repros.py 6390            # A19 last

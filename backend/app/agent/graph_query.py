@@ -6,7 +6,7 @@ against the schema card (docs/schema_card.md); four locks stand between it and t
    procedure outside a read-only list, bounded paths (at most 6 hops), a final LIMIT <= 200
    (added when missing);
 2. EXPLAIN as the reader, so a statement that doesn't parse never runs;
-3. GRAPH.RO_QUERY as `lore_reader`, an ACL user that can't send a write command (A12);
+3. GRAPH.RO_QUERY as `yaan_reader`, an ACL user that can't send a write command (A12);
 4. a 2 s timeout.
 A failure goes back to the model as an error it can fix, at most MAX_ATTEMPTS per answer.
 """

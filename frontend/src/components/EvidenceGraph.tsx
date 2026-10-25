@@ -15,7 +15,7 @@ type Props = {
 const PICKABLE = new Set(["issue", "pr"]);
 
 // Node shapes carry the type (so it reads without color); color separates people and
-// organizations from artifacts and from what Lore extracted (claims, issues, decisions).
+// organizations from artifacts and from what Yaan extracted (claims, issues, decisions).
 const SHAPE: Record<string, cytoscape.Css.NodeShape> = {
   person: "ellipse",
   product: "hexagon",

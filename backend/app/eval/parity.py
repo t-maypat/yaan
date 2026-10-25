@@ -61,14 +61,14 @@ def estimate(units: list[extract.Unit]) -> dict[str, Any]:
     s = get_settings()
     chars = sum(len(extract.SYSTEM) + len(u.render()) for u in units)
     tokens_in = int(chars / llm.CHARS_PER_TOKEN_WORST)
-    expected = llm.cost_usd(s.lore_extract_model, tokens_in, OUTPUT_TOKENS_EXPECTED * len(units))
-    worst = llm.cost_usd(s.lore_extract_model, tokens_in, 8000 * len(units))
+    expected = llm.cost_usd(s.yaan_extract_model, tokens_in, OUTPUT_TOKENS_EXPECTED * len(units))
+    worst = llm.cost_usd(s.yaan_extract_model, tokens_in, 8000 * len(units))
     return {
         "units": len(units),
         "input_tokens_worst": tokens_in,
         "expected_usd": round(expected, 4),
         "worst_usd": round(worst, 4),
-        "model": s.lore_extract_model,
+        "model": s.yaan_extract_model,
     }
 
 
@@ -128,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     live_events = [e for e in kept if e["artifact_id"] == new_message[e["unit_id"]]]
     print(f"spent ${stats['cost_usd']:.4f} on {stats['units']} units", file=sys.stderr)
     batch = extract.read_events(args.product)
-    out = compare(args.product, live_events, batch, args.graph or get_settings().lore_graph)
+    out = compare(args.product, live_events, batch, args.graph or get_settings().yaan_graph)
     path = get_settings().eval_dir / "results" / f"parity_{args.product}.json"
     path.write_text(
         json.dumps({"estimate": est, **out}, indent=1) + "\n", encoding="utf-8", newline="\n"

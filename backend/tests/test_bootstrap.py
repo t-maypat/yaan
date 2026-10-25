@@ -21,21 +21,21 @@ def runs(tmp_path, monkeypatch):
     weak = [{**r, "score": 0.25} if r.get("bucket") == "person" else r for r in weak]
     write(tmp_path / "runs" / "a", good)
     write(tmp_path / "runs" / "b", weak)
-    return {"lore": bootstrap.load("a"), "lore-search": bootstrap.load("b")}
+    return {"yaan": bootstrap.load("a"), "yaan-search": bootstrap.load("b")}
 
 
 def test_the_headline_is_recomputed_as_the_report_does(tmp_path, monkeypatch):
     r = runs(tmp_path, monkeypatch)
-    assert bootstrap.headline(r["lore"], sorted(r["lore"])) == (90.0, 80.0)  # mean(80, 100)
-    assert "reason" not in r["lore"]["u0"]  # only the declined flag is read
+    assert bootstrap.headline(r["yaan"], sorted(r["yaan"])) == (90.0, 80.0)  # mean(80, 100)
+    assert "reason" not in r["yaan"]["u0"]  # only the declined flag is read
 
 
 def test_a_paired_difference_has_an_interval_around_it(tmp_path, monkeypatch):
     out = bootstrap.summary(runs(tmp_path, monkeypatch), n=500)
-    assert out["systems"]["lore"]["avg"] == 90.0 and out["systems"]["lore-search"]["avg"] == 22.5
-    lo, hi = out["paired_vs_lore"]["lore-search"]["avg_diff_95"]
+    assert out["systems"]["yaan"]["avg"] == 90.0 and out["systems"]["yaan-search"]["avg"] == 22.5
+    lo, hi = out["paired_vs_yaan"]["yaan-search"]["avg_diff_95"]
     assert lo <= 67.5 <= hi  # identical scores per category: the difference doesn't move
-    lo, hi = out["systems"]["lore"]["unanswerable_95"]
+    lo, hi = out["systems"]["yaan"]["unanswerable_95"]
     assert lo < 80.0 < hi
 
 

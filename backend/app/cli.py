@@ -1,4 +1,4 @@
-"""Yaan command line: `yaan <command>` (`lore` still works) or `python -m app.cli <command>`.
+"""Yaan command line: `yaan <command>` or `python -m app.cli <command>`.
 
 The Makefile wraps these commands for Linux/macOS; on Windows call them directly.
 A command that isn't built yet exits with status 2 and names the phase that builds it.
@@ -17,14 +17,14 @@ def cmd_schema(args: argparse.Namespace) -> int:
     from app import schema
     from app.config import get_settings
 
-    graph = args.graph or get_settings().lore_graph
+    graph = args.graph or get_settings().yaan_graph
     for spec, outcome in schema.apply(graph):
         print(f"  {outcome:<8} {spec}")
     found = schema.verify(graph)
     for problem in found:
         print(f"  ! {problem}", file=sys.stderr)
     if found:
-        print(f"lore schema: graph {graph!r} does not match {schema.SCHEMA_FILE}", file=sys.stderr)
+        print(f"yaan schema: graph {graph!r} does not match {schema.SCHEMA_FILE}", file=sys.stderr)
         return 1
     print(f"graph {graph!r}: all {len(schema.declared())} indexes present and operational")
     return 0
@@ -39,8 +39,8 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     if not org.active():
         print(
-            "lore init sets up a graph for your own tools: set LORE_DATA_MODE=org in .env first "
-            "(the demo graph comes from `lore seed`)",
+            "yaan init sets up a graph for your own tools: set YAAN_DATA_MODE=org in .env first "
+            "(the demo graph comes from `yaan seed`)",
             file=sys.stderr,
         )
         return 1
@@ -55,7 +55,7 @@ def cmd_init(args: argparse.Namespace) -> int:
             return 1
         made = runner.prepare(graph)
     except (base.ConnectorError, org.OrgError, live.LiveError) as e:
-        print(f"lore init: {e}", file=sys.stderr)
+        print(f"yaan init: {e}", file=sys.stderr)
         return 1
     print(
         f"graph {graph!r} ready: product {base.maps().product!r}, {made['channels']} channels, "
@@ -74,7 +74,7 @@ def cmd_people(args: argparse.Namespace) -> int:
     from app.sentinel import live
 
     if not org.active():
-        print("yaan people: org mode only (LORE_DATA_MODE=org)", file=sys.stderr)
+        print("yaan people: org mode only (YAAN_DATA_MODE=org)", file=sys.stderr)
         return 1
     graph = live.demo_graph(args.graph)
     found = org.unlisted(graph)
@@ -97,13 +97,13 @@ def cmd_token(args: argparse.Namespace) -> int:
             print(f"{t['id']}  {t['person']}  {label}  expires {t['expires']}  used {used}")
         return 0
     if not args.person:
-        print("lore token: name the person (people.yaml name, email or id)", file=sys.stderr)
+        print("yaan token: name the person (people.yaml name, email or id)", file=sys.stderr)
         return 1
     want = args.person.strip().casefold()
     try:
         people = list(org.roster().values())
     except org.OrgError as e:
-        print(f"lore token: {e}", file=sys.stderr)
+        print(f"yaan token: {e}", file=sys.stderr)
         return 1
     found = [
         p
@@ -112,7 +112,7 @@ def cmd_token(args: argparse.Namespace) -> int:
     ]
     if len(found) != 1:
         what = "nobody" if not found else f"{len(found)} people"
-        print(f"lore token: {what} in people.yaml matches {args.person!r}", file=sys.stderr)
+        print(f"yaan token: {what} in people.yaml matches {args.person!r}", file=sys.stderr)
         return 1
     person = found[0]
     if args.action == "issue":
@@ -122,7 +122,7 @@ def cmd_token(args: argparse.Namespace) -> int:
         print(f"it expires in {args.days} days (--days)", file=sys.stderr)
         if auth.mode() != "token":
             print(
-                f"note: LORE_AUTH is {auth.mode()!r}; tokens are read in token mode",
+                f"note: YAAN_AUTH is {auth.mode()!r}; tokens are read in token mode",
                 file=sys.stderr,
             )
     elif args.id:
@@ -134,28 +134,28 @@ def cmd_token(args: argparse.Namespace) -> int:
 
 
 def cmd_belief(args: argparse.Namespace) -> int:
-    """What Lore believed about an issue or PR at a moment (D101): the fold replayed over the
+    """What Yaan believed about an issue or PR at a moment (D101): the fold replayed over the
     events it had learned by then. Read-only."""
     from app import db
     from app.agent.tools import parse_as_of
     from app.config import get_settings
     from app.ingest import fold
 
-    graph = args.graph or get_settings().lore_graph
+    graph = args.graph or get_settings().yaan_graph
     known_at = parse_as_of(args.at) if args.at else None
     rows = db.run("subject_product", {"id": args.subject}, graph=graph).rows
     if not rows or not rows[0]["product_id"]:
         print(
-            f"lore belief: no issue or pull request {args.subject!r} in {graph!r}", file=sys.stderr
+            f"yaan belief: no issue or pull request {args.subject!r} in {graph!r}", file=sys.stderr
         )
         return 1
     out = fold.belief(args.subject, rows[0]["product_id"], graph, known_at)
     when = args.at or "now"
     if not out["chains"]:
-        print(f"{args.subject}: Lore knew nothing about it at {when}")
+        print(f"{args.subject}: Yaan knew nothing about it at {when}")
         return 0
     for facet, chain in out["chains"].items():
-        print(f"{args.subject} {facet}, as Lore knew it at {when}:")
+        print(f"{args.subject} {facet}, as Yaan knew it at {when}:")
         for d in chain:
             print(f"  {d['value']:<10} {d['status']:<10} {d['statement']}")
     return 0
@@ -219,9 +219,9 @@ INGEST_STAGES = (
 
 
 def derived_stages(args: argparse.Namespace, graph: str, report: dict) -> None:
-    """`lore ingest`'s fold, derive and sentinel stages: the derived layer (D101)."""
+    """`yaan ingest`'s fold, derive and sentinel stages: the derived layer (D101)."""
     if "fold" in args.stages:
-        # every product with extracted events (`lore extract`) becomes graph events; then each
+        # every product with extracted events (`yaan extract`) becomes graph events; then each
         # product with events is folded from the graph, writing only what changed (D101)
         from app.ingest import events as event_store
         from app.ingest import extract, fold
@@ -272,18 +272,18 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     from app.ingest import chunk_embed, health, linker, structural
     from app.ingest.normalize import normalized_dir, read_jsonl
 
-    graph = args.graph or get_settings().lore_graph
+    graph = args.graph or get_settings().yaan_graph
     products = args.products or read_split()["dev"]
     schema.apply(graph)  # indexes before any MERGE (load order matters, decisions.md)
     problems = schema.verify(graph)
     if problems:
-        print(f"lore ingest: schema problems on {graph!r}: {problems}", file=sys.stderr)
+        print(f"yaan ingest: schema problems on {graph!r}: {problems}", file=sys.stderr)
         return 1
     artifacts = {}
     for name in products:
         path = normalized_dir(name) / "artifacts.jsonl"
         if not path.is_file():
-            print(f"lore ingest: {path} is missing: run `lore normalize`", file=sys.stderr)
+            print(f"yaan ingest: {path} is missing: run `yaan normalize`", file=sys.stderr)
             return 1
         artifacts[name] = read_jsonl(path)
     report = {}
@@ -380,7 +380,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
                 question, product_id=args.product, graph=args.graph, viewer_id=args.viewer
             )
     except llm.LLMError as e:
-        print(f"lore ask: {e}", file=sys.stderr)
+        print(f"yaan ask: {e}", file=sys.stderr)
         return 1
     print(out["answer_markdown"], end="\n\n")
     for c in out["citations"]:
@@ -418,13 +418,13 @@ def cmd_llm_check(args: argparse.Namespace) -> int:
             use_cache=False,
         )
     except llm.LLMError as e:
-        print(f"lore llm-check: {e}", file=sys.stderr)
+        print(f"yaan llm-check: {e}", file=sys.stderr)
         return 1
     except Exception as e:  # auth, credit and network errors from the SDK, shown as they are
-        print(f"lore llm-check: {type(e).__name__}: {e}", file=sys.stderr)
+        print(f"yaan llm-check: {type(e).__name__}: {e}", file=sys.stderr)
         return 1
     print(f"{out.model} answered {out.text.strip()!r} for ${out.cost_usd:.6f}")
-    print(f"today's spend ${llm.spent_today():.4f} of the ${s.lore_daily_spend_cap_usd:.2f} cap")
+    print(f"today's spend ${llm.spent_today():.4f} of the ${s.yaan_daily_spend_cap_usd:.2f} cap")
     return 0
 
 
@@ -446,12 +446,12 @@ def cmd_eval(args: argparse.Namespace) -> int:
 
             if not args.heldout or args.limit or args.products or args.ids:
                 print(
-                    "lore eval: --split test is the single held-out run (13.3): pass --heldout, "
+                    "yaan eval: --split test is the single held-out run (13.3): pass --heldout, "
                     "and no --limit, --products or --ids",
                     file=sys.stderr,
                 )
                 return 2
-            with split_guard.heldout_run(args.system, note="lore eval --split test (13.3)"):
+            with split_guard.heldout_run(args.system, note="yaan eval --split test (13.3)"):
                 run = run_herb.run(args.system, "test", workers=args.workers, progress=say)
         else:
             ids = Path(args.ids).read_text(encoding="utf-8").split() if args.ids else None
@@ -467,7 +467,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
             print(f"\nanswers: {run}", file=sys.stderr)
         results = report.score_run(run, workers=args.workers, variant=args.variant)
     except (llm.LLMError, ValueError) as e:
-        print(f"\nlore eval: {e}", file=sys.stderr)
+        print(f"\nyaan eval: {e}", file=sys.stderr)
         return 1
     r = json.loads(results.read_text(encoding="utf-8"))
     print(f"results: {results}")
@@ -502,7 +502,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
         f"${r['cost_usd']['judge_this_run']} judge | today ${llm.spent_today():.4f}"
     )
     if r["errors"]:
-        print(f"lore eval: {r['errors']} answers failed; see answers.jsonl", file=sys.stderr)
+        print(f"yaan eval: {r['errors']} answers failed; see answers.jsonl", file=sys.stderr)
     if results.name != "results.json":  # a full run: refresh the table
         print(f"table: {report.write_table()}")
     return 0
@@ -520,7 +520,7 @@ def cmd_health(args: argparse.Namespace) -> int:
     from app.config import get_settings
     from app.ingest import health
 
-    print(health.render(health.report(args.graph or get_settings().lore_graph)))
+    print(health.render(health.report(args.graph or get_settings().yaan_graph)))
     return 0
 
 
@@ -529,14 +529,14 @@ def cmd_demo(args: argparse.Namespace) -> int:
     from app.sentinel import live
 
     if org.active():
-        print("lore demo: the HERB demo is off in org mode (LORE_DATA_MODE=org)", file=sys.stderr)
+        print("yaan demo: the HERB demo is off in org mode (YAAN_DATA_MODE=org)", file=sys.stderr)
         return 1
 
     if args.action == "reset":
         print(json.dumps(live.reset_demo(args.graph)))
         return 0
     if not args.file:
-        print("lore demo inject: name an exports/inject/*.json file", file=sys.stderr)
+        print("yaan demo inject: name an exports/inject/*.json file", file=sys.stderr)
         return 1
     msg = json.loads(open(args.file, encoding="utf-8").read())
     out = live.ingest(msg, args.graph)
@@ -557,7 +557,7 @@ def cmd_bench_experts(args: argparse.Namespace) -> int:
     result = experts.bench(args.graph)
     for r in result["rows"]:
         area = r["area"] or "-"
-        print(f"{r['component'][:40]:<42}{area:<42}lore {r['lore']}  naive {r['naive']}")
+        print(f"{r['component'][:40]:<42}{area:<42}yaan {r['yaan']}  naive {r['naive']}")
     print()
     print(f"{result['questions']} questions; mean {json.dumps(result['mean'])}")
     print(f"-> {experts.write(result)}")
@@ -576,7 +576,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     try:
         out = export.export(graph, Path(args.out), embeddings=args.with_embeddings)
     except (export.ExportError, OSError) as e:
-        print(f"lore export: {e}", file=sys.stderr)
+        print(f"yaan export: {e}", file=sys.stderr)
         return 1
     print(json.dumps(out, indent=1))
     return 0
@@ -591,7 +591,7 @@ def cmd_import(args: argparse.Namespace) -> int:
     try:
         out = export.load(Path(args.path), args.graph)
     except (export.ExportError, OSError) as e:
-        print(f"lore import: {e}", file=sys.stderr)
+        print(f"yaan import: {e}", file=sys.stderr)
         return 1
     print(json.dumps(out, indent=1))
     return 0
@@ -605,7 +605,7 @@ def cmd_snapshot(args: argparse.Namespace) -> int:
     try:
         out = snapshot.snapshot(tuple(args.graphs) if args.graphs else None)
     except (snapshot.SnapshotError, OSError) as e:
-        print(f"lore snapshot: {e}", file=sys.stderr)
+        print(f"yaan snapshot: {e}", file=sys.stderr)
         return 1
     print(json.dumps(out, indent=1))
     return 0
@@ -675,8 +675,8 @@ def cmd_seed(args: argparse.Namespace) -> int:
 
     if org.active():
         print(
-            "lore seed loads the HERB demo, which is off in org mode: set LORE_DATA_MODE=demo "
-            "to try it, or run `lore init` for your own graph",
+            "yaan seed loads the HERB demo, which is off in org mode: set YAAN_DATA_MODE=demo "
+            "to try it, or run `yaan init` for your own graph",
             file=sys.stderr,
         )
         return 1
@@ -685,15 +685,15 @@ def cmd_seed(args: argparse.Namespace) -> int:
             args.source or snapshot.SNAPSHOT, force=args.force, unpinned=args.unpinned
         )
     except (snapshot.SnapshotError, OSError) as e:
-        print(f"lore seed: {e}", file=sys.stderr)
+        print(f"yaan seed: {e}", file=sys.stderr)
         return 1
     print(json.dumps(out, indent=1, default=str))
     return 0
 
 
 def cmd_mcp(args: argparse.Namespace) -> int:
-    """Serve Lore's tools over MCP on stdin/stdout, e.g. for Claude Code:
-    claude mcp add lore -- uv run --project backend lore mcp"""
+    """Serve Yaan's tools over MCP on stdin/stdout, e.g. for Claude Code:
+    claude mcp add yaan -- uv run --project backend yaan mcp"""
     import anyio
 
     from app import mcp_server
@@ -703,7 +703,7 @@ def cmd_mcp(args: argparse.Namespace) -> int:
 
 
 def seed_sandboxes(act: str, connectors: list) -> dict:
-    """`lore connectors seed --act setup|regression` with each connector's own client."""
+    """`yaan connectors seed --act setup|regression` with each connector's own client."""
     from app.connectors import base, seed
 
     by = {c.name: c for c in connectors}
@@ -714,7 +714,7 @@ def seed_sandboxes(act: str, connectors: list) -> dict:
         channel = next(iter(slack.conf.get("channels") or {}), None)
         cid = slack.channel_ids().get(channel or "")
         if not cid:
-            raise base.ConnectorError(f"the bot can't see #{channel}: /invite @lore there")
+            raise base.ConnectorError(f"the bot can't see #{channel}: /invite @yaan there")
         return {"slack_ts": seed.regression(slack.client, cid)}
     missing = [n for n in ("jira", "github") if n not in by]
     if missing:
@@ -743,7 +743,7 @@ def cmd_connectors(args: argparse.Namespace) -> int:
             return 0
         connectors = runner.configured(graph)
         if args.action == "seed" and not base.is_demo():
-            print("lore connectors seed writes the demo story: off in org mode", file=sys.stderr)
+            print("yaan connectors seed writes the demo story: off in org mode", file=sys.stderr)
             return 1
         if args.action == "seed":
             print(json.dumps(seed_sandboxes(args.act, connectors), indent=1))
@@ -788,7 +788,7 @@ def cmd_connectors(args: argparse.Namespace) -> int:
         print(json.dumps(runner.sync(connectors, graph, sweep_days=days), indent=1, default=str))
         return 0
     except (base.ConnectorError, live.LiveError) as e:
-        print(f"lore connectors: {e}", file=sys.stderr)
+        print(f"yaan connectors: {e}", file=sys.stderr)
         return 1
 
 
@@ -873,7 +873,7 @@ def cmd_retention(args: argparse.Namespace) -> int:
     from app.config import get_settings
 
     try:
-        graph = args.graph or get_settings().lore_org_graph
+        graph = args.graph or get_settings().yaan_org_graph
         print(json.dumps(retention.run(graph, apply=args.yes), indent=1))
         return 0
     except (retention.RetentionError, db.LockBusy) as e:
@@ -902,7 +902,7 @@ COMMANDS = {
     "erase": ("erase a person: what they wrote, their mentions, their account (D125)", cmd_erase),
     "retention": ("org mode: forget what is past each tool's retention (22.5)", cmd_retention),
     "audit": ("who was shown what: the access audit log, newest first (22.5)", cmd_audit),
-    "belief": ("what Lore believed about an issue or PR at a moment (D101)", cmd_belief),
+    "belief": ("what Yaan believed about an issue or PR at a moment (D101)", cmd_belief),
     "fetch-herb": ("download the HERB dataset (pinned revision) into data/herb", cmd_fetch_herb),
     "rank-dev": ("rank products by change signals to pick the dev products (D017)", cmd_rank_dev),
     "normalize": ("HERB products -> data/normalized/<product>/artifacts.jsonl (S1)", cmd_normalize),
@@ -937,28 +937,28 @@ COMMANDS = {
 
 # command -> [(flag, argparse options)]
 OPTIONS: dict[str, list[tuple[str, dict]]] = {
-    "schema": [("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"})],
-    "init": [("--graph", {"help": "graph name (default: LORE_ORG_GRAPH, e.g. yaan_org)"})],
+    "schema": [("--graph", {"help": "graph name (default: YAAN_GRAPH, e.g. lore_herb)"})],
+    "init": [("--graph", {"help": "graph name (default: YAAN_ORG_GRAPH, e.g. yaan_org)"})],
     "belief": [
         ("subject", {"help": "an issue (iss:...) or PR (pr:...) id"}),
-        ("--at", {"help": "ISO date or datetime (UTC): what Lore knew then; default now"}),
-        ("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"}),
+        ("--at", {"help": "ISO date or datetime (UTC): what Yaan knew then; default now"}),
+        ("--graph", {"help": "graph name (default: YAAN_GRAPH, e.g. lore_herb)"}),
     ],
     "forget": [
         ("ids", {"nargs": "+", "help": "item ids, e.g. msg:slack-C123-1730000000.000100"}),
         ("--reason", {"default": "removed by an admin", "help": "kept on each tombstone"}),
         ("--yes", {"action": "store_true", "help": "do it (default: a dry run)"}),
-        ("--graph", {"help": "default: LORE_ORG_GRAPH in org mode, else LORE_DEMO_GRAPH"}),
+        ("--graph", {"help": "default: YAAN_ORG_GRAPH in org mode, else YAAN_DEMO_GRAPH"}),
     ],
     "erase": [
         ("person", {"help": "an eid_ id, a name or an email (quote a full name)"}),
         ("--yes", {"action": "store_true", "help": "do it (default: a dry run)"}),
-        ("--graph", {"help": "default: LORE_ORG_GRAPH in org mode, else LORE_DEMO_GRAPH"}),
+        ("--graph", {"help": "default: YAAN_ORG_GRAPH in org mode, else YAAN_DEMO_GRAPH"}),
     ],
-    "people": [("--graph", {"help": "default: LORE_ORG_GRAPH"})],
+    "people": [("--graph", {"help": "default: YAAN_ORG_GRAPH"})],
     "retention": [
         ("--yes", {"action": "store_true", "help": "forget them (default: a dry run)"}),
-        ("--graph", {"help": "default: LORE_ORG_GRAPH"}),
+        ("--graph", {"help": "default: YAAN_ORG_GRAPH"}),
     ],
     "audit": [
         ("--person", {"help": "only what this person (an eid_ id) was shown"}),
@@ -974,7 +974,7 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ),
         ("--label", {"help": "issue: what the token is for, e.g. 'laptop' or 'claude code'"}),
         ("--days", {"type": int, "default": 90, "help": "issue: days until it expires"}),
-        ("--id", {"help": "revoke: only this token (an id from `lore token list`)"}),
+        ("--id", {"help": "revoke: only this token (an id from `yaan token list`)"}),
     ],
     "normalize": [
         ("--products", {"nargs": "+", "help": "product names (default: the dev products)"})
@@ -982,39 +982,39 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
     "ingest": [
         ("--products", {"nargs": "+", "help": "product names (default: the dev products)"}),
         ("--stages", {"nargs": "+", "choices": INGEST_STAGES, "default": list(INGEST_STAGES)}),
-        ("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"}),
+        ("--graph", {"help": "graph name (default: YAAN_GRAPH, e.g. lore_herb)"}),
     ],
     "extract": [
         ("--products", {"nargs": "+", "help": "product names (default: the dev products)"}),
         ("--sample", {"type": int, "help": "only N units spread over the products -> _sample"}),
         ("--workers", {"type": int, "default": 6, "help": "parallel LLM calls"}),
     ],
-    "bench-experts": [("--graph", {"help": "graph name (default: LORE_GRAPH)"})],
+    "bench-experts": [("--graph", {"help": "graph name (default: YAAN_GRAPH)"})],
     "demo": [
         ("action", {"choices": ("reset", "inject")}),
         ("file", {"nargs": "?", "help": "inject: an exports/inject/*.json message"}),
-        ("--graph", {"help": "graph name (default: LORE_DEMO_GRAPH, e.g. lore_demo)"}),
+        ("--graph", {"help": "graph name (default: YAAN_DEMO_GRAPH, e.g. lore_demo)"}),
     ],
-    "health": [("--graph", {"help": "graph name (default: LORE_GRAPH, e.g. lore_herb)"})],
+    "health": [("--graph", {"help": "graph name (default: YAAN_GRAPH, e.g. lore_herb)"})],
     "search": [
         ("query", {"nargs": "+", "help": "free text"}),
         ("--product", {"help": "product id, e.g. VizForce"}),
         ("--k", {"type": int, "default": 10}),
         ("--mode", {"choices": ("hybrid", "fulltext", "vector"), "default": "hybrid"}),
-        ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
+        ("--graph", {"help": "graph name (default: YAAN_GRAPH)"}),
     ],
     "bench-search": [
         ("--k", {"type": int, "default": 10}),
-        ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
+        ("--graph", {"help": "graph name (default: YAAN_GRAPH)"}),
     ],
     "ask": [
         ("question", {"nargs": "+", "help": "free text"}),
         ("--baseline", {"action": "store_true", "help": "hybrid RAG, no graph tools"}),
         ("--product", {"help": "product id, e.g. VizForce"}),
-        ("--graph", {"help": "graph name (default: LORE_GRAPH)"}),
+        ("--graph", {"help": "graph name (default: YAAN_GRAPH)"}),
         ("--viewer", {"help": "answer as this employee (eid_...): hidden sources left out"}),
     ],
-    "snapshot": [("--graphs", {"nargs": "+", "help": "graphs to save (default: LORE_GRAPH)"})],
+    "snapshot": [("--graphs", {"nargs": "+", "help": "graphs to save (default: YAAN_GRAPH)"})],
     "export": [
         ("--out", {"required": True, "help": "file to write: .jsonl, or .jsonl.gz"}),
         ("--graph", {"help": "default: the graph the API serves"}),
@@ -1094,14 +1094,14 @@ OPTIONS: dict[str, list[tuple[str, dict]]] = {
         ("--days", {"type": float, "default": 30, "help": "backfill: how far back"}),
         ("--yes", {"action": "store_true", "help": "backfill: ingest it (spends on the model)"}),
         ("--act", {"choices": ("setup", "regression"), "default": "setup", "help": "seed act"}),
-        ("--graph", {"help": "default: LORE_DEMO_GRAPH, or LORE_ORG_GRAPH in org mode"}),
+        ("--graph", {"help": "default: YAAN_DEMO_GRAPH, or YAAN_ORG_GRAPH in org mode"}),
         ("--every", {"type": float, "default": 30, "help": "run: seconds between polls"}),
     ],
     "eval": [
         (
             "--system",
             {
-                "choices": ("baseline", "baseline-meta", "lore", "lore-search"),
+                "choices": ("baseline", "baseline-meta", "yaan", "yaan-search"),
                 "default": "baseline",
             },
         ),
@@ -1149,7 +1149,7 @@ def main(argv: list[str] | None = None) -> int:
         return COMMANDS[args.command][1](args)
     phase, _ = PENDING[args.command]
     print(
-        f"lore {args.command}: not built yet; it arrives in {phase} (docs/PLAN.md).",
+        f"yaan {args.command}: not built yet; it arrives in {phase} (docs/PLAN.md).",
         file=sys.stderr,
     )
     return 2

@@ -80,7 +80,7 @@ def test_a09_label_alternation_is_unsupported(graph):
 
 
 def test_a10_regex_works_on_6_0(graph):
-    # 4.x docs said unsupported; 6.0.1 supports it. Lore still avoids it (lint ban, D021).
+    # 4.x docs said unsupported; 6.0.1 supports it. Yaan still avoids it (lint ban, D021).
     assert read(graph, "MATCH (p:Person) WHERE p.name =~ 'A.*' RETURN p.name LIMIT 5") == [["Ada"]]
 
 
@@ -97,7 +97,7 @@ def load_chunks(graph, chunks, embed=True):
 
 
 def test_a03_vector_score_is_a_cosine_distance_lower_is_closer(empty_graph):
-    dim = get_settings().lore_embed_dim
+    dim = get_settings().yaan_embed_dim
     load_chunks(
         empty_graph,
         [
@@ -119,7 +119,7 @@ def test_a03_vector_score_is_a_cosine_distance_lower_is_closer(empty_graph):
 
 
 def test_a15_vectors_must_be_written_with_vecf32(empty_graph):
-    dim = get_settings().lore_embed_dim
+    dim = get_settings().yaan_embed_dim
     load_chunks(empty_graph, [{"id": "vec", "text": "", "v": unit(dim, (0, 1.0))}])
     load_chunks(empty_graph, [{"id": "list", "text": "", "v": unit(dim, (0, 1.0))}], embed=False)
     query = (
@@ -328,7 +328,7 @@ def test_a19_aggregate_by_node_then_read_properties(empty_graph):
         CREATE (:A {id: 'x'}), (:A {id: 'y', m1: 1})
         MATCH (a:A {id: 'x'}) RETURN a.id, a.m1, count(a)
     i.e. an aggregate grouped by a property that this node lacks but others have. The forms
-    Lore uses instead (lint rule A19 in test_query_lint.py) are pinned here."""
+    Yaan uses instead (lint rule A19 in test_query_lint.py) are pinned here."""
     writer(empty_graph).query("CREATE (:A {id: 'x'}), (:A {id: 'y', m1: 1, m2: 2})")
     by_node = "MATCH (a:A {id: 'x'}) WITH a, count(a) AS n RETURN a.id, a.m1, a.m2, n LIMIT 1"
     assert read(empty_graph, by_node) == [["x", None, None, 1]]
@@ -386,7 +386,7 @@ def test_a13_memory_per_graph(admin, graph):
 def test_a14_python_client_timeout_and_read_only_path(graph):
     with pytest.raises(ResponseError, match="Query timed out"):
         reader(graph).ro_query("UNWIND range(1, 300000000) AS i RETURN count(i)", timeout=100)
-    from falkordb.asyncio import FalkorDB as AsyncFalkorDB  # exists; Lore uses the sync client
+    from falkordb.asyncio import FalkorDB as AsyncFalkorDB  # exists; Yaan uses the sync client
 
     assert AsyncFalkorDB
 

@@ -75,7 +75,7 @@ MAPS = Maps(
 def team(tmp_path, monkeypatch, empty_graph):
     people = tmp_path / "people.yaml"
     people.write_text(PEOPLE, encoding="utf-8")
-    monkeypatch.setenv("LORE_DATA_MODE", "org")
+    monkeypatch.setenv("YAAN_DATA_MODE", "org")
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(org, "PEOPLE_FILE", people)
     caches = (get_settings, org.roster, org.accounts, org.source_audiences, org.unknown_speakers)

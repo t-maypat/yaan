@@ -30,7 +30,7 @@ def listed(org_mode):  # noqa: F811
     for cached in (org.roster, org.accounts, org.emails, org.email_domains):
         cached.cache_clear()
     people = {p["name"]: eid for eid, p in org.roster().items()}
-    return get_settings().lore_org_graph, people["Priya Shah"], people["Ken Ito"]
+    return get_settings().yaan_org_graph, people["Priya Shah"], people["Ken Ito"]
 
 
 def client(base: str, routes: dict) -> httpx.Client:

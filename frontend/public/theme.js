@@ -3,6 +3,6 @@
 // app's own origin only (D111).
 (function () {
   var t = null;
-  try { t = new URLSearchParams(location.search).get("theme") || localStorage.getItem("lore-theme"); } catch (e) {}
+  try { t = new URLSearchParams(location.search).get("theme") || localStorage.getItem("yaan-theme") || localStorage.getItem("lore-theme"); } catch (e) {}
   document.documentElement.dataset.theme = t === "dark" ? "dark" : "light";
 })();

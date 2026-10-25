@@ -28,7 +28,7 @@ from falkordb import FalkorDB  # noqa: E402
 
 from app import db, schema  # noqa: E402
 
-GRAPH, PRODUCT, OTHER = "lore_size", "SizeForce", "SideForce"
+GRAPH, PRODUCT, OTHER = "yaan_size", "SizeForce", "SideForce"
 DIM, CHUNKS_PER_ARTIFACT, TEXT_CHARS = 384, 1.28, 400
 WRITE = """
 UNWIND $rows AS r

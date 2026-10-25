@@ -8,7 +8,7 @@ flowchart LR
     N1["Notion page<br/>+ comments"]:::ext
   end
   S1 ~~~ G1 ~~~ J1 ~~~ N1
-  IN --> C["Connector<br/>fetch since cursor →<br/>normalize to Lore's artifacts<br/>(Jira status = event, no LLM)"]:::code
+  IN --> C["Connector<br/>fetch since cursor →<br/>normalize to Yaan's artifacts<br/>(Jira status = event, no LLM)"]:::code
   C --> L["Live path S1–S8<br/>structure, chunks, links,<br/>extraction, fold"]:::code
   L --> DB[("FalkorDB<br/>lore_demo")]:::store
   DB --> SE{"Sentinel<br/>rule table"}:::guard

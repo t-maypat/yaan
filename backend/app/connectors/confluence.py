@@ -47,7 +47,7 @@ def storage_text(value: str) -> str:
 def storage_comment(action: dict[str, Any], resolve: render.Resolve | None) -> str:
     """A draft as storage format: a heading, then a paragraph per line, quotes in blockquotes."""
     head = "Correction" if action["kind"] == "doc_fix" else "Follow-up"
-    out = [f"<p><strong>Lore Sentinel · {head}</strong></p>"]
+    out = [f"<p><strong>Yaan Sentinel · {head}</strong></p>"]
 
     def label(artifact_id: str) -> str:
         hit = resolve(artifact_id) if resolve else None

@@ -1,11 +1,11 @@
 # frontend/
 
-Lore's web UI (Phase 12): Vite + React 19 + TypeScript + Tailwind 4 + Cytoscape.js.
+Yaan's web UI (Phase 12): Vite + React 19 + TypeScript + Tailwind 4 + Cytoscape.js.
 
 ## Run it (from the repo root)
 1. API: `uv run --project backend uvicorn app.main:app --reload` (port 8000; FalkorDB up).
 2. Once: `npm --prefix frontend install`.
-3. `npm --prefix frontend run dev` → http://localhost:5173. Vite proxies the API paths to :8000 (set `LORE_API` to change it).
+3. `npm --prefix frontend run dev` → http://localhost:5173. Vite proxies the API paths to :8000 (set `YAAN_API` to change it).
 4. Type check + production build: `npm --prefix frontend run build` → `frontend/dist/`.
 
 ## What's here

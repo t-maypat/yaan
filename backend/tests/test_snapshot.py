@@ -1,4 +1,4 @@
-"""`lore snapshot` / `lore seed` (15.2): a graph and the live-path data round-trip through one
+"""`yaan snapshot` / `yaan seed` (15.2): a graph and the live-path data round-trip through one
 file, checked by sha256, counts and indexes. On the real server, as the admin user."""
 
 import json

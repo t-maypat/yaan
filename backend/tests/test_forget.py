@@ -60,12 +60,12 @@ def test_org_mode_caches_expire_and_the_demo_keeps_its_replay(monkeypatch):
     from app.config import get_settings
 
     assert llm.cache_expiry() is None  # the demo: the eval replays from the cache
-    monkeypatch.setenv("LORE_DATA_MODE", "org")
+    monkeypatch.setenv("YAAN_DATA_MODE", "org")
     get_settings.cache_clear()
     try:
         assert llm.cache_expiry() == 30 * 86_400
     finally:
-        monkeypatch.delenv("LORE_DATA_MODE")
+        monkeypatch.delenv("YAAN_DATA_MODE")
         get_settings.cache_clear()
 
 

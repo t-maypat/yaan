@@ -29,8 +29,8 @@ RESAMPLES = 10_000
 SEED = 17
 # (label, dev run, held-out run): the runs the report's tables come from
 SYSTEMS = (
-    ("lore", "20261017T1729Z_lore_dev", "20261018T1301Z_lore_test"),
-    ("lore-search", "20261017T1735Z_lore-search_dev", "20261018T1321Z_lore-search_test"),
+    ("yaan", "20261017T1729Z_lore_dev", "20261018T1301Z_lore_test"),
+    ("yaan-search", "20261017T1735Z_lore-search_dev", "20261018T1321Z_lore-search_test"),
     ("baseline", "20261017T1744Z_baseline_dev", "20261018T1315Z_baseline_test"),
 )
 
@@ -83,7 +83,7 @@ def interval(values: list[float]) -> list[float]:
 
 
 def summary(runs: dict[str, dict[str, dict]], n: int = RESAMPLES, seed: int = SEED) -> dict:
-    """Point estimates and 95% intervals per system, and paired differences against `lore`."""
+    """Point estimates and 95% intervals per system, and paired differences against `yaan`."""
     names = list(runs)
     shared = set.intersection(*(set(r) for r in runs.values()))
     groups = strata({i: runs[names[0]][i] for i in shared})
@@ -100,16 +100,16 @@ def summary(runs: dict[str, dict[str, dict]], n: int = RESAMPLES, seed: int = SE
             "unanswerable": round(point[s][1], 1),
             "unanswerable_95": interval([d[1] for d in draws[s]]),
         }
-    if "lore" in names:
-        out["paired_vs_lore"] = {
+    if "yaan" in names:
+        out["paired_vs_yaan"] = {
             s: {
-                "avg_diff": round(point["lore"][0] - point[s][0], 1),
+                "avg_diff": round(point["yaan"][0] - point[s][0], 1),
                 "avg_diff_95": interval(
-                    [a[0] - b[0] for a, b in zip(draws["lore"], draws[s], strict=True)]
+                    [a[0] - b[0] for a, b in zip(draws["yaan"], draws[s], strict=True)]
                 ),
             }
             for s in names
-            if s != "lore"
+            if s != "yaan"
         }
     return out
 

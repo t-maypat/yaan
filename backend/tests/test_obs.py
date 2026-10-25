@@ -106,7 +106,7 @@ def test_metrics_need_an_admin_or_the_scrape_token(signed, quiet, monkeypatch): 
     assert ken.get("/metrics").status_code == 403
     admin = TestClient(main.app, headers={"Authorization": f"Bearer {auth.issue(priya)}"})
     assert admin.get("/metrics").status_code == 200
-    monkeypatch.setenv("LORE_METRICS_TOKEN", "scrape-secret")
+    monkeypatch.setenv("YAAN_METRICS_TOKEN", "scrape-secret")
     get_settings.cache_clear()
     scraper = TestClient(main.app, headers={"Authorization": "Bearer scrape-secret"})
     assert scraper.get("/metrics").status_code == 200

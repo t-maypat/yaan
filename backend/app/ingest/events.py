@@ -1,13 +1,13 @@
 """Verified events in the graph: the derived layer's system of record (D101).
 
 Every event that passed S6 (a verbatim quote in its message) becomes an `:Event` node, from the
-batch extraction (`lore ingest --stages fold` loads data/extract) or the live path. Events are
+batch extraction (`yaan ingest --stages fold` loads data/extract) or the live path. Events are
 never deleted: a newer version of an artifact that no longer states one closes it
 (`retracted_ms`). Claims, decisions and issues are a deterministic projection of the live
 events (fold.py), so they can be rebuilt from the graph alone, and the belief at any earlier
-moment replayed by folding the events Lore knew then (`read(..., known_at_ms=T)`).
+moment replayed by folding the events Yaan knew then (`read(..., known_at_ms=T)`).
 
-`observed_ms` is when Lore first learned an event (set once). Before D101 the fold stamped
+`observed_ms` is when Yaan first learned an event (set once). Before D101 the fold stamped
 every claim and decision with the time of the last rebuild, so the transaction-time axis said
 nothing.
 """
@@ -80,7 +80,7 @@ def retract(artifact_id: str, keep: list[str], graph: str | None, now_ms: int | 
 
 
 def read(product: str, graph: str | None, known_at_ms: int | None = None) -> list[dict[str, Any]]:
-    """The product's events as the fold takes them: the live ones, or the ones Lore knew at
+    """The product's events as the fold takes them: the live ones, or the ones Yaan knew at
     `known_at_ms`. Fields the graph didn't store (nulls) come back as None."""
     params = {"product_id": product, "known_at_ms": known_at_ms}
     rows = db.run_all("product_events", params, cap=READ_CAP, graph=graph, timeout_ms=30_000)

@@ -143,7 +143,7 @@ export function Inbox({ onCount }: { onCount: (open: number) => void }) {
           <p className="font-semibold text-warn">The Inbox didn't load</p>
           <p className="mt-0.5">{error}</p>
           <p className="text-sm text-muted mt-1">
-            Is the API running, and does the demo graph exist? <code>lore demo reset</code> creates it.
+            Is the API running, and does the demo graph exist? <code>yaan demo reset</code> creates it.
           </p>
         </div>
       )}

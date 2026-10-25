@@ -1,4 +1,4 @@
-// tiny_company.cypher — the `graph` test fixture: Lore's idea in miniature (a PR merged, then reverted, with the evidence). Invented data, not HERB.
+// tiny_company.cypher — the `graph` test fixture: Yaan's idea in miniature (a PR merged, then reverted, with the evidence). Invented data, not HERB.
 CREATE
   (ada:Person:Entity {id: 'eid_ada', name: 'Ada', role: 'Engineer'}),
   (grace:Person:Entity {id: 'eid_grace', name: 'Grace', role: 'Engineer'}),

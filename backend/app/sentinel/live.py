@@ -19,7 +19,7 @@ live message folds over them too; `reset_demo` copies lore_herb into lore_demo (
 and clears that folder.
 
 Writes go to the demo graph only: `ingest` and `reset_demo` refuse the main graph. In org mode
-(LORE_DATA_MODE=org, app/org.py, D097) they go to the org graph instead: no rule-5 id check,
+(YAAN_DATA_MODE=org, app/org.py, D097) they go to the org graph instead: no rule-5 id check,
 people are registered on first sight, the fold reads only that graph's own live events, and
 `reset_demo` refuses, so nothing from HERB ever reaches a team's graph.
 
@@ -56,12 +56,12 @@ def demo_graph(graph: str | None) -> str:
     """The graph live writes go to: the demo graph, or in org mode the org graph."""
     s = get_settings()
     if org.active():
-        graph = graph or s.lore_org_graph
-        if graph in (s.lore_graph, s.lore_demo_graph):
+        graph = graph or s.yaan_org_graph
+        if graph in (s.yaan_graph, s.yaan_demo_graph):
             raise LiveError(f"org mode writes to your own graph, never the HERB graph {graph!r}")
         return graph
-    graph = graph or s.lore_demo_graph
-    if graph == s.lore_graph:
+    graph = graph or s.yaan_demo_graph
+    if graph == s.yaan_graph:
         raise LiveError(f"live writes go to the demo graph only, never {graph!r}")
     return graph
 
@@ -79,10 +79,10 @@ def reset_demo(graph: str | None = None) -> dict[str, Any]:
     writer = db.client(readonly=False)
     if graph in writer.list_graphs():
         writer.select_graph(graph).delete()
-    writer.select_graph(get_settings().lore_graph).copy(graph)
+    writer.select_graph(get_settings().yaan_graph).copy(graph)
     shutil.rmtree(live_dir(graph), ignore_errors=True)
     fold.forget_memo(graph)  # a new derived layer: the next fold writes in full (D142)
-    return {"graph": graph, "copied_from": get_settings().lore_graph, "ms": _ms(t0)}
+    return {"graph": graph, "copied_from": get_settings().yaan_graph, "ms": _ms(t0)}
 
 
 def artifact(msg: dict[str, Any]) -> Artifact:
@@ -217,10 +217,10 @@ def _prepare(
     if a.author_eid not in meta.employees:
         raise LiveError(f"unknown author {a.author_eid!r}")
     if present_ids(graph, [a.id]) and not replace:
-        raise LiveError(f"{a.id!r} is already in {graph!r}: run `lore demo reset` to replay it")
+        raise LiveError(f"{a.id!r} is already in {graph!r}: run `yaan demo reset` to replay it")
     a, found = with_channel_kind(a, graph)
     if a.channel_id and not found:
-        raise LiveError(f"channel {a.channel_id!r} is not in {graph!r}: run `lore demo reset`")
+        raise LiveError(f"channel {a.channel_id!r} is not in {graph!r}: run `yaan demo reset`")
     if a.kind == "message" and not a.channel_id:
         raise LiveError("a live message needs its channel")
     stages["s1_validate"] = _ms(t0)
@@ -307,7 +307,7 @@ def _write_one(p: dict[str, Any], graph: str) -> None:
     product = a.product_hint
     again = bool(present_ids(graph, [a.id]))
     if again and not p["replace"]:  # another writer took it while the model read it
-        raise LiveError(f"{a.id!r} is already in {graph!r}: run `lore demo reset` to replay it")
+        raise LiveError(f"{a.id!r} is already in {graph!r}: run `yaan demo reset` to replay it")
     t = time.perf_counter()
     rows = structural.product_rows(product, [a], set(meta.employees), received_ms)
     rows["upsert_channels"] = []  # the channel exists (checked above); don't overwrite it
@@ -391,7 +391,7 @@ def estimate_extraction(items: list[Artifact], graph: str | None = None) -> dict
     D114): how many need the model, and the worst case (every output token the call may use)
     and the expected cost (a typical answer), from each one's real extraction unit."""
     graph = demo_graph(graph)
-    model = get_settings().lore_extract_model
+    model = get_settings().yaan_extract_model
     need = worst = expected = 0.0
     chars = 0
     for n, a in enumerate(items):
@@ -602,7 +602,7 @@ def _base(graph: str) -> tuple[list[dict[str, Any]], dict[str, list[Artifact]]]:
 
 
 def _base_events_and_artifacts() -> tuple[list[dict[str, Any]], dict[str, list[Artifact]]]:
-    """Every product's extracted events and normalized artifacts, as `lore ingest` folds them.
+    """Every product's extracted events and normalized artifacts, as `yaan ingest` folds them.
     Read once per version of the files: a batch re-extraction while the API runs is picked up
     on the next live message instead of folding over stale events (D098)."""
     have = sorted(p.name for p in extract.out_dir("x").parent.glob("*") if p.name[0] != "_")

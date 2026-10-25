@@ -1,4 +1,4 @@
-# People (org mode only, LORE_DATA_MODE=org; the demo ignores this file).
+# People (org mode only, YAAN_DATA_MODE=org; the demo ignores this file).
 #
 # Yaan registers anyone it meets in a connected tool on its own, under their name in that tool.
 # Slack and Jira vouch for a work email: the same email in both tools is one person, and the

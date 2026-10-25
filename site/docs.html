@@ -27,7 +27,7 @@
   // Light by default; ?theme= or a saved choice wins. Before first paint, so no flash.
   (function () {
     var t = null;
-    try { t = new URLSearchParams(location.search).get('theme') || localStorage.getItem('lore-theme'); } catch (e) {}
+    try { t = new URLSearchParams(location.search).get('theme') || localStorage.getItem('yaan-theme') || localStorage.getItem('lore-theme'); } catch (e) {}
     document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
   })();
 </script>
@@ -86,7 +86,7 @@
         <div><b>4 tools</b><span>Slack, GitHub, Jira, Notion</span></div>
         <div><b>3 AI clients</b><span>Claude Code, Codex, Cursor</span></div>
       </div>
-      <p class="doc-note"><b>Note:</b> Yaan was called Lore while it was built. Settings (<code>LORE_…</code>), container names and some files still use that name, and <code>lore</code> works as the command too.</p>
+      <p class="doc-note"><b>Note:</b> Yaan was called Lore while it was built. Old <code>LORE_…</code> settings still work, and a few stored names keep it: the demo graphs <code>lore_herb</code> and <code>lore_demo</code>, and the demo snapshot file.</p>
     </section>
 
     <section id="before">
@@ -115,7 +115,7 @@ cd yaan</code></pre>
       <dl class="vars">
         <div><dt><code>FALKORDB_ADMIN_PASSWORD</code><br><code>FALKORDB_WRITER_PASSWORD</code><br><code>FALKORDB_READER_PASSWORD</code></dt><dd>Set a different, strong password for each database user. Use only letters, digits and dashes.</dd></div>
         <div><dt><code>ANTHROPIC_API_KEY</code></dt><dd>Paste your key here. This is optional.</dd></div>
-        <div><dt><code>LORE_DAILY_SPEND_CAP_USD</code></dt><dd>The maximum AI spend for one day, in US dollars. Yaan stops calls that could go above it.</dd></div>
+        <div><dt><code>YAAN_DAILY_SPEND_CAP_USD</code></dt><dd>The maximum AI spend for one day, in US dollars. Yaan stops calls that could go above it.</dd></div>
       </dl>
       <p class="caution"><b>Caution:</b> Do not put <code>.env</code> into Git. It contains your passwords and keys.</p>
     </section>
@@ -187,7 +187,7 @@ cd yaan</code></pre>
         </article>
       </div>
       <h3 class="h3-doc">Start the connectors</h3>
-      <p>Switch Yaan from the demo to your own data. In <code>.env</code>, set <code>LORE_DATA_MODE=org</code>. Your data then goes into its own graph, <code>yaan_org</code>. Nothing from the demo graph is mixed in.</p>
+      <p>Switch Yaan from the demo to your own data. In <code>.env</code>, set <code>YAAN_DATA_MODE=org</code>. Your data then goes into its own graph, <code>yaan_org</code>. Nothing from the demo graph is mixed in.</p>
       <p>Copy the example map, then edit it. Name your product and the channels Yaan reads. Each channel name starts with <code>bug-</code>, <code>develop-</code> or <code>planning-</code>. The prefix tells Yaan what to read from it.</p>
       <p>Say who may read each source other than Slack: <code>visibility: everyone</code>, or <code>visibility: members</code> with a <code>members</code> list. Slack tells Yaan which channels are private and who is in them. Until a source says, Yaan shows nothing from it.</p>
       <pre class="code"><code>cp connectors.org.example.yaml connectors.yaml</code></pre>
@@ -218,7 +218,7 @@ docker compose exec worker yaan connectors health</code></pre>
           <p>Add this to <code>~/.codex/config.toml</code>:</p>
           <pre class="code"><code>[mcp_servers.yaan]
 command = "docker"
-args = ["exec", "-i", "lore-api-1", "yaan", "mcp"]</code></pre>
+args = ["exec", "-i", "yaan-api-1", "yaan", "mcp"]</code></pre>
         </article>
         <article class="card-tool">
           <header><span class="glyph" style="--icon:url(assets/icons/color/cursor.svg);--icon-d:url(assets/icons/color/cursor-d.svg)"></span><h3>Cursor</h3></header>
@@ -240,8 +240,8 @@ args = ["exec", "-i", "lore-api-1", "yaan", "mcp"]</code></pre>
         <li><b>Change the three database passwords.</b> The example values are for local use only.</li>
         <li><b>Keep the ports on 127.0.0.1.</b> Put an HTTPS proxy, for example Caddy or nginx, in front of Yaan.</li>
         <li><b>Tell Yaan the address of your proxy.</b> Set <code>FORWARDED_ALLOW_IPS</code>. Then each visitor gets their own request limit.</li>
-        <li><b>Set a daily AI spend cap.</b> Use <code>LORE_DAILY_SPEND_CAP_USD</code>.</li>
-        <li><b>For a public demo, replay answers only.</b> Set <code>LORE_LLM_CACHE_ONLY=1</code>. Yaan then never calls the AI model for a new question. Also set <code>LORE_MCP_ASK=0</code>.</li>
+        <li><b>Set a daily AI spend cap.</b> Use <code>YAAN_DAILY_SPEND_CAP_USD</code>.</li>
+        <li><b>For a public demo, replay answers only.</b> Set <code>YAAN_LLM_CACHE_ONLY=1</code>. Yaan then never calls the AI model for a new question. Also set <code>YAAN_MCP_ASK=0</code>.</li>
         <li><b>Keep the request limits on.</b> The defaults limit questions per address, per day and in total, and limit how many answers run at the same time.</li>
         <li><b>Give each device its own token.</b> Tokens expire after 90 days. <code>yaan token list</code> shows them with when each was last used; <code>yaan token revoke "Name" --id &lt;id&gt;</code> ends one, and every browser session signed in with it.</li>
       </ul>

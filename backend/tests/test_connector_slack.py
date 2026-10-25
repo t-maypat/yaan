@@ -12,7 +12,7 @@ MAPS = Maps(
     sources={
         "slack": {
             "channels": {"vizforce-bugs": "ch-force-d79648"},
-            "alerts_channel": "lore-alerts",
+            "alerts_channel": "yaan-alerts",
             "people": {"U1": "eid_9e9883de"},
         }
     },
@@ -25,7 +25,7 @@ class FakeClient:
 
     def conversations_list(self, **kw):
         return {
-            "channels": [{"name": "vizforce-bugs", "id": "C1"}, {"name": "lore-alerts", "id": "C9"}]
+            "channels": [{"name": "vizforce-bugs", "id": "C1"}, {"name": "yaan-alerts", "id": "C9"}]
         }
 
     def conversations_history(self, channel, oldest=None, limit=None, **kw):
@@ -50,7 +50,7 @@ class FakeClient:
 
     def chat_getPermalink(self, channel, message_ts):
         stamp = message_ts.replace(".", "")
-        return {"permalink": f"https://lore-demo.slack.com/archives/{channel}/p{stamp}"}
+        return {"permalink": f"https://yaan-demo.slack.com/archives/{channel}/p{stamp}"}
 
 
 HISTORY = [
@@ -68,7 +68,7 @@ HISTORY = [
         "text": "[synthetic demo] On it.",
         "edited": {"ts": "1805000200.000000"},
     },
-    {"type": "message", "bot_id": "B1", "ts": "1805000300.000300", "text": "Lore answered"},
+    {"type": "message", "bot_id": "B1", "ts": "1805000300.000300", "text": "Yaan answered"},
     {
         "type": "message",
         "subtype": "channel_join",
@@ -111,7 +111,7 @@ def test_a_channel_the_bot_cant_see_waits_alone_and_says_so(monkeypatch, conn):
     mapped = conn.conf["channels"]
     conn.conf = {**conn.conf, "channels": {**mapped, "vizforce-dev": "ch-x"}}
     assert len(conn.fetch(0)) == 2  # the readable channel's messages still come in
-    assert conn.problems == ["the bot can't see #vizforce-dev: /invite @lore there"]
+    assert conn.problems == ["the bot can't see #vizforce-dev: /invite @yaan there"]
 
 
 def test_post_routes_notifications_and_thread_corrections(conn):
@@ -123,7 +123,7 @@ def test_post_routes_notifications_and_thread_corrections(conn):
         "draft": "Please recheck.",
     }
     ref = conn.post(note)
-    assert ref.startswith("https://lore-demo.slack.com/archives/C9/")
+    assert ref.startswith("https://yaan-demo.slack.com/archives/C9/")
     assert (
         conn.client.posted[-1]["channel"] == "C9"
         and "For Hannah Garcia" in conn.client.posted[-1]["text"]
@@ -179,7 +179,7 @@ def test_alert_cards_offer_approve_and_dismiss_until_decided():
     }
     blocks = slack.alert_blocks(alert)
     actions = next(b for b in blocks if b["type"] == "actions")
-    assert [e["action_id"] for e in actions["elements"]] == ["lore_approve", "lore_dismiss"]
+    assert [e["action_id"] for e in actions["elements"]] == ["yaan_approve", "yaan_dismiss"]
     assert actions["elements"][0]["value"] == "alert:1" and actions["elements"][0]["confirm"]
     assert blocks[0]["type"] == "header" and "Regression" in blocks[0]["text"]["text"]
     done = slack.alert_blocks(alert, decided="Approved by <@U1>")

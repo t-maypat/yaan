@@ -1,14 +1,14 @@
 """Org mode (D097): Yaan on a team's own tools instead of the HERB demo company.
 
-`LORE_DATA_MODE=org` switches the live path and the connectors from the demo to a team's data:
-- writes go to `LORE_ORG_GRAPH` (default `yaan_org`) and never to a HERB graph;
+`YAAN_DATA_MODE=org` switches the live path and the connectors from the demo to a team's data:
+- writes go to `YAAN_ORG_GRAPH` (default `yaan_org`) and never to a HERB graph;
 - items need no "[synthetic demo]" label and keep their own ids (`msg:slack-…`, not
   `msg:synthetic-slack-…`);
 - people come from `people.yaml` (one entry per person, with their account in each tool and
   their role for the authority policy), or are registered the first time they appear, under
   an id derived from their account;
 - the product and the channels `connectors.yaml` declares are created in the graph by
-  `prepare` (`lore init`, and every connector sync).
+  `prepare` (`yaan init`, and every connector sync).
 
 A channel's kind says what Yaan reads from it: `bug` (support), `develop` (dev), `planning`, or
 `mixed` (a channel where bugs and pull requests are both discussed: every event type is read).
@@ -60,7 +60,7 @@ class OrgError(ValueError):
 
 
 def active() -> bool:
-    return get_settings().lore_data_mode == "org"
+    return get_settings().yaan_data_mode == "org"
 
 
 def eid_for(key: str, digits: int = 8) -> str:
@@ -263,7 +263,7 @@ def met_id(key: str) -> str:
     """The id of the person a key (`email:…` or `source:account`) names: the 8-digit id it was
     registered under before D130, else a 16-digit one. Two keys on one id are refused loudly:
     merged, one person would inherit the other's private channels (F9)."""
-    met = filestate.cached(directory_file(get_settings().lore_org_graph), {})
+    met = filestate.cached(directory_file(get_settings().yaan_org_graph), {})
     legacy = eid_for(key)
     if not key.startswith("email:") and legacy in met and met[legacy].get("key") in (None, key):
         return legacy
@@ -485,7 +485,7 @@ def access_file(graph: str) -> Path:
 def synced(graph: str | None) -> dict[str, dict[str, Any]]:
     """What GitHub and Jira said about who may read them (D131): `github:<repo>` and
     `jira:<project>` -> {everyone, members, synced_ms}. A key not there is hidden."""
-    return filestate.cached(access_file(graph or get_settings().lore_org_graph), {})
+    return filestate.cached(access_file(graph or get_settings().yaan_org_graph), {})
 
 
 def set_synced(graph: str, key: str, everyone: bool, members: Iterable[str]) -> None:

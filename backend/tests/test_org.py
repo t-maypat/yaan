@@ -47,10 +47,10 @@ CACHES = (
 
 @pytest.fixture
 def org_mode(tmp_path, monkeypatch):
-    """LORE_DATA_MODE=org with a people.yaml and a data dir of the test's own."""
+    """YAAN_DATA_MODE=org with a people.yaml and a data dir of the test's own."""
     people = tmp_path / "people.yaml"
     people.write_text(PEOPLE, encoding="utf-8")
-    monkeypatch.setenv("LORE_DATA_MODE", "org")
+    monkeypatch.setenv("YAAN_DATA_MODE", "org")
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(org, "PEOPLE_FILE", people)
     for cached in CACHES:
@@ -67,7 +67,7 @@ def test_demo_is_the_default_and_keeps_its_shapes():
     assert not org.active()
     assert base.synthetic_id("msg", "slack", "C1-1") == "msg:synthetic-slack-C1-1"
     assert base.tag() == "[synthetic demo] "
-    assert get_settings().api_graph() == get_settings().lore_api_graph
+    assert get_settings().api_graph() == get_settings().yaan_api_graph
 
 
 def test_org_mode_drops_the_demo_label_and_serves_the_org_graph(org_mode):
@@ -184,7 +184,7 @@ def test_slack_and_jira_vouch_for_emails_and_long_ids_are_mentions(org_mode, mon
 def test_yaan_people_lists_who_was_met_but_not_listed_as_entries_to_paste(org_mode, capsys):
     from app import cli, filestate
 
-    graph = get_settings().lore_org_graph
+    graph = get_settings().yaan_org_graph
     sam = org.person_id("slack", "U2", "Sam Lee")
     dee = org.person_id("jira", "x1", "Dee", email="dee@acme.example")
     met = {k: {"id": k, "name": v["name"], "key": v["key"]} for k, v in org._hints.items()}
@@ -219,7 +219,7 @@ def test_two_accounts_on_one_id_are_refused_and_old_ids_are_kept(org_mode):
     collision and stops loudly; an account registered with an 8-digit id before keeps it."""
     from app import filestate
 
-    graph = get_settings().lore_org_graph
+    graph = get_settings().yaan_org_graph
     taken = org.eid_for("slack:U5", 16)
     old = org.eid_for("slack:U7")
     filestate.write(org.directory_file(graph), {
@@ -365,7 +365,7 @@ def test_init_asks_for_org_mode_first(capsys):
     from app import cli
 
     assert cli.main(["init"]) == 1
-    assert "LORE_DATA_MODE=org" in capsys.readouterr().err
+    assert "YAAN_DATA_MODE=org" in capsys.readouterr().err
 
 
 # --- a connector in org mode -----------------------------------------------------------------
@@ -392,7 +392,7 @@ def test_slack_reads_a_teams_channel_in_org_mode(org_mode, monkeypatch):
         product="Acme",
         default_person=None,
         sources={
-            "slack": {"channels": {"vizforce-bugs": "bug-support"}, "alerts_channel": "lore-alerts"}
+            "slack": {"channels": {"vizforce-bugs": "bug-support"}, "alerts_channel": "yaan-alerts"}
         },
     )
     conn = slack.SlackConnector(Team(history), "yaan_org", maps)
@@ -630,7 +630,7 @@ def test_a_batch_ends_where_one_message_at_a_time_does(org_mode, empty_graph):
 
     from app import schema
 
-    other = f"lore_test_{uuid.uuid4().hex[:12]}"
+    other = f"yaan_test_{uuid.uuid4().hex[:12]}"
     schema.apply(other)
     try:
         for g in (empty_graph, other):

@@ -1,4 +1,4 @@
-// 00_schema.cypher — indexes for one graph; `lore schema` runs it one line per call, then checks the result (CONTEXT §9.14; verified on 6.0.1 in Phase 1.5)
+// 00_schema.cypher — indexes for one graph; `yaan schema` runs it one line per call, then checks the result (CONTEXT §9.14; verified on 6.0.1 in Phase 1.5)
 CREATE INDEX FOR (p:Person) ON (p.id)
 CREATE INDEX FOR (t:Team) ON (t.id)
 CREATE INDEX FOR (p:Product) ON (p.id)

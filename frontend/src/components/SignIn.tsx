@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { SIGN_IN_EVENT, signIn, signOut } from "../api";
 
 // Org mode signs people in (D100): when an API call answers 401, ask for the token that
-// `lore token issue "<name>"` printed, trade it for a session cookie this page can't read
+// `yaan token issue "<name>"` printed, trade it for a session cookie this page can't read
 // (D111), and reload so every view asks again as that person. A sign-in proxy never gets
 // here: it sends the identity itself.
 export function SignIn() {
@@ -34,7 +34,7 @@ export function SignIn() {
           {refused ? ` That token was refused: ${refused}` : ""}
         </p>
         <label htmlFor="token" className="block text-[0.78rem] text-muted mt-4">
-          Your token, from <code>lore token issue "Your Name"</code>
+          Your token, from <code>yaan token issue "Your Name"</code>
         </label>
         <input
           id="token"

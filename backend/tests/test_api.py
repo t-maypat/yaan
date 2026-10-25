@@ -294,7 +294,7 @@ def test_approve_and_dismiss_go_to_the_demo_graph_and_errors_are_409(monkeypatch
 
 
 def test_demo_writes_refuse_the_main_graph(monkeypatch):
-    monkeypatch.setattr(main, "get_settings", lambda: Settings(lore_api_graph="lore_herb"))
+    monkeypatch.setattr(main, "get_settings", lambda: Settings(yaan_api_graph="lore_herb"))
     monkeypatch.setattr(main, "demo_limiter", main.RateLimiter(10))
     r = TestClient(main.app).post("/demo/reset")
     assert r.status_code == 409 and "demo graph only" in r.json()["detail"]
@@ -329,11 +329,11 @@ def test_ingest_artifact_needs_the_secret(monkeypatch):
     monkeypatch.setattr(live, "ingest", lambda msg, graph=None: {"ok": True})
     monkeypatch.setattr(main, "demo_limiter", main.RateLimiter(10))
     client = TestClient(main.app)
-    monkeypatch.setattr(main, "get_settings", lambda: Settings(lore_ingest_secret=""))
+    monkeypatch.setattr(main, "get_settings", lambda: Settings(yaan_ingest_secret=""))
     assert client.post("/ingest/artifact", json={}).status_code == 503
-    monkeypatch.setattr(main, "get_settings", lambda: Settings(lore_ingest_secret="s3"))
+    monkeypatch.setattr(main, "get_settings", lambda: Settings(yaan_ingest_secret="s3"))
     assert client.post("/ingest/artifact", json={}).status_code == 401
-    r = client.post("/ingest/artifact", json={}, headers={"X-Lore-Secret": "s3"})
+    r = client.post("/ingest/artifact", json={}, headers={"X-Yaan-Secret": "s3"})
     assert r.json() == {"ok": True}
 
 
@@ -397,8 +397,8 @@ def test_graph_health_and_eval_latest(monkeypatch):
     assert TestClient(main.app).get("/graph/health").json()["total_nodes"] == 7
     out = TestClient(main.app).get("/eval/latest").json()  # the committed eval/results files
     systems = {r["system"] for r in out["systems"]}
-    assert {"baseline", "lore", "lore-search"} <= systems
-    assert out["drift"]["lore"]["split"] == "drift" and out["reference"]["avg"] == 43.41
+    assert {"baseline", "yaan", "yaan-search"} <= systems
+    assert out["drift"]["yaan"]["split"] == "drift" and out["reference"]["avg"] == 43.41
 
 
 def test_a_public_demo_drops_what_fails_when_the_repair_isnt_cached(monkeypatch):

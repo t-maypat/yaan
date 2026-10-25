@@ -34,7 +34,7 @@ def data(tmp_path, monkeypatch):
 
 @pytest.fixture
 def org_mode(monkeypatch):
-    monkeypatch.setenv("LORE_DATA_MODE", "org")
+    monkeypatch.setenv("YAAN_DATA_MODE", "org")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -57,7 +57,7 @@ def test_only_org_mode_has_a_cutoff(monkeypatch, org_mode):
     m = maps(slack={})
     assert retention.cutoff_ms("slack", NOW, m) == NOW - 365 * DAY
     assert retention.cutoff_ms("notion", NOW, m) is None  # not configured: kept
-    monkeypatch.setenv("LORE_DATA_MODE", "demo")
+    monkeypatch.setenv("YAAN_DATA_MODE", "demo")
     get_settings.cache_clear()
     assert retention.cutoff_ms("slack", NOW, m) is None  # the demo keeps its data
 

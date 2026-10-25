@@ -3,8 +3,8 @@
 In: the messages of the channels `connectors.yaml` maps (e.g. #vizforce-bugs plays VizForce's
 bug-davidgarcia channel) become live messages in that channel: S1-S8 + the Sentinel.
 Out: notification drafts go to the alerts channel; corrections go into the thread of the
-Slack message they correct. The bot (`SlackBot`) answers `@lore <question>` in the thread with
-Lore's checked citations, and posts each new alert as a card with Approve and Dismiss buttons
+Slack message they correct. The bot (`SlackBot`) answers `@yaan <question>` in the thread with
+Yaan's checked citations, and posts each new alert as a card with Approve and Dismiss buttons
 that record the verdict as a decision (sentinel/approve.respond), as the Inbox does.
 
 Who may read what (H1, D109): in org mode each round also reads which mapped channels are
@@ -175,7 +175,7 @@ class SlackConnector:
         for slack_name, herb_id in org.channel_map(self.conf).items():
             cid = self.channel_ids().get(slack_name)
             if not cid:  # archived, or the bot was removed: this channel waits, not Slack
-                self.problems.append(f"the bot can't see #{slack_name}: /invite @lore there")
+                self.problems.append(f"the bot can't see #{slack_name}: /invite @yaan there")
                 continue
             rows = db.run("get_channel", {"id": herb_id}, graph=self.graph).rows
             if not rows:
@@ -215,7 +215,7 @@ class SlackConnector:
                 # never guess "public" for a channel we can't see (it may have turned private),
                 # nor keep what it was: unknown, so hidden, until the bot sees it again (D132)
                 rows.append({"id": target, "visibility": "unknown"})
-                self.problems.append(f"the bot can't see #{unseen[0]}: /invite @lore there")
+                self.problems.append(f"the bot can't see #{unseen[0]}: /invite @yaan there")
                 continue
             private = [n for n in names if n in self._private]
             if private and len(names) > 1:
@@ -276,7 +276,7 @@ class SlackConnector:
         if not text or m.get("subtype") in SKIP_SUBTYPES - {"bot_message"}:
             return None  # channel events aren't company knowledge
         if by_bot and not (base.is_demo() and text.startswith(SEEDED)):
-            return None  # Lore's own answers, cards and notifications: never read back
+            return None  # Yaan's own answers, cards and notifications: never read back
         text = self.plain(m["text"])
         author = self.who(m.get("user"), text)
         created = ts_ms(m["ts"])
@@ -464,7 +464,7 @@ class SlackConnector:
                 "chat_postMessage",
                 channel=cid,
                 thread_ts=ts,
-                text=f"Correction from Lore: {action.get('target_name') or 'this message'}",
+                text=f"Correction from Yaan: {action.get('target_name') or 'this message'}",
                 blocks=render.slack_correction(action, resolve),
                 unfurl_links=False,
                 metadata=meta,
@@ -522,10 +522,10 @@ class SlackConnector:
         return org.channel_map(self.conf).get(names.get(slack_channel_id, ""))
 
     def alerts_channel(self) -> str:
-        name = self.conf.get("alerts_channel") or "lore-alerts"
+        name = self.conf.get("alerts_channel") or "yaan-alerts"
         cid = self.channel_ids().get(name)
         if not cid:
-            raise ConnectorError(f"the bot can't see #{name}: /invite @lore there")
+            raise ConnectorError(f"the bot can't see #{name}: /invite @yaan there")
         return cid
 
     def permalink(self, channel: str, ts: str) -> str:
@@ -544,7 +544,7 @@ class SlackConnector:
             raise ConnectorError(message) from e
 
 
-# --- the bot: @lore questions and alert cards ----------------------------------------------
+# --- the bot: @yaan questions and alert cards ----------------------------------------------
 IN_A_DM = (
     "\n_Not everyone in this channel can see those sources, so this answer leaves them out. "
     "Send me the question as a direct message for an answer from everything you can see._"
@@ -552,11 +552,11 @@ IN_A_DM = (
 
 
 def answer_text(out: dict[str, Any], permalink: Callable[[str], str | None]) -> str:
-    """Lore's answer in Slack mrkdwn: the text, then each citation with its verbatim quote and,
+    """Yaan's answer in Slack mrkdwn: the text, then each citation with its verbatim quote and,
     for a Slack message, a link back to it."""
     text = re.sub(r"\*\*(.+?)\*\*", r"*\1*", out["answer_markdown"])
     if out.get("hidden_sources"):
-        text += f"\n_{out['hidden_sources']} sources hidden: you can't see them in Lore._"
+        text += f"\n_{out['hidden_sources']} sources hidden: you can't see them in Yaan._"
     if out["abstain"] or not out["citations"]:
         return text
     lines = [text, "", "_Sources (each quote checked word for word):_"]
@@ -576,7 +576,7 @@ def alert_blocks(
 
 
 class SlackBot:
-    """The Socket Mode app: `@lore` questions, alert cards, button clicks, and a nudge to the
+    """The Socket Mode app: `@yaan` questions, alert cards, button clicks, and a nudge to the
     runner when a mapped channel gets a message (so it syncs now, not at the next poll)."""
 
     def __init__(self, bot_token: str, app_token: str, graph: str, on_message: Callable[[], None]):
@@ -593,8 +593,10 @@ class SlackBot:
         self.app.event("message")(self._message)
         for name in ACCESS_EVENTS:  # who may read a channel changed: re-read it now (D132)
             self.app.event(name)(self._access_changed)
-        self.app.action("lore_approve")(self._verdict("approved"))
-        self.app.action("lore_dismiss")(self._verdict("dismissed"))
+        # lore_*: buttons on cards posted before the rename (D144)
+        for prefix in ("yaan", "lore"):
+            self.app.action(f"{prefix}_approve")(self._verdict("approved"))
+            self.app.action(f"{prefix}_dismiss")(self._verdict("dismissed"))
 
     def start(self) -> None:
         from slack_bolt.adapter.socket_mode import SocketModeHandler
@@ -637,7 +639,7 @@ class SlackBot:
         question = MENTION.sub("", event.get("text") or "").strip()
         thread = event.get("thread_ts") or event["ts"]
         if len(question) < 3:
-            hint = "Ask me about the company, e.g. `@lore who knows the export module?`"
+            hint = "Ask me about the company, e.g. `@yaan who knows the export module?`"
             say(text=hint, thread_ts=thread)
             return
         if refusal := self.limited(event.get("user")):

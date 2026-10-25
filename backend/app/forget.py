@@ -280,7 +280,7 @@ def clear_llm_cache() -> str:
     """Org mode: empty the LLM disk cache, whose keys hash whole prompts, so the entries that
     held a forgotten item can't be told apart; there it only saves money. The demo keeps it:
     it is the eval's free replay, and the demo's data is synthetic."""
-    if get_settings().lore_data_mode != "org":
+    if get_settings().yaan_data_mode != "org":
         return "kept (demo: synthetic data, and the eval replays from it)"
     from app import llm
 

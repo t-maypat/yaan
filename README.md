@@ -54,13 +54,13 @@ Open **http://127.0.0.1:8000**: Ask, Inbox, Timeline, Graph health. Yaan and Fal
 
 **The `yaan` command.** `./yaan <command>` (`.\yaan` in PowerShell) runs the CLI inside the api container, from any folder: it joins the running api, or starts a throwaway one when the stack is down. `./yaan --help` lists the commands. To type plain `yaan`, add `alias yaan=/path/to/yaan/yaan` to your shell profile (on Windows, put the repo folder on your `PATH`).
 
-> Yaan was called Lore while it was built: settings (`LORE_…`), container names and some files still use that name, and `lore` works as the command too.
+> Yaan was called Lore while it was built. Old `LORE_…` settings still work (a `YAAN_…` one wins), and a few stored names keep it: the graphs `lore_herb` and `lore_demo`, the data volume `lore_falkordb-data` and the demo snapshot `lore-snapshot.tar.gz`.
 
 ## Use your own data
 
 Org mode points Yaan at your team's tools instead of the demo. Your data goes into its own graph, and nothing from the demo is mixed in.
 
-1. In `.env`, set `LORE_DATA_MODE=org` and each tool's token.
+1. In `.env`, set `YAAN_DATA_MODE=org` and each tool's token.
 2. `cp connectors.org.example.yaml connectors.yaml`, then name your product and the channels Yaan reads. A channel's name starts with `bug-`, `develop-` or `planning-`, which tells Yaan what to read from it. Say who may read each non-Slack source (`visibility: everyone`, or `members`); Slack's private channels and their members are read from Slack. A channel that holds both bugs and pull-request talk can say so (`{channel: eng, kind: mixed}`), and a tool or channel can belong to another product (`product:`).
 3. List the people who will use Yaan in [`people.yaml`](people.yaml), with their email, role and account in each tool. Yaan registers everyone else the first time they appear in a tool (one person across Slack and Jira when the work email matches; `yaan people` lists them), but only listed people can sign in.
 4. Create the graph and start the connectors:
@@ -78,7 +78,7 @@ docker compose --profile app --profile connectors up -d          # the connector
 ./yaan token revoke "Priya Shah"
 ```
 
-   Behind a single-sign-on proxy (oauth2-proxy, Cloudflare Access), set `LORE_AUTH=header` instead: the proxy sends the user's email in `X-Forwarded-Email` and `LORE_AUTH_PROXY_SECRET` in `X-Lore-Proxy-Secret`. For sign-in with Google, Okta or Entra ID, the `sso` profile runs oauth2-proxy for you: fill the `OAUTH2_PROXY_*` settings in `.env`, then `docker compose --profile app --profile sso up -d` and open port 4180. People with `admin: true` in `people.yaml` see the Admin page (worker, dead letters, tokens, spend, people not yet listed), Graph health and Evaluation; others see Ask and Inbox. In a Slack channel, `@yaan` answers from what everyone in that channel may read; a direct message to the bot answers from everything the asker may read.
+   Behind a single-sign-on proxy (oauth2-proxy, Cloudflare Access), set `YAAN_AUTH=header` instead: the proxy sends the user's email in `X-Forwarded-Email` and `YAAN_AUTH_PROXY_SECRET` in `X-Yaan-Proxy-Secret`. For sign-in with Google, Okta or Entra ID, the `sso` profile runs oauth2-proxy for you: fill the `OAUTH2_PROXY_*` settings in `.env`, then `docker compose --profile app --profile sso up -d` and open port 4180. People with `admin: true` in `people.yaml` see the Admin page (worker, dead letters, tokens, spend, people not yet listed), Graph health and Evaluation; others see Ask and Inbox. In a Slack channel, `@yaan` answers from what everyone in that channel may read; a direct message to the bot answers from everything the asker may read.
 
 | Tool | In | Out, once you approve |
 |---|---|---|
@@ -101,9 +101,9 @@ Linear, GitLab, Confluence, Google Drive, Gmail, Google Meet, Zoom and Discord h
 
    FalkorDB keeps the graph in memory, capped by `FALKORDB_MAXMEMORY` (2 GB; about 7 KB per item read, measured: a year at 5,000 items a day needs about 13 GB, and `retention_days` bounds it). At the cap it refuses every write, deletion included, so Yaan warns from 80% on `/health` and the Admin page; `yaan persistence` shows the numbers. A new deployment can also keep an append-only file (`FALKORDB_APPENDONLY=yes`), losing at most about a second of writes in a crash; an existing one switches with `yaan persistence aof` first (see `.env.example`).
 
-   Logs are JSON lines (`docker compose logs api worker`), one per request with its `X-Request-ID`, and one per connector round with its numbers. `/metrics` serves Prometheus text to admins, or to a scraper holding `LORE_METRICS_TOKEN`: requests by route and status, graph memory, today's spend, the worker's rounds and items, dead letters, tools backing off.
+   Logs are JSON lines (`docker compose logs api worker`), one per request with its `X-Request-ID`, and one per connector round with its numbers. `/metrics` serves Prometheus text to admins, or to a scraper holding `YAAN_METRICS_TOKEN`: requests by route and status, graph memory, today's spend, the worker's rounds and items, dead letters, tools backing off.
 
-7. Decide what Yaan keeps. `retention_days` in `connectors.yaml` (for every tool, or per tool) makes the worker forget older items daily, as if the tool had deleted them; a decision only they supported goes too, since Yaan states nothing it can't quote. An audit log records who was shown which items, by id, never their words: `yaan audit --person <id>` or the Admin page. It keeps 13 months (`LORE_AUDIT_MONTHS`), and `yaan erase` removes a person from it.
+7. Decide what Yaan keeps. `retention_days` in `connectors.yaml` (for every tool, or per tool) makes the worker forget older items daily, as if the tool had deleted them; a decision only they supported goes too, since Yaan states nothing it can't quote. An audit log records who was shown which items, by id, never their words: `yaan audit --person <id>` or the Admin page. It keeps 13 months (`YAAN_AUDIT_MONTHS`), and `yaan erase` removes a person from it.
 
 ## Use it from your AI client
 
@@ -121,7 +121,7 @@ claude mcp add --transport http yaan http://127.0.0.1:8000/mcp
 4. **Answer.** A plain tool loop over 17 read-only tools, each one `.cypher` file, with a citation validator and viewer-scoped redaction.
 5. **Watch.** The Change Sentinel flags regressions, reversals, unauthorized changes and key-person risks, drafts follow-ups from the blast radius, and records your Approve as a decision.
 
-Diagrams: [architecture](docs/diagrams/lore-overview.svg) · [graph data model](docs/diagrams/data-model.svg).
+Diagrams: [architecture](docs/diagrams/yaan-overview.svg) · [graph data model](docs/diagrams/data-model.svg).
 
 ### Graph data model
 

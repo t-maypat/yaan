@@ -59,7 +59,7 @@ def fake(monkeypatch, tmp_path):
     (tmp_path / "upsert_people.cypher").write_text(
         "// upsert_people.cypher — t\nUNWIND $rows", encoding="utf-8"
     )
-    settings = Settings(queries_dir=tmp_path, lore_graph="g_test", query_timeout_ms=2000)
+    settings = Settings(queries_dir=tmp_path, yaan_graph="g_test", query_timeout_ms=2000)
     monkeypatch.setattr(db, "get_settings", lambda: settings)
     graphs = {True: FakeGraph(), False: FakeGraph()}
 

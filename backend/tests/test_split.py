@@ -88,8 +88,8 @@ def test_heldout_run_logs_first_then_opens_only_while_active(world):
     herb, evals = world
     log = evals / "heldout_runs.log"
     test_product = split.read_split(evals / "split.json")["test"][0]
-    with split.heldout_run("lore", note="final", log=log):
-        assert "system=lore\tfinal" in log.read_text("utf-8")  # logged before any read
+    with split.heldout_run("yaan", note="final", log=log):
+        assert "system=yaan\tfinal" in log.read_text("utf-8")  # logged before any read
         questions = split.load_questions(test_product, herb, evals / "split.json")
         assert questions["unanswerable_questions"] == [f"U of {test_product}"]
     with pytest.raises(split.HeldOutError):  # closed again afterwards

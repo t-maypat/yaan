@@ -23,7 +23,7 @@ HEADER = re.compile(r"^//\s*(?P<name>[\w.]+\.cypher)\s*[—-]+\s*(?P<purpose>.+)
 
 # (group title, test on the query name), first match wins
 GROUPS = [
-    ("Schema (indexes, applied and verified by `lore schema`)", lambda n: n == "00_schema"),
+    ("Schema (indexes, applied and verified by `yaan schema`)", lambda n: n == "00_schema"),
     ("Search (full-text and vector, inside FalkorDB)", lambda n: n.startswith("search_")),
     ("Graph health", lambda n: n.startswith("health_")),
     (

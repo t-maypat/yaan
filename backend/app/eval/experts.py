@@ -72,7 +72,7 @@ def bench(graph: str | None = None) -> dict[str, Any]:
                 "area": out["areas"][0]["name"] if out["areas"] else None,
                 "who_knows": ranked[:5],
                 "baseline": base[:5],
-                "lore": score(ranked, c["truth"]),
+                "yaan": score(ranked, c["truth"]),
                 "naive": score(base, c["truth"]),
             }
         )
@@ -81,10 +81,10 @@ def bench(graph: str | None = None) -> dict[str, Any]:
             m: round(sum(r[system][m] for r in rows) / len(rows), 3) if rows else None
             for m in ("hit@1", "recall@3", "recall@5")
         }
-        for system in ("lore", "naive")
+        for system in ("yaan", "naive")
     }
     return {
-        "graph": graph or get_settings().lore_graph,
+        "graph": graph or get_settings().yaan_graph,
         "questions": len(rows),
         "mean": mean,
         "rows": rows,

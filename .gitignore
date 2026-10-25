@@ -13,7 +13,7 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Data: downloaded or generated (make data / lore fetch-herb)
+# Data: downloaded or generated (make data / yaan fetch-herb)
 data/
 third_party/
 eval/runs/
@@ -32,5 +32,5 @@ Thumbs.db
 .claude/settings.local.json
 CLAUDE.local.md
 
-# Snapshots: ~45 MB, published as a release asset (lore seed --from <url>)
+# Snapshots: ~45 MB, published as a release asset (yaan seed --from <url>)
 snapshots/*.tar.gz

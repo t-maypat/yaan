@@ -95,7 +95,7 @@ def test_a_correction_becomes_a_plain_text_comment_on_the_document(conn):
     assert ref == f"https://docs.google.com/document/d/{FILE_ID}/edit"
     sent = conn.seen["posted"][0]
     assert (
-        sent.startswith("Lore Sentinel · Correction") and "###" not in sent and "<sub>" not in sent
+        sent.startswith("Yaan Sentinel · Correction") and "###" not in sent and "<sub>" not in sent
     )
     assert (
         conn.post({"id": "a2", "kind": "doc_fix", "target_id": "doc:herb_x", "draft": "x"}) is None

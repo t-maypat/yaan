@@ -46,6 +46,6 @@ def person_limits() -> tuple[RateLimiter, RateLimiter]:
 
     s = get_settings()
     return (
-        RateLimiter(s.lore_ask_per_person_per_minute),
-        RateLimiter(s.lore_ask_per_person_per_day, window=86_400),
+        RateLimiter(s.yaan_ask_per_person_per_minute),
+        RateLimiter(s.yaan_ask_per_person_per_day, window=86_400),
     )

@@ -9,7 +9,7 @@
   btn.addEventListener('click', () => {
     const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
     root.dataset.theme = next;
-    try { localStorage.setItem('lore-theme', next); } catch (e) { /* storage blocked: lasts this visit */ }
+    try { localStorage.setItem('yaan-theme', next); } catch (e) { /* storage blocked: lasts this visit */ }
     sync();
   });
 

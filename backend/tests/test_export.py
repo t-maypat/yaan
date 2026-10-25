@@ -42,7 +42,7 @@ def test_a_graph_goes_out_as_jsonl_and_comes_back_the_same(empty_graph, tmp_path
     assert json.loads(lines[0])["yaan_export"] == 1 and len(lines) == 1 + header["nodes"] + header[
         "edges"
     ]
-    copy = f"lore_test_{uuid.uuid4().hex[:12]}"
+    copy = f"yaan_test_{uuid.uuid4().hex[:12]}"
     try:
         loaded = export.load(out, copy)
         assert (loaded["nodes"], loaded["edges"]) == (header["nodes"], header["edges"])

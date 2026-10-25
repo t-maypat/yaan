@@ -1,4 +1,4 @@
-"""`lore connectors seed` (17.7) against mocked Jira, GitHub, Notion and Slack: the calls come
+"""`yaan connectors seed` (17.7) against mocked Jira, GitHub, Notion and Slack: the calls come
 in story order, and everything written into a sandbox carries the rule-5 label."""
 
 import json
@@ -131,5 +131,5 @@ def test_a_second_take_updates_the_merged_file_on_a_new_branch():
     assert url.endswith("/pull/2")
     ref = next(b for m, p, b in calls if p.endswith("/git/refs"))
     put = next(b for m, p, b in calls if m == "PUT" and p.endswith("csv_stream.py"))
-    assert ref["ref"].startswith("refs/heads/lore-demo/csv-export-chunks-")
+    assert ref["ref"].startswith("refs/heads/yaan-demo/csv-export-chunks-")
     assert put["sha"] == "old-file" and put["branch"] == ref["ref"].removeprefix("refs/heads/")

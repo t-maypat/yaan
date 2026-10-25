@@ -1,4 +1,4 @@
-"""`lore connectors seed` (17.7): writes the labeled synthetic story into the sandboxes.
+"""`yaan connectors seed` (17.7): writes the labeled synthetic story into the sandboxes.
 
 Act `setup` (before the demo):
 1. Notion: the "CSV Export Spec" page, with Fiona Davis's review comment;
@@ -7,7 +7,7 @@ Act `setup` (before the demo):
 3. GitHub: a branch, a commit, the fix PR, a review comment as Bob Johnson, the merge;
 4. Jira: a comment linking the PR, then the move to Done.
 Act `regression` (the live moment): the customer re-report in #vizforce-bugs, written as Ian
-Davis. Typing the same text in Slack yourself works too; `lore connectors run` picks it up.
+Davis. Typing the same text in Slack yourself works too; `yaan connectors run` picks it up.
 
 Every item opens with "[synthetic demo" (rule 5), and personas are named in the label.
 Each step prints what it created; a failing call stops the act loudly.
@@ -132,8 +132,8 @@ def jira_done(http: httpx.Client, key: str, pr_url: str, say: Callable[[str], No
 def github_fix(http: httpx.Client, repo: str, say: Callable[[str], None]) -> str:
     base = check(http.get(f"/repos/{repo}"), "GitHub repo")["default_branch"]
     sha = check(http.get(f"/repos/{repo}/git/ref/heads/{base}"), "GitHub ref")["object"]["sha"]
-    # One branch per take, so the story can be seeded again after `lore demo reset`.
-    branch = f"lore-demo/csv-export-chunks-{int(time.time())}"
+    # One branch per take, so the story can be seeded again after `yaan demo reset`.
+    branch = f"yaan-demo/csv-export-chunks-{int(time.time())}"
     check(
         http.post(f"/repos/{repo}/git/refs", json={"ref": f"refs/heads/{branch}", "sha": sha}),
         "GitHub branch",

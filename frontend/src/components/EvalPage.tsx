@@ -5,9 +5,9 @@ import { type EvalLatest, getEvalLatest, type SystemResult } from "../api";
 // One series (Avg per system), so one hue and no legend; HERB's published result is a reference line.
 
 const SYSTEM_WORDS: Record<string, string> = {
-  lore: "Yaan",
-  "lore-unvalidated": "Yaan's first answers, as written (no validator, no abstention line)",
-  "lore-search": "Yaan without graph tools (search and read only)",
+  yaan: "Yaan",
+  "yaan-unvalidated": "Yaan's first answers, as written (no validator, no abstention line)",
+  "yaan-search": "Yaan without graph tools (search and read only)",
   baseline: "Plain RAG baseline",
 };
 const CATS: [string, string][] = [
@@ -41,7 +41,7 @@ export function EvalPage() {
   const main = test.length ? test : dev;
   const mainWord = test.length ? "held-out" : "dev";
   const rows = test.length ? [...test, ...dev] : dev;
-  const lore = main.find((s) => s.system === "lore");
+  const yaan = main.find((s) => s.system === "yaan");
   const base = main.find((s) => s.system === "baseline");
   return (
     <section className="pt-10 max-w-[64rem]" aria-labelledby="h-eval">
@@ -53,15 +53,15 @@ export function EvalPage() {
           ? "Held-out questions from HERB, Salesforce AI Research's enterprise benchmark (EMNLP 2025): 7 products never read while building Yaan, run once"
           : "Dev questions from HERB, Salesforce AI Research's enterprise benchmark (EMNLP 2025)"}{" "}
         (
-        {lore ? `${lore.questions.answerable} answerable, ${lore.questions.unanswerable} unanswerable` : `${mainWord} split`}
+        {yaan ? `${yaan.questions.answerable} answerable, ${yaan.questions.unanswerable} unanswerable` : `${mainWord} split`}
         ), scored with HERB's own judge prompts. Each row is one change away from Yaan, so the gap between rows is what that part
         is worth.
       </p>
-      {lore && base && (
+      {yaan && base && (
         <p className="mt-5 text-[1.1rem] max-w-[64ch]">
-          Yaan scores <span className="font-semibold">{num(lore.avg)}</span> against the baseline's{" "}
+          Yaan scores <span className="font-semibold">{num(yaan.avg)}</span> against the baseline's{" "}
           <span className="font-semibold">{num(base.avg)}</span>, and every quote it shows was checked word for word (
-          {num(lore.citations?.quote_ok_pct, 0)}%).
+          {num(yaan.citations?.quote_ok_pct, 0)}%).
         </p>
       )}
 
@@ -90,7 +90,7 @@ export function EvalPage() {
               const d = s.split === "dev" ? data.drift[s.system] : undefined;
               return (
                 <tr key={`${s.system}-${s.split}`} className="border-b border-rule">
-                  <td className={`py-1.5 pr-3 ${s.system === "lore" ? "font-semibold" : ""}`}>
+                  <td className={`py-1.5 pr-3 ${s.system === "yaan" ? "font-semibold" : ""}`}>
                     {SYSTEM_WORDS[s.system] ?? s.system}
                     {test.length > 0 && <span className="text-muted font-normal"> · {s.split === "test" ? "held-out" : "dev"}</span>}
                   </td>
@@ -137,7 +137,7 @@ export function EvalPage() {
           <div>
             <dt className="font-semibold">Who knows a component ({data.experts.questions} questions, no LLM)</dt>
             <dd className="text-muted mt-0.5">
-              Yaan's expertise ranking puts a right engineer first {num(100 * (data.experts.mean.lore?.["hit@1"] ?? 0), 0)}% of
+              Yaan's expertise ranking puts a right engineer first {num(100 * (data.experts.mean.yaan?.["hit@1"] ?? 0), 0)}% of
               the time; "whoever posted most" does {num(100 * (data.experts.mean.naive?.["hit@1"] ?? 0), 0)}%.
             </dd>
           </div>
@@ -185,7 +185,7 @@ function AvgBars({
             const tip = CATS.map(([k, label]) => `${label} ${num(s.categories[k]?.score)}`).join(" · ");
             return (
               <li key={s.system}>
-                <p className={`text-[0.85rem] ${s.system === "lore" ? "font-semibold" : "text-muted"}`}>
+                <p className={`text-[0.85rem] ${s.system === "yaan" ? "font-semibold" : "text-muted"}`}>
                   {SYSTEM_WORDS[s.system] ?? s.system}
                 </p>
                 <div
@@ -197,7 +197,7 @@ function AvgBars({
                   onBlur={() => setHover(null)}
                   aria-label={`${SYSTEM_WORDS[s.system] ?? s.system}: Avg ${num(s.avg)}. ${tip}`}
                 >
-                  <div className="h-5 bg-link rounded-r" style={{ width: `${w}%`, opacity: s.system === "lore" ? 1 : 0.55 }} />
+                  <div className="h-5 bg-link rounded-r" style={{ width: `${w}%`, opacity: s.system === "yaan" ? 1 : 0.55 }} />
                   <span className="text-[0.9rem] font-semibold tabular-nums">{num(s.avg)}</span>
                   {hover === s.system && (
                     <span className="absolute left-0 -top-7 z-10 bg-ink text-paper text-[0.78rem] px-2 py-0.5 rounded-sm whitespace-nowrap">

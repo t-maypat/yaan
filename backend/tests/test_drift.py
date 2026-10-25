@@ -1,4 +1,4 @@
-"""HERB-Drift (13.1) and the Lore − validator variant (R2): loading, summaries, table cells.
+"""HERB-Drift (13.1) and the Yaan − validator variant (R2): loading, summaries, table cells.
 No LLM: verdicts are written by hand."""
 
 import json
@@ -47,7 +47,7 @@ def test_summarize_drift_counts_stale_over_answered_only():
         },
         {"id": "d", "verdict": "wrong", "correct": False, "stale": False, "judge_cost_usd": 0.0},
     ]
-    meta = {"run_id": "r", "system": "lore", "products": ["P"], "answer_model": "m"}
+    meta = {"run_id": "r", "system": "yaan", "products": ["P"], "answer_model": "m"}
     s = report.summarize_drift(meta, rows, verdicts)
     assert (s["n"], s["correct_pct"], s["abstained"], s["wrong"]) == (4, 25.0, 1, 1)
     assert s["stale_answer_rate"] == pytest.approx(33.3)  # 1 of the 3 answered
@@ -56,7 +56,7 @@ def test_summarize_drift_counts_stale_over_answered_only():
 
 
 def test_the_unvalidated_variant_needs_the_stored_first_answers(tmp_path):
-    (tmp_path / "meta.json").write_text(json.dumps({"system": "lore", "split": "dev"}))
+    (tmp_path / "meta.json").write_text(json.dumps({"system": "yaan", "split": "dev"}))
     plain = {"id": "x", "error": None, "answer": "A [1]", "abstain": False}
     (tmp_path / "answers.jsonl").write_text(json.dumps(plain) + "\n")
     with pytest.raises(ValueError, match="no 'unvalidated' field"):

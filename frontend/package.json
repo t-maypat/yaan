@@ -1,8 +1,8 @@
 {
-  "name": "lore-frontend",
+  "name": "yaan-frontend",
   "private": true,
   "version": "0.1.0",
-  "description": "Lore's web UI (Phase 12): the Ask pane, the evidence graph and, with the Sentinel, the Inbox.",
+  "description": "Yaan's web UI (Phase 12): the Ask pane, the evidence graph and, with the Sentinel, the Inbox.",
   "type": "module",
   "scripts": {
     "dev": "vite",

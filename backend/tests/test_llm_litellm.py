@@ -41,10 +41,10 @@ def test_the_anthropic_request_keys_are_pinned():
 
 def test_settings_default_to_anthropic_and_no_litellm_models():
     s = Settings(_env_file=None)
-    assert s.lore_llm_provider == "anthropic"
-    assert (s.lore_litellm_model_extract, s.lore_litellm_model_answer) == (None, None)
+    assert s.yaan_llm_provider == "anthropic"
+    assert (s.yaan_litellm_model_extract, s.yaan_litellm_model_answer) == (None, None)
     with pytest.raises(ValueError):
-        Settings(_env_file=None, lore_llm_provider="openai")
+        Settings(_env_file=None, yaan_llm_provider="openai")
 
 
 # --- the default path: untouched ----------------------------------------------------------
@@ -71,11 +71,11 @@ def anthropic_gateway(tmp_path, monkeypatch):
             "cache_dir": tmp_path / "cache",
             "data_dir": tmp_path / "data",
             "anthropic_api_key": "test-key",
-            "lore_llm_provider": "anthropic",
-            "lore_extract_model": "claude-haiku-5-5",
-            "lore_answer_model": "claude-haiku-5-5",
-            "lore_extract_effort": "low",
-            "lore_answer_effort": "medium",
+            "yaan_llm_provider": "anthropic",
+            "yaan_extract_model": "claude-haiku-5-5",
+            "yaan_answer_model": "claude-haiku-5-5",
+            "yaan_extract_effort": "low",
+            "yaan_answer_effort": "medium",
         }
     )
     monkeypatch.setattr(llm, "get_settings", lambda: settings)
@@ -151,14 +151,14 @@ def lite(tmp_path, monkeypatch):
         update={
             "cache_dir": tmp_path / "cache",
             "data_dir": tmp_path / "data",
-            "lore_llm_provider": "litellm",
-            "lore_litellm_model_extract": "openai/gpt-test",
-            "lore_litellm_model_answer": "openai/gpt-test",
-            "lore_litellm_model_judge": None,
-            "lore_extract_effort": "low",
-            "lore_answer_effort": "xhigh",
-            "lore_daily_spend_cap_usd": 0.05,
-            "lore_llm_cache_only": False,
+            "yaan_llm_provider": "litellm",
+            "yaan_litellm_model_extract": "openai/gpt-test",
+            "yaan_litellm_model_answer": "openai/gpt-test",
+            "yaan_litellm_model_judge": None,
+            "yaan_extract_effort": "low",
+            "yaan_answer_effort": "xhigh",
+            "yaan_daily_spend_cap_usd": 0.05,
+            "yaan_llm_cache_only": False,
         }
     )
     monkeypatch.setattr(llm, "get_settings", lambda: settings)
@@ -249,7 +249,7 @@ def test_a_cut_off_or_declined_answer_raises(lite):
 
 
 def test_a_model_litellm_cannot_price_is_refused_before_any_call(lite):
-    lite.settings.lore_litellm_model_extract = "mystery/model"
+    lite.settings.yaan_litellm_model_extract = "mystery/model"
     with pytest.raises(llm.LLMError, match="no price"):
         llm.complete(role="extract", system="s", user="u", purpose="t")
     assert lite.calls == []
@@ -275,7 +275,7 @@ def test_the_spend_cap_refuses_before_calling(lite):
 
 def test_cache_only_replays_and_never_reaches_litellm(lite):
     llm.complete(role="extract", system="s", user="warm", purpose="t")
-    lite.settings.lore_llm_cache_only = True
+    lite.settings.yaan_llm_cache_only = True
     assert llm.complete(role="extract", system="s", user="warm", purpose="t").cached
     with pytest.raises(llm.CacheOnly):
         llm.complete(role="extract", system="s", user="new", purpose="t")
@@ -283,7 +283,7 @@ def test_cache_only_replays_and_never_reaches_litellm(lite):
 
 
 def test_a_role_without_a_model_and_a_missing_install_fail_with_instructions(lite, monkeypatch):
-    with pytest.raises(llm.LLMError, match="LORE_LITELLM_MODEL_JUDGE"):
+    with pytest.raises(llm.LLMError, match="YAAN_LITELLM_MODEL_JUDGE"):
         llm.complete(role="judge", system="s", user="u", purpose="t")
     monkeypatch.setitem(sys.modules, "litellm", None)  # `import litellm` raises ImportError
     with pytest.raises(llm.LLMError, match=r"uv pip install --python backend/.venv litellm"):

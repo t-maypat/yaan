@@ -17,7 +17,7 @@ Yaan is 0.x: only the latest commit on `main` and the latest release get fixes.
 - Answers, tools, the web UI, Slack or MCP showing a source the viewer may not see (`backend/app/agent/access.py`).
 - Bypassing sign-in (`backend/app/auth.py`) or acting as another person.
 - Generated Cypher writing to the graph or escaping its guard (`backend/app/agent/graph_query.py`).
-- Spending past `LORE_DAILY_SPEND_CAP_USD`, or LLM calls from an unauthenticated request when `LORE_LLM_CACHE_ONLY=1`.
+- Spending past `YAAN_DAILY_SPEND_CAP_USD`, or LLM calls from an unauthenticated request when `YAAN_LLM_CACHE_ONLY=1`.
 - Posting to Slack, GitHub, Jira or Notion without a person's approval.
 
 ## Out of scope

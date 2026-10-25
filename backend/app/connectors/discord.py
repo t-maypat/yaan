@@ -2,7 +2,7 @@
 replies out. REST v10, polling (no Gateway connection, so nothing is pushed).
 
 In: the messages of one channel (`DISCORD_CHANNEL_ID`) newer than the cursor become messages in
-the Lore channel `connectors.yaml` maps (`discord.channels`: Discord channel id -> Lore channel
+the Yaan channel `connectors.yaml` maps (`discord.channels`: Discord channel id -> Yaan channel
 id). Reading message text needs the MESSAGE_CONTENT privileged intent enabled for the bot and
 the READ_MESSAGE_HISTORY permission. Edits after the cursor passed a message are not seen: the
 `after` cursor only returns new messages. People are keyed by Discord user id in
@@ -66,7 +66,7 @@ class DiscordConnector(HttpConnector):
             or httpx.Client(
                 base_url=API,
                 timeout=20,
-                headers={"Authorization": f"Bot {bot_token}", "User-Agent": "Lore (scaffold, 0.1)"},
+                headers={"Authorization": f"Bot {bot_token}", "User-Agent": "Yaan (scaffold, 0.1)"},
             ),
         )
         self.channel = org.channel_map(self.maps.source("discord")).get(channel_id)
@@ -83,7 +83,7 @@ class DiscordConnector(HttpConnector):
     def fetch(self, since_ms: int) -> list[Item]:
         if not self.channel:
             raise ConnectorError(
-                f"connectors.yaml: discord.channels needs {self.channel_id!r} -> a Lore channel id"
+                f"connectors.yaml: discord.channels needs {self.channel_id!r} -> a Yaan channel id"
             )
         channel_name = self.channel_name()
         items: list[Item] = []

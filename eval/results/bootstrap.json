@@ -3,7 +3,7 @@
   "questions": 200,
   "resamples": 10000,
   "systems": {
-   "lore": {
+   "yaan": {
     "avg": 83.2,
     "avg_95": [
      78.3,
@@ -15,7 +15,7 @@
      93.3
     ]
    },
-   "lore-search": {
+   "yaan-search": {
     "avg": 25.0,
     "avg_95": [
      19.7,
@@ -40,8 +40,8 @@
     ]
    }
   },
-  "paired_vs_lore": {
-   "lore-search": {
+  "paired_vs_yaan": {
+   "yaan-search": {
     "avg_diff": 58.2,
     "avg_diff_95": [
      51.0,
@@ -61,7 +61,7 @@
   "questions": 399,
   "resamples": 10000,
   "systems": {
-   "lore": {
+   "yaan": {
     "avg": 63.6,
     "avg_95": [
      57.8,
@@ -73,7 +73,7 @@
      82.4
     ]
    },
-   "lore-search": {
+   "yaan-search": {
     "avg": 24.2,
     "avg_95": [
      19.6,
@@ -98,8 +98,8 @@
     ]
    }
   },
-  "paired_vs_lore": {
-   "lore-search": {
+  "paired_vs_yaan": {
+   "yaan-search": {
     "avg_diff": 39.4,
     "avg_diff_95": [
      32.6,

@@ -4,8 +4,8 @@ Phase 12 step 1 (R1-8): `/ask` streams the agent's fixed event sequence as Serve
 Events: `tool_call`, `tool_result` (one pair per tool), `answer`, `citations`, `subgraph`,
 then `done`, or `error` if the agent fails (fail loudly: no canned fallback answer).
 
-Phase 17.1: `/mcp` serves Lore's read-only tools (and `ask`) over streamable HTTP to any MCP
-client (app/mcp_server.py); stdio is `lore mcp`.
+Phase 17.1: `/mcp` serves Yaan's read-only tools (and `ask`) over streamable HTTP to any MCP
+client (app/mcp_server.py); stdio is `yaan mcp`.
 
 R2 W4: `/ask` takes `as_of_ms` (the Timeline's slider re-asks for the state at a moment);
 `/decision/{id}/lineage`, `/entity/{id}`, `/graph/health` and `/eval/latest` serve the
@@ -13,7 +13,7 @@ Timeline, the entity panel and the Graph Health and Eval pages (12.1, 12.4, 12.6
 
 Step 2 (with Phase 11): the Inbox (`/alerts`, `/alerts/detail`, `/alerts/approve`,
 `/alerts/dismiss`) and the live demo (`/demo/injections`, `/demo/inject/{name}`, `/demo/reset`;
-`/ingest/artifact` behind a secret header). Everything reads and writes `LORE_API_GRAPH`
+`/ingest/artifact` behind a secret header). Everything reads and writes `YAAN_API_GRAPH`
 (`lore_demo`, a copy of `lore_herb`), so Ask sees what the demo injects; writes refuse the
 main graph (live.demo_graph). Public demo writes are limited to the labeled files in
 exports/inject/, rate-limited per IP and serialized by one lock (D058).
@@ -43,7 +43,7 @@ from app import __version__, audit, auth, db, mcp_server, obs
 from app.config import REPO_ROOT, get_settings
 from app.limits import RateLimiter, person_limits
 
-mcp_http = mcp_server.HttpEndpoint()  # /mcp (17.1): Lore's tools for any MCP client
+mcp_http = mcp_server.HttpEndpoint()  # /mcp (17.1): Yaan's tools for any MCP client
 
 
 @asynccontextmanager
@@ -67,7 +67,7 @@ def finish_stuck_responses() -> None:
 
 
 obs.setup_logging()
-app = FastAPI(title="Lore", version=__version__, lifespan=lifespan)
+app = FastAPI(title="Yaan", version=__version__, lifespan=lifespan)
 app.router.add_route("/mcp", mcp_http, include_in_schema=False)
 ASK_PER_MINUTE = 6  # per IP when nobody is signed in; the daily spend caps are the second guard
 STREAM_POLL_S = 0.5  # /ask checks this often whether the browser is still listening
@@ -76,13 +76,13 @@ _s = get_settings()
 # Anonymous askers (the demo) are counted per IP; a signed-in person on their own (D124), so an
 # office behind one address, or everyone behind one TLS proxy, doesn't share one budget.
 ask_limiter = RateLimiter(ASK_PER_MINUTE)
-ask_daily_limiter = RateLimiter(_s.lore_ask_per_ip_per_day, window=86_400)
+ask_daily_limiter = RateLimiter(_s.yaan_ask_per_ip_per_day, window=86_400)
 ask_person_limiter, ask_person_daily_limiter = person_limits()
 # D081: guards for a public deployment, where an agent swarm can come from many IPs at once.
-ask_global_limiter = RateLimiter(_s.lore_ask_global_per_minute)  # one key for everyone
-ask_slots = threading.BoundedSemaphore(_s.lore_ask_concurrency)
-request_limiter = RateLimiter(_s.lore_requests_per_ip_per_minute)
-person_request_limiter = RateLimiter(_s.lore_requests_per_person_per_minute)
+ask_global_limiter = RateLimiter(_s.yaan_ask_global_per_minute)  # one key for everyone
+ask_slots = threading.BoundedSemaphore(_s.yaan_ask_concurrency)
+request_limiter = RateLimiter(_s.yaan_requests_per_ip_per_minute)
+person_request_limiter = RateLimiter(_s.yaan_requests_per_person_per_minute)
 # The routes that read or write the graph (D100). /ingest/artifact has its own secret; /health
 # and the built UI's files are public, and the UI signs in when an API call answers 401.
 API_PREFIXES = (
@@ -212,7 +212,7 @@ def open_session(request: Request, response: Response) -> dict:
     """The web UI's sign-in (D111): the token, sent once as a bearer header, becomes an
     HttpOnly session cookie, so no page script ever holds it."""
     if auth.mode() != "token":
-        raise HTTPException(404, f"sign-in sessions are for LORE_AUTH=token, not {auth.mode()!r}")
+        raise HTTPException(404, f"sign-in sessions are for YAAN_AUTH=token, not {auth.mode()!r}")
     scheme, _, token = (request.headers.get("authorization") or "").partition(" ")
     if scheme.lower() != "bearer" or not token.strip():
         raise HTTPException(401, "send the token as 'Authorization: Bearer <token>'")
@@ -347,7 +347,7 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
     viewer = as_principal(request, body.viewer_id, "the viewer")
     # The slot first: a request turned away as busy doesn't use up the asker's limits (D098).
     if not ask_slots.acquire(blocking=False):
-        raise HTTPException(503, "Lore is busy answering; try again shortly", {"Retry-After": "10"})
+        raise HTTPException(503, "Yaan is busy answering; try again shortly", {"Retry-After": "10"})
     # a signed-in person's own limits; an anonymous asker's address's (D124)
     key = who or client_ip(request)
     minute, day = (ask_person_limiter, ask_person_daily_limiter)
@@ -360,7 +360,7 @@ def ask(body: AskRequest, request: Request) -> StreamingResponse:
         asker = "you have" if who else "this address has"
         refused = f"{asker} asked {day.per_minute} questions today: the limit for a day"
     elif not ask_global_limiter.allow("*"):
-        refused = "Lore is answering many questions right now; try in a minute"
+        refused = "Yaan is answering many questions right now; try in a minute"
     if refused:
         ask_slots.release()
         raise HTTPException(429, refused)
@@ -451,9 +451,9 @@ def decision_belief(
     request: Request,
     known_at_ms: int | None = Query(default=None, ge=0, le=MAX_MS),
 ) -> dict:
-    """What Lore believed about an issue or PR at `known_at_ms` (transaction time; None =
+    """What Yaan believed about an issue or PR at `known_at_ms` (transaction time; None =
     now): the fold replayed over the events it had learned by then (D101). The Timeline's
-    `as_of_ms` is event time; this is when Lore knew it."""
+    `as_of_ms` is event time; this is when Yaan knew it."""
     from app.ingest import fold
 
     if not subject_id.startswith(("iss:", "pr:")):
@@ -741,7 +741,7 @@ def demo_inject(name: str, request: Request) -> dict:
     from app.sentinel import live
 
     if org.active():
-        raise HTTPException(409, "demo injections are off in org mode (LORE_DATA_MODE=org)")
+        raise HTTPException(409, "demo injections are off in org mode (YAAN_DATA_MODE=org)")
     msg = injection(name)
     return demo_write(request, lambda g: live.ingest(msg, g))
 
@@ -756,17 +756,18 @@ def demo_reset(request: Request) -> dict:
 
 @app.post("/ingest/artifact")
 def ingest_artifact(msg: dict[str, Any], request: Request) -> dict:
-    """Ingest any message live (11.6). Needs LORE_INGEST_SECRET in the X-Lore-Secret header,
+    """Ingest any message live (11.6). Needs YAAN_INGEST_SECRET in the X-Yaan-Secret header,
     since arbitrary text costs an LLM call; ids start `msg:synthetic-` in the demo (any id in
     org mode)."""
     from app.sentinel import live
 
-    secret = get_settings().lore_ingest_secret
+    secret = get_settings().yaan_ingest_secret
     if not secret:
-        raise HTTPException(503, "live ingestion is off: set LORE_INGEST_SECRET")
-    given = request.headers.get("x-lore-secret") or ""
+        raise HTTPException(503, "live ingestion is off: set YAAN_INGEST_SECRET")
+    # X-Lore-Secret: a sender set up before the rename (D144)
+    given = request.headers.get("x-yaan-secret") or request.headers.get("x-lore-secret") or ""
     if not hmac.compare_digest(given.encode("utf-8"), secret.encode("utf-8")):
-        raise HTTPException(401, "wrong or missing X-Lore-Secret")
+        raise HTTPException(401, "wrong or missing X-Yaan-Secret")
     return demo_write(request, lambda g: live.ingest(msg, g))
 
 
@@ -830,20 +831,20 @@ METRIC_HELP = {
 def metrics(request: Request) -> Response:
     """Prometheus text (22.4): what this process counted, plus the graph's memory and disk,
     today's spend, and the connector worker's counters from its heartbeat. For admins, or a
-    scraper sending LORE_METRICS_TOKEN as a bearer token (not a person's token)."""
+    scraper sending YAAN_METRICS_TOKEN as a bearer token (not a person's token)."""
     from app import llm
     from app.connectors import runner
 
     s = get_settings()
     scheme, _, sent = (request.headers.get("authorization") or "").partition(" ")
-    scraper = bool(s.lore_metrics_token) and scheme.lower() == "bearer"
-    if not (scraper and hmac.compare_digest(sent.strip(), s.lore_metrics_token or "")):
+    scraper = bool(s.yaan_metrics_token) and scheme.lower() == "bearer"
+    if not (scraper and hmac.compare_digest(sent.strip(), s.yaan_metrics_token or "")):
         try:
             who, _ = auth.identify(request.headers, request.cookies)
         except auth.AuthError as e:
             raise HTTPException(401, str(e), {"WWW-Authenticate": "Bearer"}) from e
         if not auth.is_admin(who):
-            raise HTTPException(403, "for Yaan's admins, or LORE_METRICS_TOKEN")
+            raise HTTPException(403, "for Yaan's admins, or YAAN_METRICS_TOKEN")
     g = graph()
     out = [*obs.METRICS.samples(), ("yaan_build_info", {"version": __version__}, 1)]
     try:

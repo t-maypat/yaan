@@ -47,7 +47,7 @@ def test_the_tools_are_the_agents_minus_raw_cypher_plus_ask(monkeypatch):
             "description"
         ]
     )
-    monkeypatch.setattr(get_settings(), "lore_mcp_ask", False)
+    monkeypatch.setattr(get_settings(), "yaan_mcp_ask", False)
     assert "ask" not in [t.name for t in mcp_server.tool_list()]
     with pytest.raises(loop.ToolError, match="unknown tool"):
         mcp_server.run("ask", {"question": "Who?"}, "g")
@@ -135,7 +135,7 @@ def test_a_signed_in_mcp_client_sees_only_what_its_person_may(company, tmp_path,
     from app import auth
     from app.agent import access
 
-    monkeypatch.setenv("LORE_AUTH", "token")
+    monkeypatch.setenv("YAAN_AUTH", "token")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     get_settings.cache_clear()
     monkeypatch.setattr(mcp_server, "graph", lambda: company)
@@ -190,11 +190,11 @@ def test_an_org_graph_is_never_described_as_herb(monkeypatch):
     from app.config import get_settings
 
     assert "HERB" in mcp_server.instructions()  # the demo says what it is
-    monkeypatch.setenv("LORE_DATA_MODE", "org")
+    monkeypatch.setenv("YAAN_DATA_MODE", "org")
     get_settings.cache_clear()
     try:
         said = mcp_server.instructions()
         assert "HERB" not in said and "synthetic" not in said and "your team's own" in said
     finally:
-        monkeypatch.delenv("LORE_DATA_MODE")
+        monkeypatch.delenv("YAAN_DATA_MODE")
         get_settings.cache_clear()

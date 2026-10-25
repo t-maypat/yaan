@@ -13,7 +13,7 @@ product in that year is assumed to hold a quarter of them: ~15.5k issues.
 Each run reports, per stage: a cold full fold (nothing resolved before), a steady-state batch
 (5 new events after the newest), and a late edit (an event dated in the middle of the history:
 everything after it is resolved again). Follow-ups name their issue loosely, as people do in
-chat (`--exact`: by its title, as Jira does). The graph `lore_load` is deleted unless `--keep`.
+chat (`--exact`: by its title, as Jira does). The graph `yaan_load` is deleted unless `--keep`.
 """
 
 import argparse
@@ -28,7 +28,7 @@ from app import db, schema  # noqa: E402
 from app.ingest import events as event_store  # noqa: E402
 from app.ingest import fold, resolve  # noqa: E402
 
-GRAPH, PRODUCT = "lore_load", "LoadForce"
+GRAPH, PRODUCT = "yaan_load", "LoadForce"
 SPEAKER, REPORTER = "eid_cccccccc", "eid_aaaaaaaa"
 WORDS = (
     "cache login export chart sync token oauth upload report dashboard filter search billing "

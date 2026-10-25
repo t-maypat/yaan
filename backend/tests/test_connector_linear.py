@@ -125,7 +125,7 @@ def test_a_ticket_comment_goes_on_the_issue_that_a_linear_message_reported(conn,
     )
     assert ref == "https://linear.app/acme/issue/ENG-12#c-9"
     sent = conn.seen["queries"][-1]["variables"]["input"]
-    assert sent["issueId"] == "ENG-12" and "### Lore Sentinel · Follow-up" in sent["body"]
+    assert sent["issueId"] == "ENG-12" and "### Yaan Sentinel · Follow-up" in sent["body"]
     assert conn.link("msg:synthetic-linear-ENG-12-comment-c-1") == ("Linear ENG-12", None)
     assert (
         conn.post({"id": "a2", "kind": "notify_owner", "target_id": "eid_1", "draft": "x"}) is None

@@ -66,7 +66,7 @@ def test_an_unknown_shape_still_posts_with_ids_linked():
 
 def test_github_markdown_quotes_under_their_lead_with_links():
     md = render.markdown({"id": "act:7", "kind": "ticket_comment", "draft": TICKET}, resolve)
-    assert md.startswith("### Lore Sentinel · Follow-up")
+    assert md.startswith("### Yaan Sentinel · Follow-up")
     assert md.endswith("<!-- yaan-action:act:7 -->")  # found again on a retry (D110)
     assert "- **Now 'reopened' since 2026-10-18** · [Message in #vizforce-bugs](" in md
     assert f"  > {QUOTE}" in md

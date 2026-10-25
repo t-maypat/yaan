@@ -1,6 +1,6 @@
-%% lore schema: declare, apply, verify (Phase 1.5, D019).
+%% yaan schema: declare, apply, verify (Phase 1.5, D019).
 flowchart LR
-  F["00_schema.cypher<br/>16 index statements<br/>one per line"]:::file --> A["Apply each line<br/>as lore_writer"]:::code
+  F["00_schema.cypher<br/>16 index statements<br/>one per line"]:::file --> A["Apply each line<br/>as yaan_writer"]:::code
   A -- "succeeds" --> C["created"]:::code
   A -- "Attribute 'x' is<br/>already indexed" --> E["exists<br/>(the only error tolerated)"]:::code
   A -- "any other error" --> X["Stop with the error"]:::guard

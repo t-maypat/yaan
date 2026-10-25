@@ -42,7 +42,7 @@ def check_complete(dest: Path) -> None:
     if missing or len(products) != PRODUCT_COUNT:
         raise RuntimeError(
             f"HERB at {dest} is incomplete: missing {missing or 'no metadata'}, "
-            f"{len(products)} of {PRODUCT_COUNT} product files. Rerun `lore fetch-herb`."
+            f"{len(products)} of {PRODUCT_COUNT} product files. Rerun `yaan fetch-herb`."
         )
 
 

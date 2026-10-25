@@ -1,14 +1,14 @@
 """MCP server (Phase 17.1, D073; spec docs/CONTEXT.md §9.8).
 
-Any MCP client (Claude Code, Claude Desktop, Cursor, another agent) gets Lore's read-only graph
+Any MCP client (Claude Code, Claude Desktop, Cursor, another agent) gets Yaan's read-only graph
 tools with the same names, descriptions and JSON schemas the answer agent uses: they are built
 from `tools.REGISTRY`, and every call goes through `loop.call_tool`, so product ids are checked
 and errors come back as tool errors exactly as for the agent. `graph_query` stays inside the
-agent's guard (§9.8). `ask` (on unless LORE_MCP_ASK=0) runs the whole agent and returns an answer
+agent's guard (§9.8). `ask` (on unless YAAN_MCP_ASK=0) runs the whole agent and returns an answer
 whose quotes were checked word for word, behind the daily spend cap and a per-minute limit.
 
-Two transports: stdio (`lore mcp`) and streamable HTTP at `/mcp` on the API (`HttpEndpoint`,
-started in the API's lifespan). Everything reads `LORE_API_GRAPH`, like the API.
+Two transports: stdio (`yaan mcp`) and streamable HTTP at `/mcp` on the API (`HttpEndpoint`,
+started in the API's lifespan). Everything reads `YAAN_API_GRAPH`, like the API.
 """
 
 import json
@@ -46,23 +46,23 @@ ORG_INSTRUCTIONS = (
     "complete answer whose quotes Yaan has already checked word for word against the sources."
 )
 INSTRUCTIONS = (
-    "Lore is a time-aware graph of a software company's Slack messages, meetings, documents "
+    "Yaan is a time-aware graph of a software company's Slack messages, meetings, documents "
     "and pull requests, linked to people, customers, issues and decisions with validity "
     "windows (HERB, a public synthetic dataset, plus labeled synthetic demo messages). Every "
     "tool is read-only and returns artifact ids with their text: cite those ids for any claim. "
     "Most tools need a product_id (resolve_entity finds it). `ask` returns a complete answer "
-    "whose quotes Lore has already checked word for word against the sources."
+    "whose quotes Yaan has already checked word for word against the sources."
 )
 def instructions() -> str:
-    return ORG_INSTRUCTIONS if get_settings().lore_data_mode == "org" else INSTRUCTIONS
+    return ORG_INSTRUCTIONS if get_settings().yaan_data_mode == "org" else INSTRUCTIONS
 
 
 ASK = types.Tool(
     name="ask",
     description=(
-        "Ask Lore a question in plain language. Lore's own agent picks the graph tools, answers, "
+        "Ask Yaan a question in plain language. Yaan's own agent picks the graph tools, answers, "
         "and checks every quote word for word against its source; sentences it can't support "
-        "are dropped, and with nothing supported it says 'Not found in Lore's graph'. Returns "
+        "are dropped, and with nothing supported it says 'Not found in Yaan's graph'. Returns "
         "the answer in markdown with numbered citations (artifact id + verbatim quote). Costs "
         "an LLM call; prefer the specific tools for simple lookups."
     ),
@@ -113,7 +113,7 @@ def tool_list() -> list[types.Tool]:
                 annotations=types.ToolAnnotations(read_only_hint=True, open_world_hint=False),
             )
         )
-    if get_settings().lore_mcp_ask:
+    if get_settings().yaan_mcp_ask:
         out.append(ASK)
     return out
 
@@ -180,7 +180,7 @@ def run(
     signed-in person of an HTTP client (D100): `ask` answers as them and every tool result is
     redacted to what they may see. stdio has no viewer: it is the local user's own process."""
     graph_name = graph_name or graph()
-    if name == "ask" and get_settings().lore_mcp_ask:
+    if name == "ask" and get_settings().yaan_mcp_ask:
         if viewer:
             if args.get("viewer_id") not in (None, "", viewer):
                 raise loop.ToolError(f"signed in as {viewer}: answers are for you")
@@ -227,9 +227,9 @@ def build(graph_name: str | None = None) -> Server:
         return types.CallToolResult(content=[types.TextContent(type="text", text=text)])
 
     return Server(
-        "lore",
+        "yaan",
         version=__version__,
-        title="Lore",
+        title="Yaan",
         description="A time-aware company brain on FalkorDB: answers with verbatim sources.",
         instructions=instructions(),
         on_list_tools=list_tools,
@@ -254,7 +254,7 @@ class HttpEndpoint:
 
     @asynccontextmanager
     async def running(self) -> AsyncIterator[None]:
-        hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*", *get_settings().lore_mcp_hosts]
+        hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*", *get_settings().yaan_mcp_hosts]
         manager = StreamableHTTPSessionManager(
             app=build(),
             json_response=True,

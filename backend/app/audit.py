@@ -9,7 +9,7 @@ ids of the items in what they were shown, after permissions.
 It names items and never copies them: no question, no words. So forgetting an item needs
 nothing here (its id names a tombstone from then on), and erasing a person drops the lines
 that name them as the viewer (`scrub`, from forget.erase_person). Whole months older than
-LORE_AUDIT_MONTHS are deleted by the retention job. Yaan only appends; admins read it with
+YAAN_AUDIT_MONTHS are deleted by the retention job. Yaan only appends; admins read it with
 `yaan audit` or on the Admin page. `yaan backup` carries it (22.2).
 """
 
@@ -128,7 +128,7 @@ def scrub(graph: str, person: str) -> int:
 
 def prune(graph: str, keep_months: int | None = None, now: float | None = None) -> list[str]:
     """Delete whole months older than the last `keep_months` (this month included)."""
-    keep_months = keep_months or get_settings().lore_audit_months
+    keep_months = keep_months or get_settings().yaan_audit_months
     t = time.gmtime(now or time.time())
     index = t.tm_year * 12 + t.tm_mon - 1
     oldest = index - keep_months + 1

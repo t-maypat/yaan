@@ -1,4 +1,4 @@
-"""Authority policy, Lore's "Bailiff" (Phase 8.3, R1-3 / D039).
+"""Authority policy, Yaan's "Bailiff" (Phase 8.3, R1-3 / D039).
 
 A pure function: given a claim's kind, its speaker and the facts about the thing it changes,
 decide whether the claim may change the decision chain. The LLM never decides authority.

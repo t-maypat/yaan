@@ -1,12 +1,12 @@
 # Local stack: FalkorDB + Browser. The image's run.sh starts
 #   redis-server $REDIS_ARGS --protected-mode no --dir /var/lib/falkordb/data --loadmodule falkordb.so $FALKORDB_ARGS
 # Profile `app` adds the API serving the built UI (R2 W6); a TLS proxy is the deployment's.
-name: lore
+name: yaan
 
 # Settings the API and the connector worker share (one image, two commands).
 x-yaan: &yaan
   build: .
-  image: lore-api
+  image: yaan-api
   env_file: .env
   environment:
     FALKORDB_HOST: falkordb # the service name, inside the compose network
@@ -20,10 +20,10 @@ x-yaan: &yaan
     # connector maps and the people directory (org mode): an edit applies on restart
     - ./connectors.yaml:/app/connectors.yaml:ro
     - ./people.yaml:/app/people.yaml:ro
-  # Least privilege (H1, D108): an unprivileged user (on Linux, LORE_UID / LORE_GID = the owner
+  # Least privilege (H1, D108): an unprivileged user (on Linux, YAAN_UID / YAAN_GID = the owner
   # of ./data), a read-only filesystem apart from ./data and /tmp, no Linux capabilities, and
   # no way to gain privileges.
-  user: "${LORE_UID:-10001}:${LORE_GID:-10001}"
+  user: "${YAAN_UID:-${LORE_UID:-10001}}:${YAAN_GID:-${LORE_GID:-10001}}"
   read_only: true
   tmpfs: [/tmp]
   cap_drop: [ALL]
@@ -71,10 +71,10 @@ services:
         --appendonly ${FALKORDB_APPENDONLY:-no} --appendfsync everysec
         --maxmemory ${FALKORDB_MAXMEMORY:-2gb} --maxmemory-policy noeviction
         --user default on >${FALKORDB_ADMIN_PASSWORD:?set FALKORDB_ADMIN_PASSWORD in .env (see .env.example)} allkeys allcommands
-        --user ${FALKORDB_WRITER_USER:-lore_writer} on >${FALKORDB_WRITER_PASSWORD:?set FALKORDB_WRITER_PASSWORD in .env} allkeys -@all
+        --user ${FALKORDB_WRITER_USER:-yaan_writer} on >${FALKORDB_WRITER_PASSWORD:?set FALKORDB_WRITER_PASSWORD in .env} allkeys -@all
         +graph.query +graph.ro_query +graph.explain +graph.profile +graph.list +graph.delete +graph.copy
         +graph.constraint +graph.memory +ping +info +client|setinfo
-        --user ${FALKORDB_READER_USER:-lore_reader} on >${FALKORDB_READER_PASSWORD:?set FALKORDB_READER_PASSWORD in .env} allkeys -@all
+        --user ${FALKORDB_READER_USER:-yaan_reader} on >${FALKORDB_READER_PASSWORD:?set FALKORDB_READER_PASSWORD in .env} allkeys -@all
         +graph.ro_query +graph.explain +graph.list +ping +info +client|setinfo
       # redis-cli inside the container authenticates as the admin with this.
       REDISCLI_AUTH: "${FALKORDB_ADMIN_PASSWORD}"
@@ -93,24 +93,24 @@ services:
     restart: always
 
   # The API with the built web UI (R2 W6): docker compose --profile app up -d --build
-  # Seed it once, no API key needed: docker compose --profile app run --rm api lore seed --from <path or URL>
+  # Seed it once, no API key needed: docker compose --profile app run --rm api yaan seed --from <path or URL>
   api:
     <<: *yaan
     profiles: ["app"]
     ports:
-      - "127.0.0.1:${LORE_API_PORT:-8000}:8000" # put a TLS proxy in front for a public deployment
+      - "127.0.0.1:${YAAN_API_PORT:-${LORE_API_PORT:-8000}}:8000" # put a TLS proxy in front for a public deployment
 
   # Sign-in with Google, Okta, Entra ID or any OIDC provider, in front of the API (D133):
-  # LORE_AUTH=header, LORE_AUTH_PROXY_SECRET and the OAUTH2_PROXY_* settings in .env, then
+  # YAAN_AUTH=header, YAAN_AUTH_PROXY_SECRET and the OAUTH2_PROXY_* settings in .env, then
   #   docker compose --profile app --profile sso up -d     (then open http://127.0.0.1:4180)
-  # oauth2-proxy proves itself to Yaan with Basic auth: <email>:<LORE_AUTH_PROXY_SECRET>.
+  # oauth2-proxy proves itself to Yaan with Basic auth: <email>:<YAAN_AUTH_PROXY_SECRET>.
   sso:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
     profiles: ["sso"]
     restart: always
     depends_on: [api]
     ports:
-      - "127.0.0.1:${LORE_SSO_PORT:-4180}:4180" # put a TLS proxy in front for a public deployment
+      - "127.0.0.1:${YAAN_SSO_PORT:-${LORE_SSO_PORT:-4180}}:4180" # put a TLS proxy in front for a public deployment
     environment:
       OAUTH2_PROXY_HTTP_ADDRESS: "0.0.0.0:4180"
       OAUTH2_PROXY_UPSTREAMS: "http://api:8000"
@@ -127,7 +127,7 @@ services:
       # who signed in, to Yaan: Basic <email>:<the shared secret> plus X-Forwarded-Email
       OAUTH2_PROXY_PASS_BASIC_AUTH: "true"
       OAUTH2_PROXY_PREFER_EMAIL_TO_USER: "true"
-      OAUTH2_PROXY_BASIC_AUTH_PASSWORD: ${LORE_AUTH_PROXY_SECRET:-}
+      OAUTH2_PROXY_BASIC_AUTH_PASSWORD: ${YAAN_AUTH_PROXY_SECRET:-${LORE_AUTH_PROXY_SECRET:-}}
       # tools' webhooks and the health check come without a person
       OAUTH2_PROXY_SKIP_AUTH_ROUTES: "POST=^/hooks/,GET=^/health$"
 
@@ -148,3 +148,5 @@ services:
 
 volumes:
   falkordb-data:
+    # Named as before the rename (Lore, D144), so an existing graph is found again
+    name: lore_falkordb-data

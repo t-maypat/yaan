@@ -106,7 +106,7 @@ def second(falkordb):
 
     from app import schema
 
-    name = f"lore_test_{uuid.uuid4().hex[:12]}"
+    name = f"yaan_test_{uuid.uuid4().hex[:12]}"
     schema.apply(name)
     db.run_text(BASE, label="base", graph=name, readonly=False)
     yield name
@@ -122,7 +122,7 @@ DERIVED_EDGES = (
 
 
 def layer(graph, timeless=True):
-    """The derived layer as comparable data. `timeless` drops when Lore learned things
+    """The derived layer as comparable data. `timeless` drops when Yaan learned things
     (observed_ms, and the row hash that covers it): two orders of arrival differ there only."""
     skip = {"observed_ms", "row_hash"} if timeless else set()
     nodes = {}
@@ -150,7 +150,7 @@ def layer(graph, timeless=True):
 
 
 # --- events ----------------------------------------------------------------------------------
-def test_an_event_keeps_when_lore_first_learned_it(base):
+def test_an_event_keeps_when_yaan_first_learned_it(base):
     event_store.load(EVENTS[:2], base, observed_ms=100)
     event_store.load(EVENTS[:3], base, observed_ms=200)  # the first two again, and one new
     got = {e["artifact_id"]: e["observed_ms"] for e in event_store.read("W", base)}
@@ -163,7 +163,7 @@ def test_a_retracted_event_is_closed_not_deleted_and_replayable(base):
     assert event_store.retract("msg:m2", [], base, now_ms=150) == 1
     assert {e["artifact_id"] for e in event_store.read("W", base)} == {"msg:m1", "msg:m3"}
     before = {e["artifact_id"] for e in event_store.read("W", base, known_at_ms=120)}
-    assert before == {"msg:m1", "msg:m2", "msg:m3"}  # what Lore knew before the retraction
+    assert before == {"msg:m1", "msg:m2", "msg:m3"}  # what Yaan knew before the retraction
     assert event_store.read("W", base, known_at_ms=50) == []  # before it learned anything
     event_store.load([EVENTS[1]], base, observed_ms=300)  # the newer version says it again
     assert len(event_store.read("W", base)) == 3

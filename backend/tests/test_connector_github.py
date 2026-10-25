@@ -16,7 +16,7 @@ MAPS = Maps(
     default_person="eid_bd791efc",
     sources={"github": {"people": {"hannah-gh": "eid_9e9883de"}}},
 )
-REPO = "acme/lore-demo-sandbox"
+REPO = "acme/yaan-demo-sandbox"
 PULLS = [
     {
         "number": 2,
@@ -89,7 +89,7 @@ def conn():
 def test_prs_come_in_with_herbs_shape_and_reviews(conn):
     items = {i.artifact.meta["number"]: i for i in conn.fetch(0)}
     pr = items[1].artifact
-    assert pr.id == "pr:synthetic-github-acme-lore-demo-sandbox-1" and pr.kind == "pr"
+    assert pr.id == "pr:synthetic-github-acme-yaan-demo-sandbox-1" and pr.kind == "pr"
     assert pr.author_eid == "eid_9e9883de" and pr.url.endswith("/pull/1")
     assert (pr.meta["state"], pr.meta["merged"]) == ("closed", True)
     assert pr.meta["reviews"] == [
@@ -117,7 +117,7 @@ def test_comments_go_on_the_targeted_pr_or_the_issues_fix_pr(conn, monkeypatch):
     )
     assert ref == f"https://github.com/{REPO}/pull/1#c1" and conn.posted[0][0] == 1
     assert (
-        conn.posted[0][1].startswith("### Lore Sentinel · Follow-up")
+        conn.posted[0][1].startswith("### Yaan Sentinel · Follow-up")
         and "- Regressed." in (conn.posted[0][1])
     )
     conn.post({"id": "a2", "kind": "doc_fix", "target_id": conn.pr_id(2), "draft": "Note."})

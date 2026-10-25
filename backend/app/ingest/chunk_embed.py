@@ -166,7 +166,7 @@ def _model():
     from fastembed import TextEmbedding  # imported late: loading ONNX takes seconds
 
     s = get_settings()
-    return TextEmbedding(s.lore_embed_model, cache_dir=str(s.models_dir))
+    return TextEmbedding(s.yaan_embed_model, cache_dir=str(s.models_dir))
 
 
 @lru_cache
@@ -177,7 +177,7 @@ def _cache():
 
 
 def embed_key(kind: str, text: str) -> str:
-    model = get_settings().lore_embed_model
+    model = get_settings().yaan_embed_model
     return hashlib.sha256(f"{model}\n{kind}\n{text}".encode()).hexdigest()
 
 
@@ -211,9 +211,9 @@ def _embed(texts: list[str], kind: str) -> list[list[float]]:
         for i, vec in zip(todo, fresh, strict=True):
             vectors[i] = [float(x) for x in vec]
             cache.set(keys[i], vectors[i], expire=expire)
-    dim = get_settings().lore_embed_dim
+    dim = get_settings().yaan_embed_dim
     if any(len(v) != dim for v in vectors):
-        raise ValueError(f"embedding size differs from LORE_EMBED_DIM={dim}")
+        raise ValueError(f"embedding size differs from YAAN_EMBED_DIM={dim}")
     return vectors
 
 

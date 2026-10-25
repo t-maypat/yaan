@@ -68,7 +68,7 @@ COMMENTS = {
             "author": {"accountId": "acc-hannah"},
             "created": "2027-03-12T20:00:00.000+0000",
             "updated": "2027-03-12T20:00:00.000+0000",
-            "body": doc("[synthetic demo] Fix: https://github.com/acme/lore-demo-sandbox/pull/1"),
+            "body": doc("[synthetic demo] Fix: https://github.com/acme/yaan-demo-sandbox/pull/1"),
         },
         {
             "id": "9",
@@ -156,7 +156,7 @@ def test_a_ticket_becomes_a_report_its_changes_and_its_comments(conn):
     )
     assert done.artifact.text.startswith("[synthetic demo] Jira VIZ-1")  # labeled (rule 5)
     # the resolution names the fix PR the ticket's own comment gave: the fold links FIXES
-    assert ev2["pr"] == "https://github.com/acme/lore-demo-sandbox/pull/1"
+    assert ev2["pr"] == "https://github.com/acme/yaan-demo-sandbox/pull/1"
     assert comment.events is None  # the extractor reads comments like any message
     assert (
         "times out again" in comment.artifact.text and comment.artifact.author_eid == "eid_7017b913"
@@ -188,7 +188,7 @@ def test_comments_go_on_the_ticket(conn, monkeypatch):
     # a retry: found by its marker in the footer (D110), not posted twice
     again = conn.post({"id": "a1", "kind": "doc_fix", "target_id": target, "draft": "x"})
     assert again == ref and len(conn.seen["posted"]) == 1
-    panel, items, footer = body["content"]  # a Lore panel, one list item a line, the footer
+    panel, items, footer = body["content"]  # a Yaan panel, one list item a line, the footer
     assert panel["type"] == "panel" and panel["attrs"]["panelType"] == "warning"  # a correction
     assert items["type"] == "bulletList" and len(items["content"]) == 2
     assert conn.link("msg:synthetic-jira-VIZ-1-change-101") == (

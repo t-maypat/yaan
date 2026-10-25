@@ -8,7 +8,7 @@ Spec: docs/CONTEXT.md §8; facts in docs/decisions.md (API facts).
 How a call goes (D033):
 1. The request is hashed; a cached answer is returned at no cost.
 2. The spend ledger checks the worst case (every input token plus `max_tokens` of output at
-   list price) against LORE_DAILY_SPEND_CAP_USD and refuses the call if it could cross it. In
+   list price) against YAAN_DAILY_SPEND_CAP_USD and refuses the call if it could cross it. In
    org mode answers also have a share of that cap, so questions can't use up what reading new
    items needs, and each person a daily budget of their own (D124).
 3. The call runs (`messages.parse` when a Pydantic `output` is given: the API constrains the
@@ -71,15 +71,15 @@ class Refused(LLMError):
 
 
 class CacheOnly(LLMError):
-    """LORE_LLM_CACHE_ONLY is on (a public demo) and this call isn't cached: no API call."""
+    """YAAN_LLM_CACHE_ONLY is on (a public demo) and this call isn't cached: no API call."""
 
 
 def refuse_uncached() -> None:
     """A public deployment replays cached answers only, so strangers can't spend the key."""
-    if get_settings().lore_llm_cache_only:
+    if get_settings().yaan_llm_cache_only:
         raise CacheOnly(
-            "This public demo replays answers Lore has already worked out, and this question "
-            "isn't one of them. Pick a suggested question, or run Lore yourself to ask anything."
+            "This public demo replays answers Yaan has already worked out, and this question "
+            "isn't one of them. Pick a suggested question, or run Yaan yourself to ask anything."
         )
 
 
@@ -93,25 +93,25 @@ class LLMResult:
     cache_read_tokens: int
     cache_write_tokens: int
     cost_usd: float
-    cached: bool  # served from Lore's disk cache: no call, no cost
+    cached: bool  # served from Yaan's disk cache: no call, no cost
     request_id: str | None
 
 
 def prices() -> dict[str, tuple[float, float, float, float]]:
-    """PRICES, with LORE_PRICES_FILE's entries on top (D121)."""
-    path = get_settings().lore_prices_file
+    """PRICES, with YAAN_PRICES_FILE's entries on top (D121)."""
+    path = get_settings().yaan_prices_file
     if not path:
         return PRICES
     import yaml
 
     if not path.is_file():
-        raise LLMError(f"LORE_PRICES_FILE {path} doesn't exist")
+        raise LLMError(f"YAAN_PRICES_FILE {path} doesn't exist")
     extra = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     out = dict(PRICES)
     for model, p in extra.items():
         if not (isinstance(p, list) and len(p) == 4 and all(isinstance(x, int | float) for x in p)):
             raise LLMError(
-                f"LORE_PRICES_FILE: {model} needs [input, output, cache write, cache read] in USD "
+                f"YAAN_PRICES_FILE: {model} needs [input, output, cache write, cache read] in USD "
                 "per million tokens"
             )
         out[str(model)] = tuple(float(x) for x in p)
@@ -122,7 +122,7 @@ def cost_usd(model: str, inp: int, out: int, cache_write: int = 0, cache_read: i
     table = prices()
     if model not in table:
         raise LLMError(
-            f"no price for model {model!r}: add it to llm.PRICES, or to LORE_PRICES_FILE"
+            f"no price for model {model!r}: add it to llm.PRICES, or to YAAN_PRICES_FILE"
         )
     p_in, p_out, p_write, p_read = table[model]
     return (inp * p_in + out * p_out + cache_write * p_write + cache_read * p_read) / 1e6
@@ -147,7 +147,7 @@ _payer: ContextVar[str | None] = ContextVar("llm_payer", default=None)
 @contextmanager
 def paying(person: str | None):
     """Charge the calls made inside the block to `person` as well (their daily budget,
-    LORE_PERSON_SPEND_CAP_USD, org mode). None: nobody's budget but the shared ones."""
+    YAAN_PERSON_SPEND_CAP_USD, org mode). None: nobody's budget but the shared ones."""
     token = _payer.set(person)
     try:
         yield
@@ -181,7 +181,7 @@ def _write_ledger(path: Path, days: dict[str, Any]) -> None:
         try:
             os.replace(tmp, path)
             return
-        except PermissionError:  # another process (an older Lore, an antivirus scan) has it open
+        except PermissionError:  # another process (an older Yaan, an antivirus scan) has it open
             if attempt == REPLACE_TRIES - 1:
                 raise
             time.sleep(0.05)
@@ -229,24 +229,24 @@ def _live_holds(days: dict[str, Any], now: float) -> dict[str, dict[str, Any]]:
 
 
 def answer_cap() -> float | None:
-    """Answers' share of the daily cap: LORE_ANSWER_SPEND_CAP_USD, else half the cap in org
+    """Answers' share of the daily cap: YAAN_ANSWER_SPEND_CAP_USD, else half the cap in org
     mode. None in the demo and the eval: there answers and extraction share one cap, as ever."""
     s = get_settings()
-    if s.lore_answer_spend_cap_usd is not None:
-        return s.lore_answer_spend_cap_usd
-    return s.lore_daily_spend_cap_usd / 2 if s.lore_data_mode == "org" else None
+    if s.yaan_answer_spend_cap_usd is not None:
+        return s.yaan_answer_spend_cap_usd
+    return s.yaan_daily_spend_cap_usd / 2 if s.yaan_data_mode == "org" else None
 
 
 def person_cap() -> float | None:
     """What one person's answers may cost a day (org mode); None in the demo."""
     s = get_settings()
-    return s.lore_person_spend_cap_usd if s.lore_data_mode == "org" else None
+    return s.yaan_person_spend_cap_usd if s.yaan_data_mode == "org" else None
 
 
 def _refuse_over_cap(
     days: dict[str, Any], worst: float, role: str | None = None, payer: str | None = None
 ) -> None:
-    cap = get_settings().lore_daily_spend_cap_usd
+    cap = get_settings().yaan_daily_spend_cap_usd
     holds = [h for h in _live_holds(days, time.time()).values() if h["day"] == today()]
     spent = float(days.get(today(), 0.0))
     held = sum(h["usd"] for h in holds)
@@ -254,7 +254,7 @@ def _refuse_over_cap(
         in_flight = f" plus ${held:.4f} held by calls in flight" if held else ""
         raise SpendCapReached(
             f"today's LLM spend is ${spent:.4f}{in_flight}; this call could add ${worst:.4f}, "
-            f"over the ${cap:.2f} cap (LORE_DAILY_SPEND_CAP_USD in .env). Raise the cap or wait "
+            f"over the ${cap:.2f} cap (YAAN_DAILY_SPEND_CAP_USD in .env). Raise the cap or wait "
             "until 00:00 UTC."
         )
     share = answer_cap() if role == "answer" else None
@@ -264,7 +264,7 @@ def _refuse_over_cap(
         if used + worst > share:
             raise SpendCapReached(
                 f"answers have used ${used:.4f} of today's ${share:.2f} share of the "
-                f"${cap:.2f} cap (LORE_ANSWER_SPEND_CAP_USD); the rest is kept for reading new "
+                f"${cap:.2f} cap (YAAN_ANSWER_SPEND_CAP_USD); the rest is kept for reading new "
                 "items. Raise it or wait until 00:00 UTC."
             )
     mine = person_cap() if payer else None
@@ -274,7 +274,7 @@ def _refuse_over_cap(
         if used + worst > mine:
             raise PersonCapReached(
                 f"your questions today have cost ${used:.4f}, and the next could add "
-                f"${worst:.4f}: over your ${mine:.2f} a day (LORE_PERSON_SPEND_CAP_USD). Try "
+                f"${worst:.4f}: over your ${mine:.2f} a day (YAAN_PERSON_SPEND_CAP_USD). Try "
                 "again after 00:00 UTC, or ask an admin to raise it."
             )
 
@@ -347,7 +347,7 @@ def spending(path: Path | None = None) -> dict[str, Any]:
     return {
         "day": day,
         "spent_usd": round(float(days.get(day, 0.0)), 4),
-        "cap_usd": get_settings().lore_daily_spend_cap_usd,
+        "cap_usd": get_settings().yaan_daily_spend_cap_usd,
         "answers_usd": round(float((days.get(ANSWERS) or {}).get(day, 0.0)), 4),
         "answer_cap_usd": answer_cap(),
         "person_cap_usd": person_cap(),
@@ -396,11 +396,11 @@ def _cache():
 
 
 def cache_expiry() -> float | None:
-    """Seconds a disk-cache entry lives: LORE_CACHE_DAYS in org mode, a bound on how long a copy
+    """Seconds a disk-cache entry lives: YAAN_CACHE_DAYS in org mode, a bound on how long a copy
     of a team's words can outlive its source (D125; `forget` also clears the cache at once);
     forever in the demo, where the eval replays its runs from the cache for free."""
     s = get_settings()
-    return s.lore_cache_days * 86_400 if s.lore_data_mode == "org" else None
+    return s.yaan_cache_days * 86_400 if s.yaan_data_mode == "org" else None
 
 
 def request_key(model: str, payload: dict[str, Any]) -> str:
@@ -420,7 +420,7 @@ def complete(
 ) -> LLMResult:
     """One LLM call through the gateway. `purpose` names it in the call log (e.g. "baseline")."""
     s = get_settings()
-    if s.lore_llm_provider == "litellm":  # optional, off by default (D091); lazy import
+    if s.yaan_llm_provider == "litellm":  # optional, off by default (D091); lazy import
         from app import llm_litellm
 
         return llm_litellm.complete(
@@ -433,9 +433,9 @@ def complete(
             use_cache=use_cache,
         )
     model, effort = {
-        "extract": (s.lore_extract_model, s.lore_extract_effort),
-        "answer": (s.lore_answer_model, s.lore_answer_effort),
-        "judge": (s.lore_judge_model, s.lore_judge_effort),
+        "extract": (s.yaan_extract_model, s.yaan_extract_effort),
+        "answer": (s.yaan_answer_model, s.yaan_answer_effort),
+        "judge": (s.yaan_judge_model, s.yaan_judge_effort),
     }[role]
     schema = output.model_json_schema() if output else None
     key = request_key(
@@ -562,7 +562,7 @@ def converse(
     turns are unaffected. The caller appends `content` unchanged to keep thinking valid.
     """
     s = get_settings()
-    if s.lore_llm_provider == "litellm":  # optional, off by default (D091); lazy import
+    if s.yaan_llm_provider == "litellm":  # optional, off by default (D091); lazy import
         from app import llm_litellm
 
         return llm_litellm.converse(
@@ -576,9 +576,9 @@ def converse(
             use_cache=use_cache,
         )
     model, effort = {
-        "extract": (s.lore_extract_model, s.lore_extract_effort),
-        "answer": (s.lore_answer_model, s.lore_answer_effort),
-        "judge": (s.lore_judge_model, s.lore_judge_effort),
+        "extract": (s.yaan_extract_model, s.yaan_extract_effort),
+        "answer": (s.yaan_answer_model, s.yaan_answer_effort),
+        "judge": (s.yaan_judge_model, s.yaan_judge_effort),
     }[role]
     payload = {
         "system": system,

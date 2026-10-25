@@ -2,14 +2,14 @@
 read and write names a person, and viewer and approver come from that person, never from the
 request body.
 
-Modes (`LORE_AUTH`, default `auto` = `token` in org mode, `none` in the demo):
+Modes (`YAAN_AUTH`, default `auto` = `token` in org mode, `none` in the demo):
 - `none`: no principal. Demo only: "view as" is a labeled persona switch over synthetic data.
-- `token`: `Authorization: Bearer <token>`. `lore token issue <person>` mints a token for a
-  people.yaml entry and stores only its SHA-256 (data/tokens.json); `lore token revoke` removes
+- `token`: `Authorization: Bearer <token>`. `yaan token issue <person>` mints a token for a
+  people.yaml entry and stores only its SHA-256 (data/tokens.json); `yaan token revoke` removes
   a person's tokens.
-- `header`: a single-sign-on proxy (oauth2-proxy, Cloudflare Access ...) in front of Lore sets
-  the user's email in `LORE_AUTH_HEADER` and `X-Lore-Proxy-Secret` to `LORE_AUTH_PROXY_SECRET`.
-  Without the secret, anyone who reached Lore around the proxy could name themselves.
+- `header`: a single-sign-on proxy (oauth2-proxy, Cloudflare Access ...) in front of Yaan sets
+  the user's email in `YAAN_AUTH_HEADER` and `X-Yaan-Proxy-Secret` to `YAAN_AUTH_PROXY_SECRET`.
+  Without the secret, anyone who reached Yaan around the proxy could name themselves.
   oauth2-proxy can't set a fixed header with its stable options, so it may instead send
   `Authorization: Basic <email>:<secret>` (`--basic-auth-password`, `--prefer-email-to-user`;
   the `sso` compose profile, D133).
@@ -46,7 +46,7 @@ from app import filestate
 from app.config import get_settings
 
 TOKEN_BYTES = 32
-TOKEN_DAYS = 90  # a token's default lifetime: `lore token issue --days` changes it
+TOKEN_DAYS = 90  # a token's default lifetime: `yaan token issue --days` changes it
 SESSION_DAYS = 30  # a browser session's longest life; never past its token's expiry
 SESSION_COOKIE = "yaan_session"
 CSRF_HEADER = "x-yaan-csrf"
@@ -61,9 +61,9 @@ class AuthError(Exception):
 
 def mode() -> str:
     s = get_settings()
-    if s.lore_auth != "auto":
-        return s.lore_auth
-    return "token" if s.lore_data_mode == "org" else "none"
+    if s.yaan_auth != "auto":
+        return s.yaan_auth
+    return "token" if s.yaan_data_mode == "org" else "none"
 
 
 def tokens_path() -> Path:
@@ -151,7 +151,7 @@ def check_token(token: str) -> tuple[str, dict[str, Any]]:
     if entry is None:
         raise AuthError("unknown or revoked token")
     if expired(entry):
-        raise AuthError("this token has expired: ask for a new one (lore token issue)")
+        raise AuthError("this token has expired: ask for a new one (yaan token issue)")
     if time.monotonic() - _touched.get(digest, -LAST_USED_EVERY_S) >= LAST_USED_EVERY_S:
         _touched[digest] = time.monotonic()
         stamp_used(digest)
@@ -267,26 +267,29 @@ def identify(headers: Any, cookies: Any = None) -> tuple[str | None, str | None]
         session = (cookies or {}).get(SESSION_COOKIE)
         if session:
             return session_person(session), "cookie"
-        raise AuthError("sign in: send 'Authorization: Bearer <token>' (lore token issue)")
+        raise AuthError("sign in: send 'Authorization: Bearer <token>' (yaan token issue)")
     if m == "header":
         s = get_settings()
-        if not s.lore_auth_proxy_secret:
-            raise AuthError("LORE_AUTH=header needs LORE_AUTH_PROXY_SECRET, sent by the proxy")
-        sent = (headers.get("x-lore-proxy-secret") or "").encode("utf-8")
+        if not s.yaan_auth_proxy_secret:
+            raise AuthError("YAAN_AUTH=header needs YAAN_AUTH_PROXY_SECRET, sent by the proxy")
+        # X-Lore-Proxy-Secret: a proxy set up before the rename (D144)
+        sent = (
+            headers.get("x-yaan-proxy-secret") or headers.get("x-lore-proxy-secret") or ""
+        ).encode("utf-8")
         basic_email, basic_secret = proxy_basic(headers.get("authorization") or "")
-        secret = s.lore_auth_proxy_secret.encode("utf-8")
+        secret = s.yaan_auth_proxy_secret.encode("utf-8")
         if not (
             hmac.compare_digest(sent, secret) or hmac.compare_digest(basic_secret, secret)
         ):
             raise AuthError("identity headers are accepted only from the sign-in proxy")
-        given = headers.get(s.lore_auth_header.lower()) or basic_email
+        given = headers.get(s.yaan_auth_header.lower()) or basic_email
         email = given.strip().casefold()
         if not email:
-            raise AuthError(f"the sign-in proxy sent no {s.lore_auth_header} header")
+            raise AuthError(f"the sign-in proxy sent no {s.yaan_auth_header} header")
         from app import org
 
         for eid, person in org.roster().items():
             if (person.get("email") or "").casefold() == email:
                 return eid, "header"
         raise AuthError(f"{email} is not in people.yaml")
-    raise AuthError(f"unknown LORE_AUTH mode {m!r}")
+    raise AuthError(f"unknown YAAN_AUTH mode {m!r}")

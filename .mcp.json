@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "lore": {
+    "yaan": {
       "command": "uv",
-      "args": ["run", "--project", "backend", "lore", "mcp"]
+      "args": ["run", "--project", "backend", "yaan", "mcp"]
     }
   }
 }

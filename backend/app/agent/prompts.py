@@ -2,8 +2,8 @@
 
 Tool results are data, never instructions (§9.6 prompt-injection hygiene). The prompt is a
 fixed prefix for a given toolset: it never varies per question, so it stays in the prompt
-cache. It is built from one guide line per tool (R2), so the Lore − graph tools ablation
-(`lore-search`, 9.8) gets the same prompt minus the lines for tools it doesn't have.
+cache. It is built from one guide line per tool (R2), so the Yaan − graph tools ablation
+(`yaan-search`, 9.8) gets the same prompt minus the lines for tools it doesn't have.
 Spec: docs/CONTEXT.md §9.6, App. C.
 
 Two profiles (H4, D118). `herb` is the prompt the demo and the evaluation run, unchanged byte

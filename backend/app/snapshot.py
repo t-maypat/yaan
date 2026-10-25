@@ -1,4 +1,4 @@
-"""`lore snapshot` and `lore seed` (Phase 15.2, R2 W6): Lore without LLM calls or an API key.
+"""`yaan snapshot` and `yaan seed` (Phase 15.2, R2 W6): Yaan without LLM calls or an API key.
 
 A snapshot is one file, `snapshots/lore-snapshot.tar.gz`:
 - `graphs/<graph>.dump`: the graph as FalkorDB's own DUMP payload (nodes, edges, properties,
@@ -68,7 +68,7 @@ def counts(r: redis.Redis, graph: str) -> dict[str, int]:
 def snapshot(graphs: tuple[str, ...] | None = None, out: Path = SNAPSHOT) -> dict[str, Any]:
     """Write the snapshot file; returns its manifest."""
     s = get_settings()
-    graphs = graphs or (s.lore_graph,)
+    graphs = graphs or (s.yaan_graph,)
     r = admin()
     manifest: dict[str, Any] = {
         "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -182,8 +182,8 @@ def seed(source: str | Path = SNAPSHOT, force: bool = False, unpinned: bool = Fa
         problems = schema.problems(schema.declared(), db.run("list_indexes", graph=g).rows)
         if problems:
             raise SnapshotError(f"{g}: indexes differ from 00_schema.cypher: {problems}")
-    if s.lore_graph in manifest["graphs"]:
-        report["demo"] = live.reset_demo(s.lore_demo_graph)
+    if s.yaan_graph in manifest["graphs"]:
+        report["demo"] = live.reset_demo(s.yaan_demo_graph)
     return report
 
 
@@ -194,7 +194,7 @@ def _read(source: str | Path) -> bytes:
             return resp.read()
     path = Path(source)
     if not path.is_file():
-        raise SnapshotError(f"no snapshot at {path}: run `lore snapshot` or pass --from <url>")
+        raise SnapshotError(f"no snapshot at {path}: run `yaan snapshot` or pass --from <url>")
     return path.read_bytes()
 
 

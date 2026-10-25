@@ -162,7 +162,7 @@ class GoogleDriveConnector(HttpConnector):
 def plain(action: dict[str, Any], resolve: render.Resolve | None) -> str:
     """A draft as plain text with each cited id replaced by its source's label and address."""
     head = "Correction" if action["kind"] == "doc_fix" else "Follow-up"
-    lines = [f"Lore Sentinel · {head}"]
+    lines = [f"Yaan Sentinel · {head}"]
 
     def label(artifact_id: str) -> str:
         hit = resolve(artifact_id) if resolve else None

@@ -1,4 +1,4 @@
-# Lore graph schema card
+# Yaan graph schema card
 
 The compact schema the guarded `graph_query` tool (agent tool 14) shows the model, and a one-page map of the graph for people. `backend/app/agent/graph_query.py` reads the block between the markers below into the tool's description, so this file is the single source. Counts are from the 3 dev products (17 Oct). Graph model in full: CONTEXT §9.2.
 

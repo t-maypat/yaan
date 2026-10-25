@@ -1,5 +1,5 @@
 {
-  "_label": "SYNTHETIC demo injection, not HERB data (CONTEXT rule 5, PLAN 11.7). Written for Lore's live demo; the id prefix msg:synthetic- marks it everywhere.",
+  "_label": "SYNTHETIC demo injection, not HERB data (CONTEXT rule 5, PLAN 11.7). Written for Yaan's live demo; the id prefix msg:synthetic- marks it everywhere.",
   "id": "msg:synthetic-20270309-2",
   "product": "ExplainabilityForce",
   "channel_id": "ch-force-9a6043",

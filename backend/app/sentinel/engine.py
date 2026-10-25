@@ -1,6 +1,6 @@
 """Sentinel engine (11.1): decision changes -> Alert nodes. Spec: docs/CONTEXT.md §9.4-9.5, D054.
 
-Runs after every fold (batch `lore ingest --stages fold derive sentinel`, or the live path),
+Runs after every fold (batch `yaan ingest --stages fold derive sentinel`, or the live path),
 over the whole extracted layer, so one code path serves both:
 1. `sentinel_changes.cypher` lists every extracted supersession and every CONFLICTS_WITH claim;
 2. RULES (code, not the LLM) say which changes deserve an alert. Normal progress

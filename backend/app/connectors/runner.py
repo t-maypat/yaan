@@ -3,7 +3,7 @@
 `sync` asks each connector for what changed since its cursor, feeds every new or newer item
 to the live path (S1-S8 + Sentinel on the demo graph), then hands the approved, unsent Actions
 to the connectors until one delivers each. The cursor and the version seen per item live in
-data/live/<graph>/connectors.json, next to the live artifacts, so `lore demo reset` clears both.
+data/live/<graph>/connectors.json, next to the live artifacts, so `yaan demo reset` clears both.
 
 In org mode (D097) the round writes to the org graph, first creates the product, the declared
 channels and the people.yaml roster there (org.prepare), and takes items without the demo label.
@@ -581,7 +581,7 @@ def wait(wake: Any, pause_s: float, graph: str, since_ms: int) -> None:
 
 
 def run_forever(graph: str | None = None, every_s: float = 30, say=None) -> None:
-    """`lore connectors run`: sync every `every_s` seconds, or at once when Slack reports a
+    """`yaan connectors run`: sync every `every_s` seconds, or at once when Slack reports a
     message; post each new alert a connector caused as a Slack card. Every line it says is a
     log record (22.4), and each round ends with one carrying its numbers."""
     import threading
@@ -606,7 +606,7 @@ def run_forever(graph: str | None = None, every_s: float = 30, say=None) -> None
         bot = SlackBot(st.slack_bot_token, st.slack_app_token, graph, on_message=wake.set)
         bot.resolve = render.resolver(connectors)
         bot.start()
-        say("slack: socket connected (@lore answers, alert cards)")
+        say("slack: socket connected (@yaan answers, alert cards)")
     say(f"connectors: {', '.join(c.name for c in connectors)} -> {graph}, every {every_s:g} s")
     pause = every_s
     while True:

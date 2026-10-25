@@ -222,7 +222,7 @@ def fold_topic(topic, claims, ctx, assigned, rows, stats) -> list[dict[str, Any]
                 "confidence": round(confidence, 3),
                 "origin": "extracted",
                 "ts_inferred": False,
-                "observed_ms": e.get("observed_ms") or ctx.observed_ms,  # when Lore learned it
+                "observed_ms": e.get("observed_ms") or ctx.observed_ms,  # when Yaan learned it
                 "product_id": e["product"],
                 "_reason": e.get("reason"),
             }
@@ -701,7 +701,7 @@ def fold_product(
     recall: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Fold one product's events from the graph and (`apply`) write the result. With
-    `known_at_ms`, only the events Lore knew then: the belief at that moment (never written)."""
+    `known_at_ms`, only the events Yaan knew then: the belief at that moment (never written)."""
     ms: dict[str, float] = {}  # each stage's time: the load test and slow-fold warnings read it
     t = time.perf_counter()
 
@@ -787,7 +787,7 @@ def forget_resolutions(product: str, graph: str | None) -> int:
 def belief(
     subject_id: str, product: str, graph: str | None, known_at_ms: int | None
 ) -> dict[str, Any]:
-    """What Lore believed about an issue or PR at `known_at_ms` (None: now): its chains as the
+    """What Yaan believed about an issue or PR at `known_at_ms` (None: now): its chains as the
     fold derives them from the events known then. Read-only: nothing is written."""
     rows = fold_product(product, graph, known_at_ms=known_at_ms, apply=False)["rows"]
     chains: dict[str, list[dict[str, Any]]] = {}

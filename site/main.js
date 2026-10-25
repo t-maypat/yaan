@@ -1,5 +1,5 @@
-/* Lore landing page. No framework, no build step.
-   Everything shown in the hero console comes from Lore's real tool output on HERB's synthetic
+/* Yaan landing page. No framework, no build step.
+   Everything shown in the hero console comes from Yaan's real tool output on HERB's synthetic
    ExplainabilityForce data (decision_lineage, rank, who_knows), with verbatim quotes. */
 (() => {
   'use strict';
@@ -22,7 +22,7 @@
   themeBtn.addEventListener('click', () => {
     const next = isDark() ? 'light' : 'dark';
     root.dataset.theme = next;
-    try { localStorage.setItem('lore-theme', next); } catch (e) { /* storage blocked: theme lasts this visit */ }
+    try { localStorage.setItem('yaan-theme', next); } catch (e) { /* storage blocked: theme lasts this visit */ }
     syncThemeLabel();
     graph && graph.refreshColors();
     shade && shade.refresh();
@@ -621,7 +621,7 @@
   (() => {
     const range = $('#driftRange'); if (!range) return;
     const dateEl = $('#driftDate'), now = $('#dtlNow'), rag = $('#ansRag'), ragStamp = $('#ragStamp'), ragNote = $('#ragNote');
-    const loreText = $('#loreText'), loreEv = $('#loreEv'), loreNote = $('#loreNote');
+    const yaanText = $('#yaanText'), yaanEv = $('#yaanEv'), yaanNote = $('#yaanNote');
     const wins = { rep: $('.w-rep'), res: $('.w-res'), reo: $('.w-reo') };
     const MAX = 33;
     const fmt = (d) => new Date(Date.UTC(2027, 1, 1 + d)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
@@ -650,21 +650,21 @@
           : 'It quotes a message written after this date. Search has no clock.';
 
       if (state === 'none') {
-        loreText.textContent = 'There is no report of this bug yet on ' + date + '.';
-        loreEv.innerHTML = '';
-        loreNote.textContent = 'No decision in force: the first report comes on 6 Feb.';
+        yaanText.textContent = 'There is no report of this bug yet on ' + date + '.';
+        yaanEv.innerHTML = '';
+        yaanNote.textContent = 'No decision in force: the first report comes on 6 Feb.';
       } else if (state === 'rep') {
-        loreText.textContent = 'No. Bob Davis reported it on 6 Feb, and it is still open on ' + date + '.';
-        loreEv.innerHTML = quote('rep');
-        loreNote.textContent = 'In force on ' + date + ': reported, from 6 Feb until 24 Feb.';
+        yaanText.textContent = 'No. Bob Davis reported it on 6 Feb, and it is still open on ' + date + '.';
+        yaanEv.innerHTML = quote('rep');
+        yaanNote.textContent = 'In force on ' + date + ': reported, from 6 Feb until 24 Feb.';
       } else if (state === 'res') {
-        loreText.textContent = 'Yes. Hannah Johnson marked it resolved on 24 Feb with PR #53.';
-        loreEv.innerHTML = quote('res');
-        loreNote.textContent = 'In force on ' + date + ': resolved, from 24 Feb until 26 Feb.';
+        yaanText.textContent = 'Yes. Hannah Johnson marked it resolved on 24 Feb with PR #53.';
+        yaanEv.innerHTML = quote('res');
+        yaanNote.textContent = 'In force on ' + date + ': resolved, from 24 Feb until 26 Feb.';
       } else {
-        loreText.innerHTML = 'Resolved on 24 Feb with PR #53, then <strong>reopened on 26 Feb</strong>.';
-        loreEv.innerHTML = quote('res') + quote('reo');
-        loreNote.textContent = 'In force on ' + date + ': reopened, since 26 Feb. The resolved state was closed, not deleted.';
+        yaanText.innerHTML = 'Resolved on 24 Feb with PR #53, then <strong>reopened on 26 Feb</strong>.';
+        yaanEv.innerHTML = quote('res') + quote('reo');
+        yaanNote.textContent = 'In force on ' + date + ': reopened, since 26 Feb. The resolved state was closed, not deleted.';
       }
     }
     range.addEventListener('input', update);
@@ -751,36 +751,36 @@
   })();
 
   /* =====================================================================
-     Results: grouped bars, one tab per metric. Lore is the one coloured
+     Results: grouped bars, one tab per metric. Yaan is the one coloured
      series; everything it's compared with is a pale bar beside it.
      ===================================================================== */
   (() => {
     const bars = $('#mxBars'); if (!bars) return;
     const ICON = {
-      lore: '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M7 6 L16 17 L25 6" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17 V27" stroke="currentColor" stroke-width="3.8" stroke-linecap="round"/><circle cx="16" cy="17" r="3.4" fill="currentColor"/></svg>',
+      yaan: '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M7 6 L16 17 L25 6" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17 V27" stroke="currentColor" stroke-width="3.8" stroke-linecap="round"/><circle cx="16" cy="17" r="3.4" fill="currentColor"/></svg>',
       search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></svg>',
       rag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M9 11h6M9 15h6"/></svg>',
       paper: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h7a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M20 5h-7a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h7z"/></svg>',
     };
     const S = {
-      lore: { name: 'Yaan', icon: 'lore' },
+      yaan: { name: 'Yaan', icon: 'yaan' },
       search: { name: 'Yaan without the FalkorDB graph', icon: 'search' },
       rag: { name: 'Plain RAG', icon: 'rag' },
       paper: { name: 'Salesforce AI Research agent (GPT-4o)', icon: 'paper' },
     };
     const TABS = [
       {
-        ylab: 'Judged score (0–100)', max: 80, ticks: [0, 20, 40, 60, 80], unit: '', series: ['lore', 'search', 'rag'],
+        ylab: 'Judged score (0–100)', max: 80, ticks: [0, 20, 40, 60, 80], unit: '', series: ['yaan', 'search', 'rag'],
         groups: [['Content', [64.0, 17.7, 12.6]], ['People', [65.2, 37.6, 13.3]], ['Customer', [54.2, 0.0, 0.0]], ['Artifact', [71.3, 41.5, 12.6]]],
         cap: 'Held-out products, one run per system, all on Claude Haiku 5.5 with the same judge prompts and search. “Without the FalkorDB graph” keeps vector and full-text search and loses every graph query.',
       },
       {
-        ylab: 'Answers right (%)', max: 100, ticks: [0, 25, 50, 75, 100], unit: '%', series: ['lore', 'search', 'rag'],
+        ylab: 'Answers right (%)', max: 100, ticks: [0, 25, 50, 75, 100], unit: '%', series: ['yaan', 'search', 'rag'],
         groups: [['All drift questions', [95.8, 70.8, 54.2]], ['Current status', [100, 54.5, 54.5]], ['As of a date', [100, 80, 60]]],
         cap: 'Our drift test: 24 hand-labeled questions on Salesforce AI Research’s enterprise data about status now and on a past date, ground truth read from the raw messages, all systems on Claude Haiku 5.5. Stale answers: Yaan 0%, search only 8.7%, plain RAG 6.7%.',
       },
       {
-        ylab: 'Score / share (0–100)', max: 100, ticks: [0, 25, 50, 75, 100], series: ['lore', 'paper'],
+        ylab: 'Score / share (0–100)', max: 100, ticks: [0, 25, 50, 75, 100], series: ['yaan', 'paper'],
         groups: [['Average score', [63.6, 43.4], '']],
         cap: 'Salesforce AI Research’s best product-specific agent is GPT-4o with ReAct, as published in their HERB paper (EMNLP 2025). Yaan runs Claude Haiku 5.5, scored with the paper’s own judge prompts. Different model, judge and setup: shown for context, not as a head-to-head.',
       },
@@ -796,7 +796,7 @@
         const u = unit ?? T.unit;
         const cols = vals.map((v, k) => {
           const key = T.series[k], h = v / T.max * 100;
-          return `<div class="mx-bar ${key === 'lore' ? 'is-lore' : ''} ${h < 9 ? 'short' : ''}" style="--h:${h};--d:${(g * vals.length + k) * 0.03}s" title="${S[key].name}: ${fmt(v, u)}">${ICON[S[key].icon]}<span class="mx-v">${fmt(v, u)}</span></div>`;
+          return `<div class="mx-bar ${key === 'yaan' ? 'is-yaan' : ''} ${h < 9 ? 'short' : ''}" style="--h:${h};--d:${(g * vals.length + k) * 0.03}s" title="${S[key].name}: ${fmt(v, u)}">${ICON[S[key].icon]}<span class="mx-v">${fmt(v, u)}</span></div>`;
         }).join('');
         return `<div class="mx-group">${cols}<span class="mx-x">${label}</span></div>`;
       }).join('');
@@ -824,7 +824,7 @@
      Why FalkorDB: the engine stack, the tail-latency plot, the comparison.
      ===================================================================== */
   (() => {
-    // stack: point at a layer to read what Lore uses it for
+    // stack: point at a layer to read what Yaan uses it for
     const out = $('#stackUse');
     if (out) {
       const idle = out.textContent;

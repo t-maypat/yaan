@@ -1,4 +1,4 @@
-%% Phase 5: lore eval = answer every dev question, judge it like HERB's evaluate.py, summarize (D035, D036).
+%% Phase 5: yaan eval = answer every dev question, judge it like HERB's evaluate.py, summarize (D035, D036).
 flowchart LR
   Q["Dev questions<br/>load_questions()<br/>held-out guard"]:::guard --> P["prepare: search<br/>one thread<br/>top 20 + authors"]:::store
   P --> R["respond: answer LLM<br/>4 threads<br/>Haiku 5.5"]:::ext

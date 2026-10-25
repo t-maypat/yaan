@@ -26,7 +26,7 @@ def signed(tmp_path, monkeypatch):
     """Org mode with token sign-in, a roster and a data dir of the test's own."""
     people = tmp_path / "people.yaml"
     people.write_text(PEOPLE, encoding="utf-8")
-    monkeypatch.setenv("LORE_DATA_MODE", "org")
+    monkeypatch.setenv("YAAN_DATA_MODE", "org")
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(org, "PEOPLE_FILE", people)
     for cached in (get_settings, org.roster, org.accounts):
@@ -43,7 +43,7 @@ def signed(tmp_path, monkeypatch):
 
 def test_the_demo_needs_no_sign_in_and_org_mode_needs_a_token(signed, monkeypatch):
     assert auth.mode() == "token"
-    monkeypatch.setenv("LORE_DATA_MODE", "demo")
+    monkeypatch.setenv("YAAN_DATA_MODE", "demo")
     get_settings.cache_clear()
     assert auth.mode() == "none" and auth.principal({}) is None
 
@@ -63,18 +63,21 @@ def test_a_token_names_its_person_until_revoked(signed):
 
 
 def test_a_proxy_header_counts_only_with_the_proxy_secret(signed, monkeypatch):
-    monkeypatch.setenv("LORE_AUTH", "header")
+    monkeypatch.setenv("YAAN_AUTH", "header")
     get_settings.cache_clear()
-    with pytest.raises(auth.AuthError, match="needs LORE_AUTH_PROXY_SECRET"):
+    with pytest.raises(auth.AuthError, match="needs YAAN_AUTH_PROXY_SECRET"):
         auth.principal({"x-forwarded-email": "ken@acme.example"})
-    monkeypatch.setenv("LORE_AUTH_PROXY_SECRET", "s3cret")
+    monkeypatch.setenv("YAAN_AUTH_PROXY_SECRET", "s3cret")
     get_settings.cache_clear()
     with pytest.raises(auth.AuthError, match="only from the sign-in proxy"):
         auth.principal({"x-forwarded-email": "ken@acme.example"})  # someone around the proxy
-    proxied = {"x-lore-proxy-secret": "s3cret"}
+    proxied = {"x-yaan-proxy-secret": "s3cret"}
     assert auth.principal({**proxied, "x-forwarded-email": "KEN@acme.example"}) == "eid_0000beef"
     with pytest.raises(auth.AuthError, match="not in people.yaml"):
         auth.principal({**proxied, "x-forwarded-email": "eve@evil.example"})
+    # a proxy set up before the rename still sends X-Lore-Proxy-Secret (D144)
+    old = {"x-lore-proxy-secret": "s3cret", "x-forwarded-email": "ken@acme.example"}
+    assert auth.principal(old) == "eid_0000beef"
 
 
 def test_oauth2_proxy_proves_itself_with_basic_auth(signed, monkeypatch):
@@ -82,8 +85,8 @@ def test_oauth2_proxy_proves_itself_with_basic_auth(signed, monkeypatch):
     `Authorization: Basic <email>:<secret>` (the `sso` compose profile)."""
     import base64
 
-    monkeypatch.setenv("LORE_AUTH", "header")
-    monkeypatch.setenv("LORE_AUTH_PROXY_SECRET", "s3cret")
+    monkeypatch.setenv("YAAN_AUTH", "header")
+    monkeypatch.setenv("YAAN_AUTH_PROXY_SECRET", "s3cret")
     get_settings.cache_clear()
 
     def basic(user, password):
@@ -121,7 +124,7 @@ def test_ops_pages_and_admin_endpoints_are_for_admins_only(signed, monkeypatch):
     assert admin.post("/admin/tokens/revoke", json={"id": kens}).json() == {"revoked": 1}
     assert ken.get("/me").status_code == 401  # revoked
     assert admin.get("/me").json()["admin"] is True
-    monkeypatch.setenv("LORE_AUTH", "none")
+    monkeypatch.setenv("YAAN_AUTH", "none")
     get_settings.cache_clear()
     assert auth.is_admin(None)  # the demo: no sign-in, everyone runs it
 

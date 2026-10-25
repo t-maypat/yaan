@@ -1,6 +1,6 @@
 """app/schema.py without a server: parsing 00_schema.cypher, the one tolerated error, verification.
 
-The same flow against FalkorDB is checked by `lore schema` on a scratch graph and, from 1.6, by
+The same flow against FalkorDB is checked by `yaan schema` on a scratch graph and, from 1.6, by
 the db tests.
 """
 
@@ -26,7 +26,7 @@ def test_vector_index_matches_the_embedding_model():
     (vector,) = [s for s in schema.declared() if s.kind == "VECTOR"]
     assert (vector.label, vector.prop) == ("Chunk", "embedding")
     assert vector.options == {
-        "dimension": get_settings().lore_embed_dim,
+        "dimension": get_settings().yaan_embed_dim,
         "similarityFunction": "cosine",
     }
 

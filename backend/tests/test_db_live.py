@@ -1,4 +1,4 @@
-"""Lore's own database code (app/db.py, app/schema.py, list_indexes.cypher) on the real server.
+"""Yaan's own database code (app/db.py, app/schema.py, list_indexes.cypher) on the real server.
 
 FalkorDB's own behavior (the A-table in decisions.md) is pinned separately by the contract
 tests; these check that our code uses it correctly.

@@ -30,7 +30,7 @@ function ThemeToggle() {
     const next = dark ? "light" : "dark";
     document.documentElement.dataset.theme = next;
     try {
-      localStorage.setItem("lore-theme", next);
+      localStorage.setItem("yaan-theme", next);
     } catch {
       /* storage blocked: the choice lasts this visit */
     }

@@ -1,7 +1,7 @@
 """Shared test fixtures (Phase 1.6).
 
 Database tests are marked `db` (by hand, or by the hook below for any test using a database
-fixture) and get their own throwaway graph, `lore_test_<random>`, with the
+fixture) and get their own throwaway graph, `yaan_test_<random>`, with the
 full schema applied and checked. They ERROR, never skip, when FalkorDB is down: a skipped test
 reads as "fine" in a summary, and a database that silently isn't there is exactly what we must
 notice. Without Docker, run `pytest -m "not db"` on purpose.
@@ -16,7 +16,7 @@ import pytest
 from app import db, schema
 from app.config import get_settings
 
-TEST_GRAPH_PREFIX = "lore_test_"
+TEST_GRAPH_PREFIX = "yaan_test_"
 FIXTURES = Path(__file__).parent / "fixtures"
 
 

@@ -1,4 +1,4 @@
-// The Lore API as the UI sees it (backend/app/main.py). `/ask` streams Server-Sent Events over
+// The Yaan API as the UI sees it (backend/app/main.py). `/ask` streams Server-Sent Events over
 // a POST, which EventSource can't send, so the stream is read with fetch and parsed here.
 
 export type ToolCall = { tool: string; input: Record<string, unknown> };
@@ -51,7 +51,7 @@ export type Artifact = {
 export type Product = { id: string; name: string; aliases: string[]; artifacts: number };
 
 // Sign-in (D100, D111). In org mode the API names a person on every call. The browser trades
-// the token from `lore token issue` once for an HttpOnly session cookie, so no script on the
+// the token from `yaan token issue` once for an HttpOnly session cookie, so no script on the
 // page can read it; a sign-in proxy's header needs nothing at all. A 401 tells the app to ask
 // for a token; the demo never answers 401. Every call sends X-Yaan-CSRF, which the API asks of
 // a cookie session before it changes anything (a page on another site can't send it).
@@ -262,7 +262,7 @@ export const resetDemo = () => send<{ ms: number }>("POST", "/demo/reset");
 export const getArtifact = (id: string) => getJson<Artifact>(`/artifact/${encodeURIComponent(id)}`);
 export const getQuery = (name: string) =>
   getJson<{ name: string; text: string }>(`/query/${encodeURIComponent(name)}`);
-// "org": the graph holds a team's own data (LORE_DATA_MODE=org), so the HERB demo's
+// "org": the graph holds a team's own data (YAAN_DATA_MODE=org), so the HERB demo's
 // suggested questions and example viewers don't apply.
 export type DataMode = "demo" | "org";
 export const getProducts = () => getJson<{ products: Product[]; mode?: DataMode }>("/products");

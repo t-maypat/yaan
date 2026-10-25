@@ -1,5 +1,5 @@
 [project]
-name = "lore"
+name = "yaan"
 version = "0.1.0"
 description = "Yaan (formerly Lore): a time-aware company brain on FalkorDB"
 requires-python = ">=3.11"
@@ -29,7 +29,6 @@ dependencies = [
 
 [project.scripts]
 yaan = "app.cli:main"
-lore = "app.cli:main"
 
 [dependency-groups]
 dev = [

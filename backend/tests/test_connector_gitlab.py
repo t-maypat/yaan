@@ -18,7 +18,7 @@ MAPS = Maps(
     default_person="eid_bd791efc",
     sources={"gitlab": {"people": {"hannah": "eid_9e9883de"}}},
 )
-PROJECT = "acme/lore-demo"
+PROJECT = "acme/yaan-demo"
 MR = {
     "id": 1,
     "iid": 11,
@@ -64,7 +64,7 @@ def conn():
 
     def handle(request: httpx.Request) -> httpx.Response:
         raw = request.url.raw_path.decode()
-        assert raw.startswith("/api/v4/projects/acme%2Flore-demo/")  # the path is URL-encoded
+        assert raw.startswith("/api/v4/projects/acme%2Fyaan-demo/")  # the path is URL-encoded
         if request.method == "GET" and request.url.path.endswith("/merge_requests"):
             seen["get"].append(dict(request.url.params))
             return httpx.Response(200, json=[MR])
@@ -86,7 +86,7 @@ def conn():
 def test_merge_requests_come_in_as_prs_with_notes_as_reviews(conn):
     (item,) = conn.fetch(0)
     pr = item.artifact
-    assert pr.id == "pr:synthetic-gitlab-acme-lore-demo-11" and pr.kind == "pr"
+    assert pr.id == "pr:synthetic-gitlab-acme-yaan-demo-11" and pr.kind == "pr"
     assert pr.author_eid == "eid_9e9883de" and pr.url.endswith("/merge_requests/11")
     assert (pr.meta["state"], pr.meta["merged"]) == ("closed", True)
     (review,) = pr.meta["reviews"]  # the system note is skipped

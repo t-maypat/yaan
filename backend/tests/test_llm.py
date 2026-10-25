@@ -45,9 +45,9 @@ def gateway(tmp_path, monkeypatch):
             "cache_dir": tmp_path / "cache",
             "data_dir": tmp_path / "data",
             "anthropic_api_key": "test-key",
-            "lore_daily_spend_cap_usd": 0.05,
-            "lore_extract_model": "claude-haiku-5-5",
-            "lore_answer_model": "claude-haiku-5-5",
+            "yaan_daily_spend_cap_usd": 0.05,
+            "yaan_extract_model": "claude-haiku-5-5",
+            "yaan_answer_model": "claude-haiku-5-5",
         }
     )
     monkeypatch.setattr(llm, "get_settings", lambda: settings)
@@ -96,7 +96,7 @@ def test_a_call_is_billed_logged_and_cached(gateway):
 
 def test_cache_only_replays_cached_calls_and_never_reaches_the_api(gateway, monkeypatch):
     llm.complete(role="answer", system="s", user="cached", purpose="t")  # warm one answer
-    public = gateway.settings.model_copy(update={"lore_llm_cache_only": True})
+    public = gateway.settings.model_copy(update={"yaan_llm_cache_only": True})
     monkeypatch.setattr(llm, "get_settings", lambda: public)
     assert llm.complete(role="answer", system="s", user="cached", purpose="t").cached
     with pytest.raises(llm.CacheOnly, match="replays answers"):
@@ -111,7 +111,7 @@ def test_requests_use_the_role_settings_and_cache_the_system_prompt(gateway):
     llm.complete(role="extract", system="rules", user="text", purpose="t")
     call = gateway.calls[0]
     assert call["model"] == "claude-haiku-5-5"
-    assert call["output_config"] == {"effort": gateway.settings.lore_extract_effort}
+    assert call["output_config"] == {"effort": gateway.settings.yaan_extract_effort}
     assert call["system"][0]["cache_control"] == {"type": "ephemeral"}
 
 
@@ -194,7 +194,7 @@ def test_a_hold_is_seen_by_another_process(gateway, tmp_path):
         from pathlib import Path
         from types import SimpleNamespace
         from app import llm
-        llm.get_settings = lambda: SimpleNamespace(lore_daily_spend_cap_usd=0.05)
+        llm.get_settings = lambda: SimpleNamespace(yaan_daily_spend_cap_usd=0.05)
         try:
             with llm.spend(0.02, Path({str(path)!r})):
                 print("admitted")
@@ -377,7 +377,7 @@ def test_converse_refusals_raise_and_are_billed(gateway):
 
 
 def test_a_ledger_held_open_elsewhere_is_retried_not_lost(gateway, monkeypatch):
-    """Windows refuses os.replace while another process has the ledger open (an older Lore
+    """Windows refuses os.replace while another process has the ledger open (an older Yaan
     process, an antivirus scan): the write waits a moment instead of crashing a paid run."""
     import os
 
@@ -397,11 +397,11 @@ def test_a_ledger_held_open_elsewhere_is_retried_not_lost(gateway, monkeypatch):
 
 
 def test_a_prices_file_adds_a_model_and_changes_a_price(tmp_path, monkeypatch):
-    """D121: LORE_PRICES_FILE overrides or extends the price table; a model nobody priced is
+    """D121: YAAN_PRICES_FILE overrides or extends the price table; a model nobody priced is
     still refused (the spend cap can't hold without a price)."""
     path = tmp_path / "prices.yaml"
     path.write_text("claude-haiku-5-5: [0.2, 1.0, 0.25, 0.02]\nmy-model: [1, 2, 0, 0]\n")
-    monkeypatch.setattr(get_settings(), "lore_prices_file", path)
+    monkeypatch.setattr(get_settings(), "yaan_prices_file", path)
     assert llm.cost_usd("claude-haiku-5-5", 1_000_000, 0) == pytest.approx(0.20)
     assert llm.cost_usd("my-model", 0, 1_000_000) == pytest.approx(2.0)
     with pytest.raises(llm.LLMError, match="no price"):
@@ -414,7 +414,7 @@ def test_a_prices_file_adds_a_model_and_changes_a_price(tmp_path, monkeypatch):
 # --- budgets in org mode (F8, D124) --------------------------------------------------------------
 def org_budgets(monkeypatch, **caps):
     settings = llm.get_settings().model_copy(
-        update={"lore_data_mode": "org", "lore_daily_spend_cap_usd": 1.0, **caps}
+        update={"yaan_data_mode": "org", "yaan_daily_spend_cap_usd": 1.0, **caps}
     )
     monkeypatch.setattr(llm, "get_settings", lambda: settings)
 
@@ -435,7 +435,7 @@ def test_answers_cannot_use_up_what_extraction_needs(gateway, monkeypatch):
 
 
 def test_each_person_has_a_daily_budget_of_their_own(gateway, monkeypatch):
-    org_budgets(monkeypatch, lore_person_spend_cap_usd=0.05)
+    org_budgets(monkeypatch, yaan_person_spend_cap_usd=0.05)
     path = llm.ledger_path()
     with llm.paying("eid_0000beef"):
         with llm.spend(0.03, path, role="answer") as pay:
@@ -451,7 +451,7 @@ def test_each_person_has_a_daily_budget_of_their_own(gateway, monkeypatch):
 
 
 def test_a_persons_calls_in_flight_count_against_them(gateway, monkeypatch):
-    org_budgets(monkeypatch, lore_person_spend_cap_usd=0.05)
+    org_budgets(monkeypatch, yaan_person_spend_cap_usd=0.05)
     path = llm.ledger_path()
     with llm.paying("eid_0000beef"), llm.spend(0.03, path, role="answer"):
         with pytest.raises(llm.PersonCapReached):  # a second question at the same time

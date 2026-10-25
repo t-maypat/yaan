@@ -2,11 +2,11 @@
 flowchart LR
   subgraph PC["Your PC · Windows 11"]
     direction LR
-    APP["Lore backend<br/>Python + falkordb client"]:::code
+    APP["Yaan backend<br/>Python + falkordb client"]:::code
     WEB(["Your browser"]):::human
     subgraph DOCKER["Docker Desktop · a small Linux VM"]
       direction TB
-      subgraph CT["Container lore-falkordb-1 · image falkordb/falkordb:6.0.1"]
+      subgraph CT["Container yaan-falkordb-1 · image falkordb/falkordb:6.0.1"]
         direction TB
         RS["Redis server 8.10.2<br/>port 6379"]:::code
         GM["graph module<br/>FalkorDB 6.0.1 · Rust engine"]:::code

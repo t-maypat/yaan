@@ -1,7 +1,7 @@
 """Scoring: a faithful port of HERB's code/evaluate.py with the judge model swapped (D035).
 
 HERB (SalesforceAIResearch/HERB, CC BY-NC 4.0) scores with gpt-4o. We can't pay for
-OpenAI, so the same prompts, copied word for word below, go to LORE_JUDGE_MODEL through
+OpenAI, so the same prompts, copied word for word below, go to YAAN_JUDGE_MODEL through
 app/llm.py. Everything else follows evaluate.py:
 - content questions: a 0-100 Likert score against the reference answer;
 - person / pr / url / company: the judge extracts the ids, links or names that answer the

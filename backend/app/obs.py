@@ -1,6 +1,6 @@
 """Logs and metrics (22.4, review F16): what an operator's tools read, instead of prints.
 
-Logs are JSON lines on stderr (`LORE_LOG_FORMAT=text` for people): time, level, component,
+Logs are JSON lines on stderr (`YAAN_LOG_FORMAT=text` for people): time, level, component,
 message, the request id when there is one, and any structured fields. The API logs one line per
 request (method, path, status, ms, who) and returns the id as `X-Request-ID` (a caller's own
 id is kept when it is a plain token). Paths only, never query strings or bodies: no question
@@ -53,7 +53,7 @@ def setup_logging() -> None:
         return
     _configured = True
     handler = logging.StreamHandler(sys.stderr)
-    if get_settings().lore_log_format == "json":
+    if get_settings().yaan_log_format == "json":
         handler.setFormatter(JsonFormatter())
     else:
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))

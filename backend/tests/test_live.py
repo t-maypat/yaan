@@ -1,5 +1,5 @@
 """The live path's guards (11.6) and the synthetic injections (11.7, D057). No database, no LLM:
-the end-to-end run (`lore demo reset` + `lore demo inject`) is checked by hand in D057."""
+the end-to-end run (`yaan demo reset` + `yaan demo inject`) is checked by hand in D057."""
 
 import json
 

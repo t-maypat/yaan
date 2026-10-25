@@ -1,8 +1,8 @@
 """The optional LiteLLM provider behind `app/llm.py` (D091, EXPERIMENTAL: never run against a
 live model).
 
-`LORE_LLM_PROVIDER=litellm` sends `complete()` and `converse()` through LiteLLM instead of the
-Anthropic SDK, so any model LiteLLM supports can play a role: `LORE_LITELLM_MODEL_EXTRACT`,
+`YAAN_LLM_PROVIDER=litellm` sends `complete()` and `converse()` through LiteLLM instead of the
+Anthropic SDK, so any model LiteLLM supports can play a role: `YAAN_LITELLM_MODEL_EXTRACT`,
 `_ANSWER` and `_JUDGE` name them in LiteLLM's "provider/model" form (for example
 `openai/gpt-4o-mini`). With the default provider (`anthropic`) this module is never imported and
 llm.py behaves exactly as before: same requests, same cache keys.
@@ -21,7 +21,7 @@ What differs, on purpose:
 - Anthropic-only parameters are mapped or dropped: `effort` becomes `reasoning_effort`
   (low / medium / high; xhigh and max become high) with `drop_params=True`, so a model that
   has no such knob ignores it; `cache_control` and Anthropic's prompt-caching breakpoints are
-  dropped (LiteLLM forwards `cache_control` only to providers that take it, and Lore's request
+  dropped (LiteLLM forwards `cache_control` only to providers that take it, and Yaan's request
   keys don't depend on it); `thinking` is not sent, and thinking blocks in a replayed
   conversation are dropped, since no other provider can read them.
 - `converse()` speaks Anthropic's message format to its caller (the agent loop) and OpenAI's to
@@ -50,7 +50,7 @@ from app import llm
 from app.llm import LLMError, LLMResult, Role, Turn
 
 INSTALL = (
-    "LORE_LLM_PROVIDER=litellm needs LiteLLM, which the default install leaves out: "
+    "YAAN_LLM_PROVIDER=litellm needs LiteLLM, which the default install leaves out: "
     "`uv pip install --python backend/.venv litellm` (or `pip install litellm`)"
 )
 EFFORTS = {"low", "medium", "high"}  # what LiteLLM's reasoning_effort takes
@@ -69,19 +69,19 @@ def role_settings(role: Role) -> tuple[str, str]:
     """(LiteLLM model name, effort) for a role; a role without a model is a loud error."""
     s = llm.get_settings()
     model = {
-        "extract": s.lore_litellm_model_extract,
-        "answer": s.lore_litellm_model_answer,
-        "judge": s.lore_litellm_model_judge,
+        "extract": s.yaan_litellm_model_extract,
+        "answer": s.yaan_litellm_model_answer,
+        "judge": s.yaan_litellm_model_judge,
     }[role]
     if not model:
         raise LLMError(
-            f"LORE_LLM_PROVIDER=litellm but LORE_LITELLM_MODEL_{role.upper()} is not set "
+            f"YAAN_LLM_PROVIDER=litellm but YAAN_LITELLM_MODEL_{role.upper()} is not set "
             "(a LiteLLM model name such as openai/gpt-4o-mini)"
         )
     effort = {
-        "extract": s.lore_extract_effort,
-        "answer": s.lore_answer_effort,
-        "judge": s.lore_judge_effort,
+        "extract": s.yaan_extract_effort,
+        "answer": s.yaan_answer_effort,
+        "judge": s.yaan_judge_effort,
     }[role]
     return model, effort
 
@@ -107,12 +107,12 @@ def check_budget(litellm: Any, model: str, prompt_chars: int, max_tokens: int) -
     daily cap, like llm.check_budget."""
     rin, rout = rates(litellm, model)
     worst = int(prompt_chars / llm.CHARS_PER_TOKEN_WORST) * rin + max_tokens * rout
-    cap = llm.get_settings().lore_daily_spend_cap_usd
+    cap = llm.get_settings().yaan_daily_spend_cap_usd
     spent = llm.spent_today()
     if spent + worst > cap:
         raise llm.SpendCapReached(
             f"today's LLM spend is ${spent:.4f}; this call could add ${worst:.4f}, over the "
-            f"${cap:.2f} cap (LORE_DAILY_SPEND_CAP_USD in .env). Raise the cap or wait until "
+            f"${cap:.2f} cap (YAAN_DAILY_SPEND_CAP_USD in .env). Raise the cap or wait until "
             "00:00 UTC."
         )
     return worst

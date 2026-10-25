@@ -273,7 +273,7 @@ def answer(
 
     `as_of_ms` answers for the state at that moment (the Timeline's slider, 12.4): the
     status tools use it unless the model names another date. `toolset` limits the tools,
-    for the Lore − graph tools ablation (`tools.SEARCH_ONLY`, 9.8); the prompt follows it.
+    for the Yaan − graph tools ablation (`tools.SEARCH_ONLY`, 9.8); the prompt follows it.
 
     `payer` is the person the model calls are charged to (their daily budget in org mode,
     D124): the signed-in asker, whoever they answer as.
@@ -313,7 +313,7 @@ def answer(
                 messages=messages,
                 tools=specs,
                 output_schema=SCHEMA,
-                purpose="lore" if toolset is None else "lore-search",
+                purpose="yaan" if toolset is None else "yaan-search",
             )
         turns.append(turn)
         messages.append({"role": "assistant", "content": turn.content})
@@ -375,7 +375,7 @@ def answer(
     if cleaned["abstain"]:
         searched = ", ".join(sorted({e["tool"] for e in state["trace"]})) or "no tools"
         cleaned = {
-            "answer_markdown": f"Not found in Lore's graph: no evidence answers this question. "
+            "answer_markdown": f"Not found in Yaan's graph: no evidence answers this question. "
             f"Searched with: {searched}.",
             "citations": [],
             "abstain": True,
@@ -396,7 +396,7 @@ def answer(
         "hidden_sources": len(state["hidden"]),
         "trace": state["trace"],
         # the model's first final answer, before autocite, repair and dropping: scoring it
-        # gives the Lore − citation validator ablation from the same run (R2, W2)
+        # gives the Yaan − citation validator ablation from the same run (R2, W2)
         "unvalidated": unvalidated,
         "validator": {
             "first_problems": first_problems,

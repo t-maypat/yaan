@@ -1,6 +1,6 @@
 """Notion connector (17.6, D073-D074): documents and their review in, corrections out.
 
-In: each child page of the demo page shared with the integration is a document. Lore reads it
+In: each child page of the demo page shared with the integration is a document. Yaan reads it
 the way it reads HERB's: a Doc artifact (its blocks as text), the message that shared it in the
 planning channel `connectors.yaml` maps (so `doc_discussion` finds its review), and each page
 comment as a review message in that channel. "Who reviewed the spec and what did they suggest?"

@@ -8,7 +8,7 @@ status change does), labeled synthetic (rule 5), in a bug channel of one product
 
 `--grow K` first adds K x the product's issue lifecycles (report, fix, reopen) as events, so a
 fold, the derived layer and the Sentinel have K times as much history to go over. The copy
-(`lore_bench`) and its live folder are deleted at the end unless `--keep`.
+(`yaan_bench`) and its live folder are deleted at the end unless `--keep`.
 """
 
 import argparse
@@ -26,7 +26,7 @@ from app.connectors import base  # noqa: E402
 from app.ingest.normalize import Artifact  # noqa: E402
 from app.sentinel import live  # noqa: E402
 
-BENCH = "lore_bench"
+BENCH = "yaan_bench"
 CHANNEL, CHANNEL_NAME = "ch-force-d79648", "bug-davidgarcia-VizForce"
 PRODUCT, AUTHOR = "VizForce", "eid_bd791efc"
 KINDS = ("issue_reported", "issue_resolved", "issue_reopened")
@@ -88,14 +88,14 @@ def main() -> int:
     ap.add_argument("--n", type=int, default=30, help="messages to time")
     ap.add_argument("--batch", type=int, default=1, help="messages per live batch")
     ap.add_argument("--grow", type=int, default=0, help="first add K x the issue lifecycles")
-    ap.add_argument("--source", default=None, help="graph to copy (default: LORE_GRAPH)")
-    ap.add_argument("--keep", action="store_true", help="keep lore_bench afterwards")
+    ap.add_argument("--source", default=None, help="graph to copy (default: YAAN_GRAPH)")
+    ap.add_argument("--keep", action="store_true", help="keep yaan_bench afterwards")
     args = ap.parse_args()
     s = get_settings()
     writer = db.client(readonly=False)
     if BENCH in writer.list_graphs():
         writer.select_graph(BENCH).delete()
-    writer.select_graph(args.source or s.lore_graph).copy(BENCH)
+    writer.select_graph(args.source or s.yaan_graph).copy(BENCH)
     shutil.rmtree(live.live_dir(BENCH), ignore_errors=True)
     t0 = int(time.time() * 1000) - 86_400_000
     try:

@@ -70,7 +70,7 @@ def conn(monkeypatch):
         if request.method == "POST":
             posted.append(json.loads(request.content))
             return httpx.Response(200, json={"id": "new"})
-        if request.url.path == "/v1/comments":  # the review, then what Lore posted
+        if request.url.path == "/v1/comments":  # the review, then what Yaan posted
             mine = [
                 {"rich_text": [{"plain_text": p["rich_text"][0]["text"]["content"]}]}
                 for p in posted

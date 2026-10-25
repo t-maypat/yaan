@@ -21,7 +21,7 @@ uv run --project backend uvicorn app.main:app --reload    # API on :8000
 npm --prefix frontend install && npm --prefix frontend run dev   # UI on :5173
 ```
 
-`uv run --project backend lore --help` lists the CLI. To work against the demo graph, restore the snapshot with `lore seed --from <release URL>` (see the README's Quickstart).
+`uv run --project backend yaan --help` lists the CLI. To work against the demo graph, restore the snapshot with `yaan seed --from <release URL>` (see the README's Quickstart).
 
 ## Test and lint
 
@@ -48,7 +48,7 @@ FalkorDB 6 is not Neo4j. The rules that matter most:
 - Writes ignore the per-query timeout and roll back in full after 10 s: batch them with `UNWIND $rows AS r MERGE …`, and use the same label set in every `MERGE` of a type.
 - Vectors are written as `vecf32(…)`; the vector score is a cosine distance (lower is closer).
 - Full-text queries are built from keywords, never a raw question.
-- Indexes are declared in `00_schema.cypher` and applied and checked by `lore schema`.
+- Indexes are declared in `00_schema.cypher` and applied and checked by `yaan schema`.
 
 `backend/tests/test_falkordb_contract.py` pins the engine behaviour these rules come from; if you find another quirk, add a contract test for it.
 

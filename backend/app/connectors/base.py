@@ -1,8 +1,8 @@
 """The connector contract and its maps (Phase 17.2, D073, D074).
 
-A connector reads one company tool and writes Lore's approved actions back into it:
+A connector reads one company tool and writes Yaan's approved actions back into it:
 - `fetch(since_ms)` returns the items created or changed since then, each already normalized
-  into Lore's artifact schema (the same rows as data/normalized/), optionally with
+  into Yaan's artifact schema (the same rows as data/normalized/), optionally with
   deterministic events (a Jira status change needs no LLM);
 - `post(action)` sends one approved Sentinel draft to the tool when the action targets
   something that lives there, and returns a reference (a URL), else None.
@@ -14,7 +14,7 @@ person each sandbox account plays. The demo sandboxes hold only labeled syntheti
 seeded item can name the person it is written as: "[synthetic demo · as Ian Davis
 (eid_7017b913)]", so one human account can play the story's several people.
 
-In org mode (LORE_DATA_MODE=org, app/org.py, D097) the same connectors read a team's own tools:
+In org mode (YAAN_DATA_MODE=org, app/org.py, D097) the same connectors read a team's own tools:
 no label is required or written, ids drop `synthetic-` (`msg:slack-…`), and an account maps to
 its people.yaml entry, or to a person registered on first sight, never to a stand-in.
 """

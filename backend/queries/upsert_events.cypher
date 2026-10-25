@@ -1,4 +1,4 @@
-// upsert_events.cypher — verified events, the derived layer's system of record (D101): immutable; observed_ms is when Lore first learned one, and an event asserted again after a retraction is live again
+// upsert_events.cypher — verified events, the derived layer's system of record (D101): immutable; observed_ms is when Yaan first learned one, and an event asserted again after a retraction is live again
 UNWIND $rows AS r
 MERGE (e:Event {id: r.id})
 ON CREATE SET e.observed_ms = r.observed_ms, e.artifact_id = r.artifact_id, e.product_id = r.product,

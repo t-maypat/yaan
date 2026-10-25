@@ -50,7 +50,7 @@
   // and "fonts-wait", which holds the hero's entrance until its fonts are in (see the end of <body>).
   (function () {
     var d = document.documentElement, t = null, q = location.search;
-    try { t = new URLSearchParams(q).get('theme') || localStorage.getItem('lore-theme'); } catch (e) {}
+    try { t = new URLSearchParams(q).get('theme') || localStorage.getItem('yaan-theme') || localStorage.getItem('lore-theme'); } catch (e) {}
     d.dataset.theme = t === 'dark' ? 'dark' : 'light';
     if (!/[?&]motion=full\b/.test(q) && window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) d.classList.add('calm');
     if (document.fonts && document.fonts.load) d.classList.add('fonts-wait');
@@ -483,7 +483,7 @@
           <tr><th scope="col">System</th><th scope="col">Avg score, held-out</th><th scope="col">Customer questions</th><th scope="col">Quotes verified</th><th scope="col">Avg on the 3 dev products we built on</th></tr>
         </thead>
         <tbody>
-          <tr class="rt-lore"><th scope="row">Yaan</th><td><span class="cell-bar" style="--v:63.6"></span>63.6</td><td>54.2</td><td>100%</td><td class="dev">83.2</td></tr>
+          <tr class="rt-yaan"><th scope="row">Yaan</th><td><span class="cell-bar" style="--v:63.6"></span>63.6</td><td>54.2</td><td>100%</td><td class="dev">83.2</td></tr>
           <tr class="rt-ref"><th scope="row">Salesforce AI Research agent (GPT-4o) <span>best agent in their HERB paper; different setup</span></th><td><span class="cell-bar" style="--v:43.4"></span>43.4</td><td>n/a</td><td>n/a</td><td class="dev">n/a</td></tr>
           <tr><th scope="row">Yaan without the FalkorDB graph<sup>*</sup></th><td><span class="cell-bar" style="--v:24.2"></span>24.2</td><td>0.0</td><td>100%</td><td class="dev">25.0</td></tr>
           <tr><th scope="row">Plain RAG</th><td><span class="cell-bar" style="--v:9.6"></span>9.6</td><td>0.0</td><td>98.5%</td><td class="dev">14.7</td></tr>
@@ -549,14 +549,14 @@
           <p class="ans-note" id="ragNote">Right only between 24 and 26 Feb. On every other day it is wrong.</p>
         </article>
 
-        <article class="ans ans-lore" id="ansLore">
+        <article class="ans ans-yaan" id="ansYaan">
           <header class="ans-h">
             <span class="ans-who"><svg class="mini-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="ym-arm" d="M7 6 L16 17 L25 6"/><path class="ym-stem" d="M16 17 V27"/><circle class="ym-node" cx="16" cy="17" r="3.3"/><rect class="ym-cite" x="3.4" y="2.4" width="7.2" height="7.2" rx="1.7"/><circle class="ym-src" cx="25" cy="6" r="3.3"/></svg>Yaan</span>
             <span class="stamp stamp-ok">Current</span>
           </header>
-          <p class="ans-text" id="loreText"></p>
-          <div class="ans-ev" id="loreEv"></div>
-          <p class="ans-note" id="loreNote"></p>
+          <p class="ans-text" id="yaanText"></p>
+          <div class="ans-ev" id="yaanEv"></div>
+          <p class="ans-note" id="yaanNote"></p>
         </article>
       </div>
 
@@ -564,7 +564,7 @@
         <p class="ds-cap">Stale answers on our drift test, built on Salesforce AI Research’s enterprise data</p>
         <div class="ds-row">
           <div class="ds"><span class="ds-n">8.7%</span><span class="ds-l">Search only: the same agent without its graph tools</span></div>
-          <div class="ds ds-lore"><span class="ds-n">0%</span><span class="ds-l">Yaan, reading the decision in force</span></div>
+          <div class="ds ds-yaan"><span class="ds-n">0%</span><span class="ds-l">Yaan, reading the decision in force</span></div>
         </div>
       </div>
     </div>
@@ -614,9 +614,9 @@
       </div>
 
       <figure class="tour-frame" id="tp" role="tabpanel" aria-labelledby="tt0">
-        <div class="frame-bar" aria-hidden="true"><span class="fb-path" id="tourPath">yaan (formerly lore) / ask</span></div>
+        <div class="frame-bar" aria-hidden="true"><span class="fb-path" id="tourPath">yaan / ask</span></div>
         <div class="frame-view">
-          <img class="tour-img is-on" src="assets/img/ask-pane-hover.png" alt="The Ask pane: an answer whose sentences each carry a numbered citation; pointing at one shows its highlighted source quote" width="1440" height="1000" loading="lazy" data-i="0" data-path="yaan (formerly lore) / ask">
+          <img class="tour-img is-on" src="assets/img/ask-pane-hover.png" alt="The Ask pane: an answer whose sentences each carry a numbered citation; pointing at one shows its highlighted source quote" width="1440" height="1000" loading="lazy" data-i="0" data-path="yaan / ask">
           <img class="tour-img" src="assets/img/timeline-asof.png" alt="A decision timeline for the 'Feature Attribution Mismatch' issue, reported, dismissed, then reopened, with an as-of slider" width="1440" height="1943" loading="lazy" data-i="1" data-path="yaan / ask / timeline">
           <img class="tour-img" src="assets/img/inbox-key-person.png" alt="An Inbox alert naming a key person whose departure would leave components with no expert" width="1020" height="1160" loading="lazy" data-i="2" data-path="yaan / inbox / key person">
           <img class="tour-img" src="assets/img/inbox-radius.png" alt="A regression alert with its blast radius drawn as a graph around the reopened issue" width="1020" height="1040" loading="lazy" data-i="3" data-path="yaan / inbox / regression">
@@ -648,7 +648,7 @@
       <div class="stack" id="stack">
         <p class="stack-k">What Yaan stands on</p>
         <ol class="layers">
-          <li class="layer l-lore" data-use="17 read-only agent tools and the Change Sentinel, all as parameterized Cypher in backend/queries/.">
+          <li class="layer l-yaan" data-use="17 read-only agent tools and the Change Sentinel, all as parameterized Cypher in backend/queries/.">
             <span class="ly-t">Yaan</span><span class="ly-d">253 Cypher queries · 17 agent tools · the Sentinel</span>
           </li>
           <li class="layer" data-use="Decision windows, SUPERSEDES chains, counts over REPORTED_BY and WORKS_AT, bounded paths: every answer that needs a link.">
@@ -732,7 +732,7 @@
 
 <dialog class="dlg" id="dlgArch" aria-labelledby="dlgArchT">
   <div class="dlg-head"><h3 id="dlgArchT">How the pieces fit</h3><button class="icon-btn" type="button" data-close aria-label="Close">×</button></div>
-  <div class="dlg-body"><img src="assets/diagrams/lore-overview.svg" alt="Yaan's big picture: company data flows through the ingestion pipeline into the FalkorDB graph, which feeds the answer agent and the Change Sentinel, which feed the web UI" loading="lazy"></div>
+  <div class="dlg-body"><img src="assets/diagrams/yaan-overview.svg" alt="Yaan's big picture: company data flows through the ingestion pipeline into the FalkorDB graph, which feeds the answer agent and the Change Sentinel, which feed the web UI" loading="lazy"></div>
 </dialog>
 <dialog class="dlg" id="dlgModel" aria-labelledby="dlgModelT">
   <div class="dlg-head"><h3 id="dlgModelT">The graph data model</h3><button class="icon-btn" type="button" data-close aria-label="Close">×</button></div>

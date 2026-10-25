@@ -1,4 +1,4 @@
-// upsert_claims.cypher — Claim nodes: one verified extracted event each, with the fold's outcome and the policy verdict (S5-S8); observed_ms is its event's, when Lore first learned it (D101)
+// upsert_claims.cypher — Claim nodes: one verified extracted event each, with the fold's outcome and the policy verdict (S5-S8); observed_ms is its event's, when Yaan first learned it (D101)
 UNWIND $rows AS r
 MERGE (c:Claim {id: r.id})
 SET c.observed_ms = r.observed_ms, c.topic = r.topic, c.kind = r.kind, c.type = r.type, c.value = r.value, c.quote = r.quote,

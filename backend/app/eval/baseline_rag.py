@@ -77,7 +77,7 @@ def with_directory(results: list[dict[str, Any]], graph: str | None = None) -> l
     each person's role. Search-only systems scored 0 on Customer questions because a report
     names CUST-0026 and only HERB's metadata, which only the graph joined, says where that
     customer works; this hands plain RAG the same joins as text, so a gap left between it and
-    Lore is structure, not data access."""
+    Yaan is structure, not data access."""
     from app import db
 
     ids = sorted(

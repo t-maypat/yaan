@@ -1,4 +1,4 @@
-"""Run a system (baseline | lore | lore-search) over a split's HERB questions. Phase 5.
+"""Run a system (baseline | yaan | yaan-search) over a split's HERB questions. Phase 5.
 
 Per run, eval/runs/<run_id>/ (gitignored) gets:
 - answers.jsonl: one row per question: the answer, abstain flag, citations, retrieved ids,
@@ -51,7 +51,7 @@ def get_system(name: str) -> System:
             ),
             respond=baseline_rag.answer_from,
         )
-    if name == "lore":
+    if name == "yaan":
         from app.agent import loop
 
         # The agent reads the graph between LLM turns, so all of it runs in the pool:
@@ -60,7 +60,7 @@ def get_system(name: str) -> System:
             prepare=lambda q, product: product,
             respond=lambda q, product: loop.answer(q, product_id=product),
         )
-    if name == "lore-search":  # Lore − graph tools (9.8, R1-7): search and reading only
+    if name == "yaan-search":  # Yaan − graph tools (9.8, R1-7): search and reading only
         from app.agent import loop, tools
 
         return System(
@@ -70,7 +70,7 @@ def get_system(name: str) -> System:
             ),
         )
     raise ValueError(
-        f"unknown system {name!r}: 'baseline', 'baseline-meta', 'lore' or 'lore-search'"
+        f"unknown system {name!r}: 'baseline', 'baseline-meta', 'yaan' or 'yaan-search'"
     )
 
 
@@ -224,8 +224,8 @@ def run(
             "questions": len(rows),
             "limit": limit,
             "partial": partial,
-            "answer_model": s.lore_answer_model,
-            "answer_effort": s.lore_answer_effort,
+            "answer_model": s.yaan_answer_model,
+            "answer_effort": s.yaan_answer_effort,
             "started_utc": run_id.split("_")[0],
             "query_latency": db.latency_stats(),
         },

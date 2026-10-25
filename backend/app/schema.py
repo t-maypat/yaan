@@ -1,4 +1,4 @@
-"""The indexes every Lore graph needs: declare, apply, verify. Built in Phase 1.5.
+"""The indexes every Yaan graph needs: declare, apply, verify. Built in Phase 1.5.
 
 backend/queries/00_schema.cypher declares them, one DDL statement per line. `apply` runs each
 line as the writer. On FalkorDB 6.0.1 a repeated line fails with "Attribute '<p>' is already

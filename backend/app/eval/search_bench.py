@@ -22,7 +22,7 @@ MODES = ("fulltext", "vector", "hybrid")
 
 
 def herb_to_artifact_ids(product: str) -> dict[str, str]:
-    """HERB id (as questions cite it) -> Lore artifact id."""
+    """HERB id (as questions cite it) -> Yaan artifact id."""
     mapping = {}
     for a in read_jsonl(normalized_dir(product) / "artifacts.jsonl"):
         herb_id = a.meta["herb_id"] if a.kind == "link" else a.id.split(":", 1)[1]

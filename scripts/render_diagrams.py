@@ -44,7 +44,7 @@ def source_hash(source: Path) -> str:
 
 
 def stamp(source: Path) -> str:
-    return f"<!-- lore-diagram sha256={source_hash(source)} -->"
+    return f"<!-- yaan-diagram sha256={source_hash(source)} -->"
 
 
 def mmdc(source_text: str, output: Path) -> None:

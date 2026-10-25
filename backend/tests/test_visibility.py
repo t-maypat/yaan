@@ -34,7 +34,7 @@ PRIYA, KEN = "eid_0000a001", "eid_0000a002"
 def org_mode(tmp_path, monkeypatch):
     people = tmp_path / "people.yaml"
     people.write_text(PEOPLE, encoding="utf-8")
-    monkeypatch.setenv("LORE_DATA_MODE", "org")
+    monkeypatch.setenv("YAAN_DATA_MODE", "org")
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(org, "PEOPLE_FILE", people)
     caches = (get_settings, org.roster, org.accounts, org.source_audiences, base.maps)
@@ -162,7 +162,7 @@ def test_a_channel_the_bot_cant_see_is_never_guessed_public(org_mode, written):
         {"id": "bug-leads", "visibility": "unknown"},
         {"id": "bug-support", "visibility": "public"},
     ]
-    assert conn.problems == ["the bot can't see #leads: /invite @lore there"]
+    assert conn.problems == ["the bot can't see #leads: /invite @yaan there"]
 
 
 def bot(conn) -> slack.SlackBot:

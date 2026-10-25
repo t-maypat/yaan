@@ -111,7 +111,7 @@ def test_a_correction_becomes_a_footer_comment_in_storage_format(conn):
     assert ref == f"{PAGE_URL}&focusedCommentId=600"
     sent = conn.seen["posted"][0]
     assert sent["pageId"] == "98765" and sent["body"]["representation"] == "storage"
-    assert "<strong>Lore Sentinel · Correction</strong>" in sent["body"]["value"]
+    assert "<strong>Yaan Sentinel · Correction</strong>" in sent["body"]["value"]
     assert "<blockquote><p>limit is 60 s</p></blockquote>" in sent["body"]["value"]
     assert (
         conn.post({"id": "a2", "kind": "doc_fix", "target_id": "doc:herb_x", "draft": "x"}) is None

@@ -1,32 +1,32 @@
 # Connectors and the MCP server: setup
 
-Lore reads a company's tools and writes its approved actions back into them. This page says how to connect each one. For the demo every tool is a **sandbox holding only labeled synthetic data**: the content comes from `lore connectors seed`, every item starts with "[synthetic demo]", and it all lands in the demo graph `lore_demo`, never in the HERB graph.
+Yaan reads a company's tools and writes its approved actions back into them. This page says how to connect each one. For the demo every tool is a **sandbox holding only labeled synthetic data**: the content comes from `yaan connectors seed`, every item starts with "[synthetic demo]", and it all lands in the demo graph `lore_demo`, never in the HERB graph.
 
 Put every token in `.env` (never commit it). The variable names are in `.env.example`.
 
 ## Your own tools (org mode)
-The setup steps below are the same for a team's real workspace. What changes is the data mode: set `LORE_DATA_MODE=org` in `.env`, and the connectors write to your own graph (`LORE_ORG_GRAPH`, default `yaan_org`) instead of the demo:
+The setup steps below are the same for a team's real workspace. What changes is the data mode: set `YAAN_DATA_MODE=org` in `.env`, and the connectors write to your own graph (`YAAN_ORG_GRAPH`, default `yaan_org`) instead of the demo:
 
 - **No label.** Items need no "[synthetic demo]" prefix, and their ids drop `synthetic-` (`msg:slack-…`, `pr:github-…`).
 - **Your channels.** Copy `connectors.org.example.yaml` over `connectors.yaml`. Each Yaan channel's name starts with `bug-` (issues reported, fixed, reopened), `develop-` (pull requests, development decisions) or `planning-` (documents and their review), or a mapping names its channel freely and gives its kind: `backend: {channel: backend, kind: mixed}`. Extraction reads bug, develop and mixed channels.
-- **Who may read what.** Slack tells Yaan which channels are private and who is in them; each round re-reads it, so someone who leaves a channel stops seeing it in Yaan. A private Slack channel needs a Yaan channel of its own. GitHub and Jira can do the same with `visibility: synced`: a repository's pull requests are read by its collaborators (everyone, for a public repository), and a Jira channel by the people who may browse every project feeding it, read from the tool every hour; until the first read, nothing from them is shown. The token needs write access to the repository (and `repo`, `read:org` on a classic token), and the Jira account Administer Projects; Jira looks at its first 1,000 users only, so a bigger site is read short (fewer readers, never more). Every other source declares its readers in `connectors.yaml`: `visibility: everyone`, or `visibility: members` with `members:` (names or emails from `people.yaml`). Until a source is declared, `lore init` stops and nothing from it is shown. Text Yaan sends out (alert cards, drafted comments) quotes only sources everyone may read. In a channel, `@yaan` answers from what everyone there may read; send the bot a direct message for an answer from everything you may read. Search ranks only what the asker may read, so a restricted person still gets a full page of results, and who-knows-what is built from what everyone may read.
+- **Who may read what.** Slack tells Yaan which channels are private and who is in them; each round re-reads it, so someone who leaves a channel stops seeing it in Yaan. A private Slack channel needs a Yaan channel of its own. GitHub and Jira can do the same with `visibility: synced`: a repository's pull requests are read by its collaborators (everyone, for a public repository), and a Jira channel by the people who may browse every project feeding it, read from the tool every hour; until the first read, nothing from them is shown. The token needs write access to the repository (and `repo`, `read:org` on a classic token), and the Jira account Administer Projects; Jira looks at its first 1,000 users only, so a bigger site is read short (fewer readers, never more). Every other source declares its readers in `connectors.yaml`: `visibility: everyone`, or `visibility: members` with `members:` (names or emails from `people.yaml`). Until a source is declared, `yaan init` stops and nothing from it is shown. Text Yaan sends out (alert cards, drafted comments) quotes only sources everyone may read. In a channel, `@yaan` answers from what everyone there may read; send the bot a direct message for an answer from everything you may read. Search ranks only what the asker may read, so a restricted person still gets a full page of results, and who-knows-what is built from what everyone may read.
 - **Your people.** `people.yaml` lists people with their role (what the authority policy reads), their team (the org chart: who works on what, a working group's team mix) and their account in each tool, so one person's Slack, GitHub and Jira accounts are one node. Anyone not listed is registered the first time they appear, under their name in that tool, with no role: their claims apply, marked unverified. Slack and Jira vouch for a work email, so an unlisted person with the same email in both is one person, and a listed person's email finds them (only emails at the domains in `people.yaml`, or `email_domains`). `yaan people` prints everyone met but not listed, as entries to paste into `people.yaml`.
-- **Threads, edits and deletions.** Slack's thread replies, later edits and deletions arrive over the socket; an edit closes what the old words said, and a deletion removes the message from Yaan. At start-up and daily Yaan compares the last 14 days of each mapped channel with its graph (`sweep_days`), for what it missed while down; `lore connectors reconcile --days 90` checks once.
-- **Forgetting.** `lore forget <id>` removes an item, and `lore erase <person>` a person, everywhere Yaan copied their words (both are dry runs without `--yes`). Cache entries expire after `LORE_CACHE_DAYS` (30).
+- **Threads, edits and deletions.** Slack's thread replies, later edits and deletions arrive over the socket; an edit closes what the old words said, and a deletion removes the message from Yaan. At start-up and daily Yaan compares the last 14 days of each mapped channel with its graph (`sweep_days`), for what it missed while down; `yaan connectors reconcile --days 90` checks once.
+- **Forgetting.** `yaan forget <id>` removes an item, and `yaan erase <person>` a person, everywhere Yaan copied their words (both are dry runs without `--yes`). Cache entries expire after `YAAN_CACHE_DAYS` (30).
 - **Jira.** A status in Jira's "done" category resolves the issue, in any workflow or language; a resolution like Won't Do dismisses it. `customer_pattern` (a regular expression) says how a ticket names a customer, and `issue_types: [Bug, Incident]` limits which tickets are issues.
 - **Collaboration.** Who works with whom (PageRank, communities, connection paths) is rebuilt hourly from threads and conversations in what everyone may read, so a private channel never shows who talks there.
-- **History:** a tool's first sync reads its last 30 days (`backfill_days` under the tool in `connectors.yaml`). `lore connectors backfill --days 365` prices a longer reach first (what each tool holds in that window, and the expected and worst-case cost of extracting it) and spends only with `--yes`; the daily spend cap still applies, and what it holds back goes in on later rounds.
-- **Set up once:** `lore init` creates the graph, its indexes, the product, the channels and the listed people. It checks both files first and changes nothing if one is wrong. Then start the connector worker (`docker compose --profile app --profile connectors up -d`), or `lore connectors run` as below.
-- **The demo stays out.** In org mode, `lore seed`, `lore demo` and `lore connectors seed` refuse, live writes refuse the HERB graphs, and the web UI hides the demo's sample questions, viewers and injections.
+- **History:** a tool's first sync reads its last 30 days (`backfill_days` under the tool in `connectors.yaml`). `yaan connectors backfill --days 365` prices a longer reach first (what each tool holds in that window, and the expected and worst-case cost of extracting it) and spends only with `--yes`; the daily spend cap still applies, and what it holds back goes in on later rounds.
+- **Set up once:** `yaan init` creates the graph, its indexes, the product, the channels and the listed people. It checks both files first and changes nothing if one is wrong. Then start the connector worker (`docker compose --profile app --profile connectors up -d`), or `yaan connectors run` as below.
+- **The demo stays out.** In org mode, `yaan seed`, `yaan demo` and `yaan connectors seed` refuse, live writes refuse the HERB graphs, and the web UI hides the demo's sample questions, viewers and injections.
 
 `connectors.yaml` and `people.yaml` are mounted into the `api` container, so an edit applies on `docker compose --profile app restart api`. One product per install: everything the connectors read belongs to the product `connectors.yaml` names.
 
 ## MCP server (no account needed)
-Any MCP client (Claude Code, Claude Desktop, Cursor, your own agent) can use Lore's read-only graph tools and, unless `LORE_MCP_ASK=0`, `ask` for a cited answer.
+Any MCP client (Claude Code, Claude Desktop, Cursor, your own agent) can use Yaan's read-only graph tools and, unless `YAAN_MCP_ASK=0`, `ask` for a cited answer.
 
 ```powershell
 # Claude Code, stdio (runs on your machine against the local graph)
-claude mcp add lore -- uv run --project backend lore mcp
+claude mcp add yaan -- uv run --project backend yaan mcp
 # or over HTTP while the API runs: http://127.0.0.1:8000/mcp
 ```
 
@@ -35,11 +35,11 @@ claude mcp add lore -- uv run --project backend lore mcp
 2. Go to https://api.slack.com/apps → **Create New App** → **From a manifest** → pick the workspace → paste the manifest below → **Create**.
 3. **Basic Information → App-Level Tokens → Generate Token and Scopes**: name it `socket`, add the scope `connections:write`, generate. Copy the `xapp-…` token into `SLACK_APP_TOKEN`.
 4. **Install App → Install to Workspace → Allow**. Copy the **Bot User OAuth Token** (`xoxb-…`) into `SLACK_BOT_TOKEN`.
-5. In Slack, create the channels `#vizforce-bugs` and `#lore-alerts`, and type `/invite @lore` in each.
+5. In Slack, create the channels `#vizforce-bugs` and `#yaan-alerts`, and type `/invite @yaan` in each.
 
 ```yaml
 display_information:
-  name: Lore
+  name: Yaan
   description: Company brain on FalkorDB. Answers with sources and flags changes. Demo with synthetic data.
   background_color: "#18202b"
 features:
@@ -47,7 +47,7 @@ features:
     messages_tab_enabled: true # direct messages to the bot: answers scoped to the asker
     messages_tab_read_only_enabled: false
   bot_user:
-    display_name: lore
+    display_name: yaan
     always_online: true
 oauth_config:
   scopes:
@@ -88,10 +88,10 @@ settings:
   token_rotation_enabled: false
 ```
 
-Socket Mode means Slack talks to Lore over an outgoing connection, so no public URL is needed.
+Socket Mode means Slack talks to Yaan over an outgoing connection, so no public URL is needed.
 
 ## GitHub (about 5 minutes)
-1. Create a new **private** repository you own, e.g. `lore-demo-sandbox`, with a README so it has a `main` branch. Put `owner/name` into `GITHUB_REPO`.
+1. Create a new **private** repository you own, e.g. `yaan-demo-sandbox`, with a README so it has a `main` branch. Put `owner/name` into `GITHUB_REPO`.
 2. https://github.com/settings/personal-access-tokens/new (fine-grained token): **Repository access → Only select repositories →** the sandbox repo. **Permissions → Repository:** Contents *Read and write* (the seed opens PRs from branches), Pull requests *Read and write*, Issues *Read and write* (Metadata *Read* is added automatically). Expiry: 7 days. Copy it into `GITHUB_TOKEN`.
 
 ## Jira Cloud (about 10 minutes)
@@ -101,16 +101,16 @@ Socket Mode means Slack talks to Lore over an outgoing connection, so no public 
 
 ## Notion (about 5 minutes)
 1. https://www.notion.so/profile/integrations → **New integration** (internal), on your workspace. Capabilities: Read content, Insert content, Read comments, Insert comments. Copy the secret into `NOTION_TOKEN`.
-2. Create a page named **Lore demo (synthetic)**. Open its **•••** menu → **Connections** → add your integration.
+2. Create a page named **Yaan demo (synthetic)**. Open its **•••** menu → **Connections** → add your integration.
 3. Copy the page id (the 32 characters at the end of its URL) into `NOTION_PAGE_ID`.
 
 ## Webhooks (optional)
 The worker polls GitHub, Jira and Notion every 30 s (Slack arrives over its socket). If Yaan is reachable from the internet, GitHub and Jira can wake it the moment something changes: set `GITHUB_WEBHOOK_SECRET` or `JIRA_WEBHOOK_SECRET` in `.env`, then add a webhook in the tool pointing at `https://<your Yaan>/hooks/github` (content type JSON, the same secret; pull request and review events) or `/hooks/jira` (issue events, the same secret). A webhook only wakes the worker: Yaan still reads what changed from the tool's API, and a request whose signature doesn't match the secret is refused. A tool that refuses or rate-limits Yaan waits on its own, as long as it asks (Retry-After) or 30 s doubling up to 15 minutes; the other tools go on.
 
 ## What each connector does
-| Source | In (to Lore) | Out (approved actions) |
+| Source | In (to Yaan) | Out (approved actions) |
 |---|---|---|
-| Slack | channel messages, thread replies, edits and deletions → the live pipeline → the Sentinel; `@lore <question>` | answers in the thread with citations; alert cards with Approve / Dismiss; messages to the people a change affects |
+| Slack | channel messages, thread replies, edits and deletions → the live pipeline → the Sentinel; `@yaan <question>` | answers in the thread with citations; alert cards with Approve / Dismiss; messages to the people a change affects |
 | GitHub | pull requests and their reviews (not issues, comments or commits yet) | comments on the PR |
 | Jira | tickets and their status changes (each change becomes a decision with who made it, no LLM needed) and comments | comments on the ticket |
 | Notion | pages of the demo database as documents, page comments as feedback | comments on the page |
@@ -121,26 +121,26 @@ The sandboxes play the team of one HERB product (VizForce): `connectors.yaml` ma
 With the tokens in `.env` (any subset works; the seed needs Jira and GitHub):
 
 ```powershell
-uv run --project backend lore demo reset                       # lore_demo := a fresh copy of the HERB graph
-uv run --project backend lore connectors status                # which connectors are configured
-uv run --project backend lore connectors seed --act setup      # Notion spec, Jira ticket, GitHub fix PR, ticket -> Done
-uv run --project backend lore connectors run                   # leave running: polls every 30 s, holds the Slack socket
+uv run --project backend yaan demo reset                       # lore_demo := a fresh copy of the HERB graph
+uv run --project backend yaan connectors status                # which connectors are configured
+uv run --project backend yaan connectors seed --act setup      # Notion spec, Jira ticket, GitHub fix PR, ticket -> Done
+uv run --project backend yaan connectors run                   # leave running: polls every 30 s, holds the Slack socket
 ```
 
-The setup act can run again for another take (after `lore demo reset`): each take uses its own GitHub branch and a new Jira ticket. The loop prints only when something changes; set `PYTHONUNBUFFERED=1` to watch its log live.
+The setup act can run again for another take (after `yaan demo reset`): each take uses its own GitHub branch and a new Jira ticket. The loop prints only when something changes; set `PYTHONUNBUFFERED=1` to watch its log live.
 
-Then, for the live moment, either type this in `#vizforce-bugs` or run `lore connectors seed --act regression`:
+Then, for the live moment, either type this in `#vizforce-bugs` or run `yaan connectors seed --act regression`:
 
 > [synthetic demo · as Ian Davis (eid_7017b913)] CUST-0003 has reopened 'CSV export times out on large dashboards': the CSV export times out on large dashboards again since this morning's release.
 
-Within a few seconds a **regression** card appears in `#lore-alerts`. **Approve and send** records the decision; the correction and the ticket comment land on the Jira ticket, the ticket comment on the GitHub PR, and the notifications in `#lore-alerts`. Ask `@lore what changed with the CSV export bug, and who should look at it?` in any channel the bot is in.
+Within a few seconds a **regression** card appears in `#yaan-alerts`. **Approve and send** records the decision; the correction and the ticket comment land on the Jira ticket, the ticket comment on the GitHub PR, and the notifications in `#yaan-alerts`. Ask `@yaan what changed with the CSV export bug, and who should look at it?` in any channel the bot is in.
 
 In Jira and GitHub every item is written by your own account; `connectors.yaml` maps it (`self`) to Hannah Garcia, and the persona label in each text names who the rest is written as.
 
 ## Experimental connectors (not run against a live API)
-Eight more tools have a connector scaffold. Each was written from the vendor's API reference and tested only against mock responses (`httpx.MockTransport`): **nobody has run them against the real service.** Expect small differences (a field, a scope, a rate limit) the first time you do. They are **off by default**: a connector starts only when **all** its required variables are set in `.env`, so an existing `.env` changes nothing. `lore connectors status` lists what is on.
+Eight more tools have a connector scaffold. Each was written from the vendor's API reference and tested only against mock responses (`httpx.MockTransport`): **nobody has run them against the real service.** Expect small differences (a field, a scope, a rate limit) the first time you do. They are **off by default**: a connector starts only when **all** its required variables are set in `.env`, so an existing `.env` changes nothing. `yaan connectors status` lists what is on.
 
-| Tool | Env vars (required unless marked) | In (to Lore) | Out (approved actions) | Docs |
+| Tool | Env vars (required unless marked) | In (to Yaan) | Out (approved actions) | Docs |
 |---|---|---|---|---|
 | Linear | `LINEAR_API_KEY`, `LINEAR_TEAM` (team key, e.g. `ENG`) | issues of the team as bug-channel messages: creation, a completed / canceled state (deterministic events, no LLM), comments | comment on the issue (Markdown) | [GraphQL](https://linear.app/developers/graphql) · [pagination](https://linear.app/developers/pagination) · [filtering](https://linear.app/developers/filtering) · [schema](https://github.com/linear/linear/blob/master/packages/sdk/src/schema.graphql) |
 | Confluence Cloud | `CONFLUENCE_BASE_URL`, `CONFLUENCE_EMAIL`, `CONFLUENCE_API_TOKEN`, `CONFLUENCE_SPACE_ID` | pages of one space as documents, plus a share message and footer comments as review messages | footer comment on the page (storage format) | [pages](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/) · [comments](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comment/) · [OpenAPI](https://dac-static.atlassian.com/cloud/confluence/openapi-v2.v3.json) |

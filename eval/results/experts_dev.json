@@ -3,7 +3,7 @@
  "graph": "lore_herb",
  "questions": 5,
  "mean": {
-  "lore": {
+  "yaan": {
    "hit@1": 1.0,
    "recall@3": 0.87,
    "recall@5": 0.96
@@ -37,7 +37,7 @@
     "eid_ab6f41bc",
     "eid_86044ae5"
    ],
-   "lore": {
+   "yaan": {
     "hit@1": 1.0,
     "recall@3": 1.0,
     "recall@5": 1.0
@@ -72,7 +72,7 @@
     "eid_ab6f41bc",
     "eid_86044ae5"
    ],
-   "lore": {
+   "yaan": {
     "hit@1": 1.0,
     "recall@3": 0.75,
     "recall@5": 1.0
@@ -108,7 +108,7 @@
     "eid_ab6f41bc",
     "eid_86044ae5"
    ],
-   "lore": {
+   "yaan": {
     "hit@1": 1.0,
     "recall@3": 0.6,
     "recall@5": 0.8
@@ -141,7 +141,7 @@
     "eid_ab6f41bc",
     "eid_86044ae5"
    ],
-   "lore": {
+   "yaan": {
     "hit@1": 1.0,
     "recall@3": 1.0,
     "recall@5": 1.0
@@ -175,7 +175,7 @@
     "eid_ab6f41bc",
     "eid_86044ae5"
    ],
-   "lore": {
+   "yaan": {
     "hit@1": 1.0,
     "recall@3": 1.0,
     "recall@5": 1.0

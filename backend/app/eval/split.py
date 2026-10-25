@@ -137,7 +137,7 @@ def make_split(path: Path | None = None, herb: Path | None = None) -> tuple[dict
 def read_split(path: Path | None = None) -> dict[str, Any]:
     path = path or eval_path("split.json")
     if not path.exists():
-        raise FileNotFoundError(f"{path} is missing: run `lore split` first")
+        raise FileNotFoundError(f"{path} is missing: run `yaan split` first")
     return json.loads(path.read_text(encoding="utf-8"))
 
 

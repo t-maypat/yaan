@@ -82,7 +82,7 @@ def test_strict_schemas_stay_inside_the_apis_shared_budget():
     )
     assert sum(t["strict"] for t in tools.TOOL_SPECS) <= 20
     assert unions <= 16 and optional <= 24, (unions, optional)
-    assert "x-lore" not in text  # the optional marker never reaches the API
+    assert "x-yaan" not in text  # the optional marker never reaches the API
 
 
 def test_call_tool_refuses_tools_outside_the_toolset():

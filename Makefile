@@ -25,22 +25,22 @@ logs:
 	docker compose logs -f falkordb
 
 schema:
-	$(RUN) lore schema --graph $(GRAPH)
+	$(RUN) yaan schema --graph $(GRAPH)
 
 data:
-	$(RUN) lore fetch-herb
+	$(RUN) yaan fetch-herb
 
 ingest:
-	$(RUN) lore ingest --graph $(GRAPH) --products "$(PRODUCTS)"
+	$(RUN) yaan ingest --graph $(GRAPH) --products "$(PRODUCTS)"
 
 health:
-	$(RUN) lore health --graph $(GRAPH)
+	$(RUN) yaan health --graph $(GRAPH)
 
 eval:
-	$(RUN) lore eval --split $(SPLIT)
+	$(RUN) yaan eval --split $(SPLIT)
 
 seed:
-	$(RUN) lore seed --graph $(GRAPH)
+	$(RUN) yaan seed --graph $(GRAPH)
 
 test:
 	$(RUN) pytest backend

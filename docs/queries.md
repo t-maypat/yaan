@@ -7,11 +7,11 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 <!-- queries -->
 253 queries, one parameterized statement per file in [`backend/queries/`](../backend/queries/), each with a fixture test.
 
-**Schema (indexes, applied and verified by `lore schema`)** (1)
+**Schema (indexes, applied and verified by `yaan schema`)** (1)
 
 | Query | Purpose |
 |---|---|
-| [`00_schema.cypher`](../backend/queries/00_schema.cypher) | indexes for one graph; `lore schema` runs it one line per call, then checks the result (CONTEXT §9.14; verified on 6.0.1 in Phase 1.5) |
+| [`00_schema.cypher`](../backend/queries/00_schema.cypher) | indexes for one graph; `yaan schema` runs it one line per call, then checks the result (CONTEXT §9.14; verified on 6.0.1 in Phase 1.5) |
 
 **Search (full-text and vector, inside FalkorDB)** (3)
 
@@ -130,7 +130,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_areas.cypher`](../backend/queries/upsert_areas.cypher) | Area nodes (10.0, D059): a product's bug-report components and development work items, the units of expertise and of the truck factor |
 | [`upsert_channels.cypher`](../backend/queries/upsert_channels.cypher) | Slack channel nodes with their stage (planning / dev / support / mixed) and kind, what extraction reads from them (D116) |
 | [`upsert_chunks.cypher`](../backend/queries/upsert_chunks.cypher) | search chunks with their embeddings, linked to their artifact (S3) |
-| [`upsert_claims.cypher`](../backend/queries/upsert_claims.cypher) | Claim nodes: one verified extracted event each, with the fold's outcome and the policy verdict (S5-S8); observed_ms is its event's, when Lore first learned it (D101) |
+| [`upsert_claims.cypher`](../backend/queries/upsert_claims.cypher) | Claim nodes: one verified extracted event each, with the fold's outcome and the policy verdict (S5-S8); observed_ms is its event's, when Yaan first learned it (D101) |
 | [`upsert_collab.cypher`](../backend/queries/upsert_collab.cypher) | (Person)-[:COLLAB {w, reviews, meetings, chats}]->(Person), both directions: how much two people worked together (10.1, D060) |
 | [`upsert_communities.cypher`](../backend/queries/upsert_communities.cypher) | Community nodes (working groups found by CDLP over COLLAB) with their size and how they map onto org-chart teams (10.4, D064) |
 | [`upsert_companies.cypher`](../backend/queries/upsert_companies.cypher) | company nodes from the customers' `company` field |
@@ -138,7 +138,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`upsert_dead_letters.cypher`](../backend/queries/upsert_dead_letters.cypher) | items a connector couldn't ingest, with the reason and the item itself so `yaan connectors retry` can replay them (H1, D107) |
 | [`upsert_decisions.cypher`](../backend/queries/upsert_decisions.cypher) | decision nodes (one per state in a topic's chain); an extracted one carries its product and its creating event's observed_ms, a structural one keeps when it was first seen (D101) |
 | [`upsert_docs.cypher`](../backend/queries/upsert_docs.cypher) | document artifacts, with type and version |
-| [`upsert_events.cypher`](../backend/queries/upsert_events.cypher) | verified events, the derived layer's system of record (D101): immutable; observed_ms is when Lore first learned one, and an event asserted again after a retraction is live again |
+| [`upsert_events.cypher`](../backend/queries/upsert_events.cypher) | verified events, the derived layer's system of record (D101): immutable; observed_ms is when Yaan first learned one, and an event asserted again after a retraction is live again |
 | [`upsert_issues.cypher`](../backend/queries/upsert_issues.cypher) | canonical Issue nodes from extracted reports, keyed by normalized title (S7, D049); status from the fold |
 | [`upsert_knows.cypher`](../backend/queries/upsert_knows.cypher) | (Person)-[:KNOWS {doa_abs, doa_norm, author, deliveries, first, discussion, score, first_ms, last_ms, refs}]->(Area): degree-of-authorship expertise with recency (10.2, §9.7) |
 | [`upsert_links.cypher`](../backend/queries/upsert_links.cypher) | shared link artifacts, one per address (D023) |
@@ -235,7 +235,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`links_shared.cypher`](../backend/queries/links_shared.cypher) | links shared in the product's messages, with who shared them and where |
 | [`list_alerts.cypher`](../backend/queries/list_alerts.cypher) | the Inbox: alerts, newest change first, optionally by status, product, alert id or triggering artifact, with who they notify |
 | [`list_dead_letters.cypher`](../backend/queries/list_dead_letters.cypher) | the items connectors couldn't ingest, newest failure first, for status, retry and Graph health (H1, D107) |
-| [`list_indexes.cypher`](../backend/queries/list_indexes.cypher) | every index in the graph with its kind, options and build status (lore schema checks these against 00_schema.cypher) |
+| [`list_indexes.cypher`](../backend/queries/list_indexes.cypher) | every index in the graph with its kind, options and build status (yaan schema checks these against 00_schema.cypher) |
 | [`list_products.cypher`](../backend/queries/list_products.cypher) | every product with its codenames and how many artifacts it holds, for the UI's product picker |
 | [`message_context.cypher`](../backend/queries/message_context.cypher) | one message as conversation context (a thread's root, read with every reply however old) (F1, D126) |
 | [`name_mentions.cypher`](../backend/queries/name_mentions.cypher) | artifacts whose text still names a person (after erasure: listed for a human to review, never rewritten, since a name can be a namesake's) (F2, D125) |
@@ -258,7 +258,7 @@ FalkorDB features these queries rely on: Cypher over a property graph, range ind
 | [`product_aliases.cypher`](../backend/queries/product_aliases.cypher) | a product's codenames (from renamed channels), so the live linker finds "abAIX" as CollaborateForce (D113) |
 | [`product_areas.cypher`](../backend/queries/product_areas.cypher) | a product's areas (components and work items) with their names, aliases and authors: who_knows matches a topic against them (10.7) |
 | [`product_clock.cypher`](../backend/queries/product_clock.cypher) | each product's last artifact time: "now" on HERB's clock, for recency (10.2, D057) |
-| [`product_events.cypher`](../backend/queries/product_events.cypher) | one product's events as Lore knows them now (not retracted), or as it knew them at $known_at_ms (observed by then, not yet retracted): the fold's input (D101), as one JSON string per event: decoded about 5x faster (A23, D129) |
+| [`product_events.cypher`](../backend/queries/product_events.cypher) | one product's events as Yaan knows them now (not retracted), or as it knew them at $known_at_ms (observed by then, not yet retracted): the fold's input (D101), as one JSON string per event: decoded about 5x faster (A23, D129) |
 | [`product_issues.cypher`](../backend/queries/product_issues.cypher) | the product's canonical customer issues with current status, status history (claims with quotes, and the policy's reason when a claim was refused), assignee, reporting customers and fixing PRs (slice B, D049, D057) |
 | [`product_prs.cypher`](../backend/queries/product_prs.cypher) | the product's own pull requests (external ones left out) with their record status chain, author, reviews, the PRs that revert them or that they revert, and what the team said to do with them in Slack (action claims with quotes) |
 | [`product_truck.cypher`](../backend/queries/product_truck.cypher) | a product's truck factor and the people it removes, for who_knows' key-person flag (10.3, 10.7) |

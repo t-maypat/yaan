@@ -1116,7 +1116,7 @@ def agent_search(
 # most 20 strict tools, 24 optional parameters and 16 union-typed parameters (anyOf or
 # nullable) across all of them. 17 tools with nullable parameters came to 28 unions (a 400),
 # so optional parameters are left out of `required` instead of being nullable (D068).
-OPTIONAL = "x-lore-optional"
+OPTIONAL = "x-yaan-optional"
 
 
 def _optional(schema: dict[str, Any]) -> dict[str, Any]:
@@ -1501,5 +1501,5 @@ REGISTRY: dict[str, Tool] = {
 }
 # The answer agent's tools, in a fixed order (part of every cached turn's key).
 TOOL_SPECS = [t.spec for t in REGISTRY.values()]
-# Lore − graph tools (9.8, R1-7): the same loop with search and reading only.
+# Yaan − graph tools (9.8, R1-7): the same loop with search and reading only.
 SEARCH_ONLY = ("search_artifacts", "get_artifact")

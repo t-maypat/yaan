@@ -21,12 +21,14 @@ What changed between versions, newest first. Yaan is 0.x: settings and the graph
 
 #### Changed
 - A steady-state fold at a year's volume takes about 6 s a batch instead of 12–14 s: the worker remembers what each decision topic was made from and compares and writes only the topics whose inputs changed, with a full write after a restart, a change of roles or customers, and at least hourly. FalkorDB's replies are parsed in C (`hiredis`, a new dependency).
+- Lore's remaining names are now Yaan's: settings `YAAN_…` (was `LORE_…`), the `X-Yaan-Secret` and `X-Yaan-Proxy-Secret` headers, the Compose project `yaan` (containers `yaan-api-1`, …; image `yaan-api`), the Python package `yaan`, the MCP server `yaan`, the eval's systems `yaan` / `yaan-search`, the default ACL users `yaan_writer` / `yaan_reader`, and the default Slack alerts channel `#yaan-alerts`. The `lore` command is gone: use `yaan`.
 - Searching one product in a big graph (over 300,000 chunks) starts from the vector index, asked deep, instead of scanning every chunk of the product exactly, which would pass the 2 s limit at about 1.4M chunks. A product the index can't fill holds few chunks, so it is still scanned exactly. Graphs the size of the demo search as before.
 
 #### Fixed
 - Running the database tests emptied the real LLM disk cache (the eval's free replay): an org-mode test of `forget` reached `data/cache` because its fixture moved `DATA_DIR` but not `CACHE_DIR`. Every test now gets its own cache and audit folders.
 
 #### Upgrading
+- **The rename keeps old installs working.** `LORE_…` settings are still read (a `YAAN_…` one wins; the logs list the old names to rename), and so are the old headers, the Approve / Dismiss buttons on cards already posted, and eval results recorded as `lore`. The FalkorDB volume keeps its name (`lore_falkordb-data`), and so do the demo graphs (`lore_herb`, `lore_demo`) and the snapshot file. Once: `docker compose -p lore --profile app --profile connectors down`, then `docker compose --profile app --profile connectors up -d --build` (without the first, the old containers hold the ports). If `connectors.yaml` names no `alerts_channel`, the default is now `#yaan-alerts`.
 - FalkorDB now starts with a 2 GB memory cap: if `yaan persistence` (or `INFO memory`) shows more in use, set `FALKORDB_MAXMEMORY` higher before `docker compose up -d`, or writes stop at once.
 - Don't set `FALKORDB_APPENDONLY=yes` on an existing volume before running `yaan persistence aof`: started that way over a snapshot-only volume, FalkorDB comes up empty, and its next snapshot overwrites the good one.
 

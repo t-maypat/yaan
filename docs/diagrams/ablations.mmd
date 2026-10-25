@@ -1,5 +1,5 @@
 %% The systems compared on dev (R2, 17 Oct): each step adds or removes one thing, so the difference is that thing's effect.
 flowchart LR
-  B["Baseline RAG<br/>20 chunks → one model call<br/>Avg 14.7 · drift 54% right"]:::ext -->|"+ agent loop<br/>+ citation validator"| S["Lore − graph tools<br/>(lore-search)<br/>search + read only<br/>Avg 25.0 · drift 71% right"]:::code
-  S -->|"+ 15 graph tools<br/>(FalkorDB)"| L["Lore<br/>17 tools<br/>Avg 83.2 · drift 96% right, 0% stale"]:::store
-  L -->|"− validator and abstention line<br/>(same run, first answers as written)"| U["Lore − validator<br/>Avg 82.6<br/>declines only 42% of<br/>unanswerable (vs 87.5%):<br/>the model's own abstentions<br/>explain near-misses"]:::guard
+  B["Baseline RAG<br/>20 chunks → one model call<br/>Avg 14.7 · drift 54% right"]:::ext -->|"+ agent loop<br/>+ citation validator"| S["Yaan − graph tools<br/>(yaan-search)<br/>search + read only<br/>Avg 25.0 · drift 71% right"]:::code
+  S -->|"+ 15 graph tools<br/>(FalkorDB)"| L["Yaan<br/>17 tools<br/>Avg 83.2 · drift 96% right, 0% stale"]:::store
+  L -->|"− validator and abstention line<br/>(same run, first answers as written)"| U["Yaan − validator<br/>Avg 82.6<br/>declines only 42% of<br/>unanswerable (vs 87.5%):<br/>the model's own abstentions<br/>explain near-misses"]:::guard

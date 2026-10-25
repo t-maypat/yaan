@@ -1,4 +1,4 @@
-"""FalkorDB access: the one place Lore's Python code talks to the graph. Built in Phase 1.3.
+"""FalkorDB access: the one place Yaan's Python code talks to the graph. Built in Phase 1.3.
 
 Two clients (CONTEXT §9.11), each logged in as its own Redis ACL user (D018):
 - the writer, for ingestion, sends GRAPH.QUERY; its user may run graph commands only;
@@ -156,7 +156,7 @@ def run_all(
     rows = run(name, {**params, "limit": cap + 1}, graph=graph, **kw).rows
     if len(rows) > cap:
         raise TooManyRows(
-            name, graph or get_settings().lore_graph, f"more than {cap} rows: raise the cap"
+            name, graph or get_settings().yaan_graph, f"more than {cap} rows: raise the cap"
         )
     return rows
 
@@ -223,7 +223,7 @@ def writer_lock(
         if time.monotonic() > deadline:
             raise LockBusy(f"graph {graph!r}: the {name} lock stayed taken for {wait_s:g} s")
         time.sleep(0.1)
-    lease = Lease(graph or get_settings().lore_graph, holder)
+    lease = Lease(graph or get_settings().yaan_graph, holder)
     done = threading.Event()
 
     def renew() -> None:
@@ -307,7 +307,7 @@ def percentile(values: list[float], pct: float) -> float:
 
 
 def _run_text(text, params, label, graph, readonly, timeout_ms, batch_rows) -> Result:
-    graph = graph or get_settings().lore_graph
+    graph = graph or get_settings().yaan_graph
     params = params or {}
     name = label
 
@@ -355,7 +355,7 @@ def explain_text(
     text: str, params: dict[str, Any] | None = None, *, label: str, graph: str | None = None
 ) -> list[str]:
     """`explain` for a statement that isn't a query file (see `run_text`)."""
-    graph = graph or get_settings().lore_graph
+    graph = graph or get_settings().yaan_graph
     g = client(readonly=True).select_graph(graph)
     plan = _execute(label, graph, None, lambda: g.explain(text, params or {}))
     return list(plan.plan)

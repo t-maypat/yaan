@@ -79,7 +79,7 @@ def test_the_socket_hears_replies_edits_and_deletions(conn):
     ]  # fmt: skip
     assert [slack.hear(e) for e in events] == [True] * 6
     assert not slack.hear({"subtype": "channel_join", "channel": "C1", "ts": "1.0"})
-    ours = {"bot_id": "B1", "channel": "C1", "ts": "1.0", "text": "Lore answered"}
+    ours = {"bot_id": "B1", "channel": "C1", "ts": "1.0", "text": "Yaan answered"}
     assert not slack.hear(ours)
     card = {"ts": "1.0", "bot_id": "B1", "text": "Approved"}  # its own alert card, updated
     assert not slack.hear({"subtype": "message_changed", "channel": "C1", "message": card})

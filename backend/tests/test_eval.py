@@ -47,8 +47,8 @@ def test_content_is_a_likert_score(gateway):  # noqa: F811
     gateway.replies.append(response(parsed=judge.Likert(score=70, reason="ok")))
     v = judge.score_answerable("Q?", "content", "ref", "answer")
     assert (v["bucket"], v["score"]) == ("content", 70)
-    assert gateway.calls[0]["model"] == gateway.settings.lore_judge_model
-    assert gateway.calls[0]["output_config"] == {"effort": gateway.settings.lore_judge_effort}
+    assert gateway.calls[0]["model"] == gateway.settings.yaan_judge_model
+    assert gateway.calls[0]["output_config"] == {"effort": gateway.settings.yaan_judge_effort}
 
 
 def test_out_of_range_likert_fails_loudly(gateway):  # noqa: F811

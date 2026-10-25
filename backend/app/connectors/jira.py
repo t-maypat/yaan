@@ -1,6 +1,6 @@
 """Jira Cloud connector (17.5, D073-D074): tickets in, comments out. REST v3, polling.
 
-HERB has no tracker, so Lore extracts issue states from chat with an LLM. A tracker states
+HERB has no tracker, so Yaan extracts issue states from chat with an LLM. A tracker states
 them outright: each ticket becomes messages in the bug channel the project maps to, with
 deterministic events, so no LLM reads them (the live path still checks every quote):
 - the ticket's creation -> `issue_reported` (title, component, customer, assignee);
