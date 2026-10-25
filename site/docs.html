@@ -132,7 +132,8 @@ cd yaan</code></pre>
       <span class="sd-n">4</span>
       <h2>Load the demo graph <span class="opt">optional</span></h2>
       <p>Load a ready-made graph of a synthetic company from Salesforce AI Research’s <a href="https://huggingface.co/datasets/Salesforce/HERB" target="_blank" rel="noopener">HERB</a> benchmark. It is the data Yaan is tested and evaluated on, so it is the fastest way to see Yaan answer before you connect your own tools. This step needs no API key. You can skip it.</p>
-      <pre class="code"><code>docker compose --profile app run --rm api yaan seed --from https://github.com/t-maypat/yaan/releases/latest/download/lore-snapshot.tar.gz</code></pre>
+      <pre class="code"><code>./yaan seed --from https://github.com/t-maypat/yaan/releases/latest/download/lore-snapshot.tar.gz</code></pre>
+      <p class="tip"><b>The <code>yaan</code> command:</b> <code>./yaan</code> (<code>.\yaan</code> in PowerShell) runs Yaan&rsquo;s command line inside its container, from any folder. It joins the running container, or starts a throwaway one when Yaan is stopped. <code>./yaan --help</code> lists the commands.</p>
       <p class="tip"><b>About the data:</b> HERB is public and fully synthetic, licensed CC BY-NC 4.0. The graph holds no real company’s or person’s data.</p>
     </section>
 
@@ -193,11 +194,11 @@ cd yaan</code></pre>
       <p>Optional: list your people in <code>people.yaml</code>, with their role and their account in each tool. A role decides who may close or reopen an issue. Yaan adds everyone else the first time they appear.</p>
       <p>Apply your settings, create your graph, and check the connectors:</p>
       <pre class="code"><code>docker compose --profile app up -d --force-recreate api
-docker compose --profile app exec api yaan init
-docker compose --profile app exec api yaan connectors status</code></pre>
+./yaan init
+./yaan connectors status</code></pre>
       <p>Start the connectors. They run in their own container, which Docker restarts after a crash or a reboot:</p>
       <pre class="code"><code>docker compose --profile app --profile connectors up -d
-docker compose --profile connectors exec worker yaan connectors health</code></pre>
+docker compose exec worker yaan connectors health</code></pre>
       <p>An item a connector can&rsquo;t ingest is kept, not dropped: <code>yaan connectors dead</code> lists them and <code>yaan connectors retry</code> replays them once you have fixed the cause.</p>
       <p class="tip"><b>Tip:</b> Slack uses Socket Mode. You do not need a public URL. GitHub, Jira and Notion are checked every 30 seconds.</p>
       <p>The first sync reads the last 30 days. To go further back, see what it would cost first: <code>yaan connectors backfill --days 365</code> is a dry run; add <code>--yes</code> to ingest it.</p>

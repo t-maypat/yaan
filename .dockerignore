@@ -13,3 +13,6 @@ eval/runs/
 **/.ruff_cache
 frontend/dist
 docs/img
+# the host-side CLI wrappers (D143)
+yaan
+yaan.cmd

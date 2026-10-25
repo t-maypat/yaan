@@ -5,3 +5,5 @@
 *.gif binary
 *.zip binary
 *.rdb binary
+# cmd scripts need CRLF: cmd misreads labels and blocks in LF-only files.
+*.cmd text eol=crlf

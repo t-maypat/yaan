@@ -1,0 +1,14 @@
+#!/bin/sh
+# ./yaan <command> runs the Yaan CLI inside the api container, from any folder (D143).
+# It joins the running api (exec), or starts a throwaway one when the stack is down (run --rm),
+# so `./yaan seed` works before `up` and `./yaan token issue` works on a live stack.
+# Paths such as data/backups/<file> mean the same here as in the container: both are the repo root.
+set -e
+cd "$(dirname "$0")"
+# A piped or scripted call has no terminal to give the container.
+tty=""
+[ -t 0 ] && [ -t 1 ] || tty="-T"
+if [ -n "$(docker compose --profile app ps -q --status running api)" ]; then
+  exec docker compose --profile app exec $tty api yaan "$@"
+fi
+exec docker compose --profile app run --rm $tty api yaan "$@"

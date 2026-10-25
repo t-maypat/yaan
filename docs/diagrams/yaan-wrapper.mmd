@@ -1,0 +1,8 @@
+%% How ./yaan runs the CLI (Phase 22.9, D143): from the repo root, into the running api container, or a throwaway one when the stack is down.
+flowchart TB
+  U["./yaan &lt;command&gt;<br/>(.\yaan in PowerShell)"]:::code --> R["Go to the repo root<br/>(where the script lives)"]:::code
+  R --> Q["Is the api container running?<br/>docker compose ps -q --status running api"]:::guard
+  Q -->|"yes"| E["docker compose exec api yaan &lt;command&gt;<br/>joins the running container: fast"]:::code
+  Q -->|"no"| N["docker compose run --rm api yaan &lt;command&gt;<br/>starts FalkorDB if needed, a throwaway api,<br/>removes it after"]:::code
+  E --> X["yaan's exit code, back to your shell"]:::store
+  N --> X

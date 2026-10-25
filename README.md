@@ -47,10 +47,12 @@ docker compose --profile app up -d --build
 **Optional: load the demo graph.** A ready-made graph of a synthetic company from Salesforce AI Research's [HERB](https://huggingface.co/datasets/Salesforce/HERB) benchmark (CC BY-NC 4.0), the data Yaan is tested and evaluated on. It needs no API key and is the fastest way to see Yaan answer.
 
 ```sh
-docker compose --profile app run --rm api yaan seed --from https://github.com/t-maypat/yaan/releases/latest/download/lore-snapshot.tar.gz
+./yaan seed --from https://github.com/t-maypat/yaan/releases/latest/download/lore-snapshot.tar.gz
 ```
 
 Open **http://127.0.0.1:8000**: Ask, Inbox, Timeline, Graph health. Yaan and FalkorDB listen on 127.0.0.1 only; put an HTTPS proxy in front to share it with your team ([guide](https://yaan-brain.vercel.app/docs#secure)).
+
+**The `yaan` command.** `./yaan <command>` (`.\yaan` in PowerShell) runs the CLI inside the api container, from any folder: it joins the running api, or starts a throwaway one when the stack is down. `./yaan --help` lists the commands. To type plain `yaan`, add `alias yaan=/path/to/yaan/yaan` to your shell profile (on Windows, put the repo folder on your `PATH`).
 
 > Yaan was called Lore while it was built: settings (`LORE_…`), container names and some files still use that name, and `lore` works as the command too.
 
@@ -65,15 +67,15 @@ Org mode points Yaan at your team's tools instead of the demo. Your data goes in
 
 ```sh
 docker compose --profile app up -d --force-recreate api
-docker compose --profile app exec api yaan init                 # your graph, product, channels and people
+./yaan init                                                      # your graph, product, channels and people
 docker compose --profile app --profile connectors up -d          # the connector worker: Slack over Socket Mode, the rest polled every 30 s
 ```
 
 5. Sign people in. In org mode every API, web UI and `/mcp` request answers as a signed-in person, who sees only the sources they may see, and approvals are recorded as theirs:
 
 ```sh
-docker compose --profile app exec api yaan token issue "Priya Shah"   # prints her token once; paste it into the web UI
-docker compose --profile app exec api yaan token revoke "Priya Shah"
+./yaan token issue "Priya Shah"   # prints her token once; paste it into the web UI
+./yaan token revoke "Priya Shah"
 ```
 
    Behind a single-sign-on proxy (oauth2-proxy, Cloudflare Access), set `LORE_AUTH=header` instead: the proxy sends the user's email in `X-Forwarded-Email` and `LORE_AUTH_PROXY_SECRET` in `X-Lore-Proxy-Secret`. For sign-in with Google, Okta or Entra ID, the `sso` profile runs oauth2-proxy for you: fill the `OAUTH2_PROXY_*` settings in `.env`, then `docker compose --profile app --profile sso up -d` and open port 4180. People with `admin: true` in `people.yaml` see the Admin page (worker, dead letters, tokens, spend, people not yet listed), Graph health and Evaluation; others see Ask and Inbox. In a Slack channel, `@yaan` answers from what everyone in that channel may read; a direct message to the bot answers from everything the asker may read.
@@ -90,9 +92,9 @@ Linear, GitLab, Confluence, Google Drive, Gmail, Google Meet, Zoom and Discord h
 6. Back it up. One file holds the graph and everything kept beside it (tokens, connector cursors, the people met in your tools, the spend ledger, the audit log), taken so that a restore loses no item and reads none twice. `--as` checks a backup by restoring its graph under another name:
 
 ```sh
-docker compose --profile app exec api yaan backup --keep 7        # data/backups/<graph>-<time>.tar.gz and its .sha256
-docker compose --profile app exec api yaan restore data/backups/<file> --as yaan_check   # a trial: graph only
-docker compose --profile app exec api yaan restore data/backups/<file> --force           # stop the worker first
+./yaan backup --keep 7        # data/backups/<graph>-<time>.tar.gz and its .sha256
+./yaan restore data/backups/<file> --as yaan_check   # a trial: graph only
+./yaan restore data/backups/<file> --force           # stop the worker first
 ```
 
    A big graph is better backed up with `--files-only`: FalkorDB answers nothing while it writes a graph's copy (about 20 s per 1.4 GB in use), so past about 30 s `yaan backup` refuses. With `--files-only`, Yaan saves its own files and then has FalkorDB save in the background; copy FalkorDB's volume after that.

@@ -17,6 +17,7 @@ What changed between versions, newest first. Yaan is 0.x: settings and the graph
 
 - `yaan backup --files-only` for a big graph: Yaan's state files, then a background save by FalkorDB; copy its volume afterwards. A `yaan backup` whose copy would keep FalkorDB from answering for more than about 30 s is refused (`--block-ok` overrides).
 - `scripts/load_size.py`: memory per item and vector-search times as a graph grows (synthetic, no model calls).
+- `./yaan <command>` (`.\yaan` in PowerShell) runs the CLI in the api container from any folder, instead of `docker compose --profile app exec api yaan <command>`. It uses the running container, or a throwaway one when Yaan is stopped.
 
 #### Changed
 - A steady-state fold at a year's volume takes about 6 s a batch instead of 12–14 s: the worker remembers what each decision topic was made from and compares and writes only the topics whose inputs changed, with a full write after a restart, a change of roles or customers, and at least hourly. FalkorDB's replies are parsed in C (`hiredis`, a new dependency).
