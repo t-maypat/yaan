@@ -39,7 +39,7 @@ from app.ingest.normalize import Artifact
 from app.sentinel import live
 
 STATE = "connectors.json"
-# the sources whose items carry `:synthetic-<source>-` ids; the last eight are experimental (D090)
+# the sources whose items carry `:synthetic-<source>-` ids; the last eight came later (D090)
 SOURCES = (
     "slack",
     "github",
@@ -489,7 +489,7 @@ def keyed(c: Connector, container: str, every: list[str]) -> Connector:
 
 
 def experimental(graph: str, st: Any) -> list[Connector]:
-    """The experimental connectors (D090, not run against live APIs): each only when ALL its
+    """The eight later connectors (D090): each only when ALL its
     required settings are set, so an unchanged .env adds nothing."""
     out: list[Connector] = []
     if st.linear_api_key and st.linear_team:

@@ -1,9 +1,9 @@
-"""What the experimental connectors share (D090): an httpx client with loud errors, the channel
+"""What the eight later connectors share (D090): an httpx client with loud errors, the channel
 lookup, and the two artifact shapes they emit.
 
-Every module built on this is a scaffold written from the vendor's API reference and tested
-only against payloads copied from it. None has run against a live API. They are OFF unless all
-of a connector's env vars are set (`runner.configured`). docs/connectors.md lists them.
+Every module built on this was written from the vendor's API reference, is unit-tested against
+payloads copied from it, and was checked against the live service (D145). They are OFF unless
+all of a connector's env vars are set (`runner.configured`). The connectors README lists them.
 """
 
 from datetime import UTC, datetime

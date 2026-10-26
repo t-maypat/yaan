@@ -87,7 +87,7 @@ docker compose --profile app --profile connectors up -d          # the connector
 | Jira | tickets, status changes, comments | comments on the ticket |
 | Notion | child pages of the pages you name, page comments | comments on the page |
 
-Linear, GitLab, Confluence, Google Drive, Gmail, Google Meet, Zoom and Discord have experimental connectors. Step-by-step setup: [connectors guide](backend/app/connectors/README.md).
+Linear, GitLab, Confluence, Google Drive, Gmail, Google Meet, Zoom and Discord have connectors too, each off until its settings are in `.env`. Step-by-step setup: [connectors guide](backend/app/connectors/README.md).
 
 6. Back it up. One file holds the graph and everything kept beside it (tokens, connector cursors, the people met in your tools, the spend ledger, the audit log), taken so that a restore loses no item and reads none twice. `--as` checks a backup by restoring its graph under another name:
 

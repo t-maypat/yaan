@@ -1,4 +1,4 @@
-"""Discord connector (D090, EXPERIMENTAL: not run against a live API): channel messages in,
+"""Discord connector (D090; checked against the live API, D145): channel messages in,
 replies out. REST v10, polling (no Gateway connection, so nothing is pushed).
 
 In: the messages of one channel (`DISCORD_CHANNEL_ID`) newer than the cursor become messages in

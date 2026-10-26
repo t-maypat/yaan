@@ -1,4 +1,4 @@
-"""GitLab connector (D090, EXPERIMENTAL: not run against a live API): merge requests in,
+"""GitLab connector (D090; checked against the live API, D145): merge requests in,
 notes out. REST v4, polling, like the GitHub connector.
 
 In: the project's merge requests updated since the cursor become PR artifacts in the shape

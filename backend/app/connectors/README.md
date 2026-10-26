@@ -137,8 +137,8 @@ Within a few seconds a **regression** card appears in `#yaan-alerts`. **Approve 
 
 In Jira and GitHub every item is written by your own account; `connectors.yaml` maps it (`self`) to Hannah Garcia, and the persona label in each text names who the rest is written as.
 
-## Experimental connectors (not run against a live API)
-Eight more tools have a connector scaffold. Each was written from the vendor's API reference and tested only against mock responses (`httpx.MockTransport`): **nobody has run them against the real service.** Expect small differences (a field, a scope, a rate limit) the first time you do. They are **off by default**: a connector starts only when **all** its required variables are set in `.env`, so an existing `.env` changes nothing. `yaan connectors status` lists what is on.
+## More connectors
+Eight more tools have connectors, written from the vendor's API reference, unit-tested against mock responses (`httpx.MockTransport`) and checked against the live services (D145). They are **off by default**: a connector starts only when **all** its required variables are set in `.env`, so an existing `.env` changes nothing. `yaan connectors status` lists what is on.
 
 | Tool | Env vars (required unless marked) | In (to Yaan) | Out (approved actions) | Docs |
 |---|---|---|---|---|

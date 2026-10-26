@@ -1,4 +1,4 @@
-"""Zoom connector (D090, EXPERIMENTAL: not run against a live API): cloud-recording
+"""Zoom connector (D090; checked against the live API, D145): cloud-recording
 transcripts in, nothing out. REST v2, polling.
 
 In: each cloud recording of a user that has a finished TRANSCRIPT file (WebVTT, produced when

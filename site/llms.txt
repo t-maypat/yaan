@@ -8,7 +8,7 @@ Key facts:
 - Grounded: every answer sentence quotes its source word for word, checked in code. With no quote, Yaan says "not found".
 - Graph-native: answers come from Cypher queries and graph algorithms (PageRank, betweenness, label propagation, shortest paths) on FalkorDB, plus full-text and vector search.
 - Change Sentinel: flags regressions, reversals, unauthorized changes and key-person risks, and drafts follow-ups for a human to approve.
-- Connectors: Slack, GitHub, Jira and Notion; experimental Linear, GitLab, Confluence, Google Drive, Gmail, Google Meet, Zoom and Discord.
+- Connectors: Slack, GitHub, Jira, Notion, Linear, GitLab, Confluence, Google Drive, Gmail, Google Meet, Zoom and Discord.
 - Results: on 7 held-out products of Salesforce AI Research's HERB benchmark (399 questions), Yaan scores 63.6 vs 9.6 for a plain RAG baseline and 24.2 for the same agent without graph tools, with 100% of quotes verified.
 
 ## Docs

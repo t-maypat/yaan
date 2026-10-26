@@ -1,4 +1,4 @@
-"""Google Meet connector (D090, EXPERIMENTAL: not run against a live API): transcripts in,
+"""Google Meet connector (D090; checked against the live API, D145): transcripts in,
 nothing out. Meet REST API v2, polling.
 
 In: each ended conference of one meeting space that has a finished transcript becomes a

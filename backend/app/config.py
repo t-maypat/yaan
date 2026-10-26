@@ -101,7 +101,7 @@ class Settings(BaseSettings):
     jira_project: str | None = None
     notion_token: str | None = None
     notion_page_id: str | None = None
-    # Experimental connectors (D090): off unless all of a connector's settings are set. Google
+    # The eight later connectors (D090): off unless all of a connector's settings are set. Google
     # and Zoom take an access token you already hold; the OAuth flow is not built.
     linear_api_key: str | None = None
     linear_team: str | None = None

@@ -1,4 +1,4 @@
-"""Google Drive connector (D090, EXPERIMENTAL: not run against a live API): Google Docs in,
+"""Google Drive connector (D090; checked against the live API, D145): Google Docs in,
 comments out. Drive API v3, polling, built like the Notion connector.
 
 In: each Google Doc in one folder becomes a Doc artifact (exported as plain text), a message

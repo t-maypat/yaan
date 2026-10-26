@@ -57,7 +57,7 @@ PUBLIC_PAGES = [ROOT / "README.md", ROOT / "site" / "index.html", ROOT / "site" 
 QUERY_COUNT = re.compile(r"(\d+) (?:graph |Cypher )?queries")
 TOOL_COUNT = re.compile(r"(\d+) read-only (?:graph |agent )?tools(?! plus `ask`)|(\d+) agent tools")
 MCP_TOOL_COUNT = re.compile(r"(\d+) read-only graph tools plus `ask`")
-BADGE = re.compile(r'<span class="lg-n">([^<]+)<span class="lg-x">experimental</span>')
+CONNECTOR = re.compile(r'<span class="lg-n">([^<]+)</span>')
 
 
 def numbers(pattern: re.Pattern[str]) -> dict[str, set[int]]:
@@ -85,15 +85,15 @@ def test_public_pages_count_what_the_repo_holds():
         assert said == {mcp}, f"{page} says {said} MCP tools; the server offers {mcp}"
 
 
-def test_the_site_marks_every_experimental_connector():
-    """Only Slack, GitHub, Jira and Notion have run against the live tools (D090): the site
-    shows the other eight as experimental."""
+def test_the_site_lists_every_connector():
+    """All twelve connectors have been checked against the live tools (D145): the site lists
+    each one, with no "experimental" badge left."""
     from app.connectors.runner import SOURCES
     from app.org import SOURCE_NAMES
 
-    experimental = {SOURCE_NAMES[s] for s in SOURCES[4:]}
     page = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
-    assert set(BADGE.findall(page)) == experimental
+    assert set(CONNECTOR.findall(page)) == {SOURCE_NAMES[s] for s in SOURCES}
+    assert "experimental" not in page.lower()
 
 
 def test_the_query_list_is_complete():

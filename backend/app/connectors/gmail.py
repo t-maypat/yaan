@@ -1,4 +1,4 @@
-"""Gmail connector (D090, EXPERIMENTAL: not run against a live API): mail in, replies out.
+"""Gmail connector (D090; checked against the live API, D145): mail in, replies out.
 Gmail API v1, polling.
 
 In: the messages that carry one label (a sandbox label you create, `GMAIL_LABEL`, a label id)

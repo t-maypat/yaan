@@ -983,9 +983,6 @@ p { margin: 0; }
 .glyph-lg { width: 28px; height: 28px; margin-bottom: 8px; }
 .lg-n { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-weight: 600; font-size: 16px; }
 .lg-d { font-size: 14px; color: var(--muted); line-height: 1.5; }
-/* not yet run against the live tool (README "Use your own data") */
-.lg-x { font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
-  border: 1px solid var(--rule); border-radius: 999px; padding: 1px 7px; }
 @media (max-width: 1100px) { .logos { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .logos { grid-template-columns: repeat(2, minmax(0, 1fr)); } .logos li { padding: 20px 14px; } }
 

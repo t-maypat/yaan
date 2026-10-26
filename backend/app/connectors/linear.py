@@ -1,4 +1,4 @@
-"""Linear connector (D090, EXPERIMENTAL: not run against a live API): issues in, comments out.
+"""Linear connector (D090; checked against the live API, D145): issues in, comments out.
 
 Linear states a ticket's facts outright, so like Jira each issue becomes messages in the bug
 channel `connectors.yaml` maps (`linear.channel`), with deterministic events and no LLM:

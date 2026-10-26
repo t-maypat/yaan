@@ -1,4 +1,4 @@
-"""Confluence Cloud connector (D090, EXPERIMENTAL: not run against a live API): pages in,
+"""Confluence Cloud connector (D090; checked against the live API, D145): pages in,
 footer comments out. REST v2, polling, built like the Notion connector.
 
 In: each page of one space becomes a Doc artifact (its storage-format body as plain text), a
