@@ -31,7 +31,7 @@ Search finds the message that said "fixed". It doesn't know the bug came back. Y
 - **Who really knows.** Authorship, PageRank, betweenness and communities, computed natively in FalkorDB, find the real expert behind the listed owner.
 - **A quote or nothing.** Every sentence cites a word-for-word quote from its source, checked in code before you see it. With no quote, Yaan says "not found". The check proves the words are in the source and on topic; it does not prove the sentence follows from them.
 - **What it tracks today.** The decisions Yaan folds are engineering ones: the status of each issue (reported, resolved, dismissed, reopened) and what the team said to do with each pull request (merge, close, hold, revert), plus who knows what. Other kinds of decisions are on the roadmap.
-- **Runs on your servers.** Your data stays in your network. The outside calls are to the AI model, with your own key and hard daily spend caps (Anthropic is tested; other providers through LiteLLM are experimental), and a one-time download of the local embedding model.
+- **Runs on your servers.** Your data stays in your network. The outside calls are to the AI model, with your own key and hard daily spend caps (Anthropic by default; other providers through LiteLLM), and a one-time download of the local embedding model.
 - **Forgets on request.** A message deleted in Slack leaves Yaan too, and `yaan forget` and `yaan erase` remove an item or a person everywhere Yaan copied their words, keeping only a record that something was removed.
 
 ## Quickstart

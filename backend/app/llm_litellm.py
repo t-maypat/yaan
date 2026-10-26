@@ -1,5 +1,4 @@
-"""The optional LiteLLM provider behind `app/llm.py` (D091, EXPERIMENTAL: never run against a
-live model).
+"""The optional LiteLLM provider behind `app/llm.py` (D091; checked against live models, D145).
 
 `YAAN_LLM_PROVIDER=litellm` sends `complete()` and `converse()` through LiteLLM instead of the
 Anthropic SDK, so any model LiteLLM supports can play a role: `YAAN_LITELLM_MODEL_EXTRACT`,

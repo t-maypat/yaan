@@ -147,7 +147,7 @@ class Settings(BaseSettings):
     # The eval judge stands in for HERB's gpt-4o judge (Phase 5, D035).
     yaan_judge_model: str = "claude-haiku-5-5"
     yaan_judge_effort: str = "low"
-    # Optional LiteLLM provider (D091, experimental): "anthropic" (default) is the SDK path with
+    # Optional LiteLLM provider (D091): "anthropic" (default) is the SDK path with
     # the original cache keys; "litellm" sends every call through litellm, one model per role.
     yaan_llm_provider: Literal["anthropic", "litellm"] = "anthropic"
     yaan_litellm_model_extract: str | None = None
