@@ -216,19 +216,21 @@ p { margin: 0; }
 /* Hero depth: over the first 400px of scroll the background moves at half speed and the copy drifts up
    slower and fades, so the console, scrolling normally, rises over it. Scroll-driven animations run in
    step with the scroll (no frame of lag); browsers without them get the same motion from main.js.
-   Never under reduced motion. The hero clips at its bottom edge, where a paper fade hides the cut. */
+   Never under reduced motion, and not on phones: with no margins the layers would slide over each other
+   (the console over the buttons, the graph across the text). The hero clips at its bottom edge, where a
+   paper fade hides the cut. */
 .hero { clip-path: inset(-100px 0 0 0); }
 .hero::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 130px; z-index: -1; pointer-events: none;
   background: linear-gradient(transparent, var(--paper) 78%); }
 @keyframes hd-bg { to { translate: 0 200px; } }
 @keyframes hd-copy { to { translate: 0 120px; opacity: .13; } }
 @keyframes hd-fade { to { translate: 0 120px; } }
-@supports (animation-timeline: scroll()) {
+@supports (animation-timeline: scroll()) { @media (min-width: 721px) {
   :root:not(.calm) .hero-graph, :root:not(.calm) .hero-shade, :root:not(.calm) .hero::before {
     animation: hd-bg linear both; animation-timeline: scroll(root); animation-range: 0 400px; will-change: translate; }
   :root:not(.calm) .hero-copy { animation: hd-copy linear both; animation-timeline: scroll(root); animation-range: 0 400px; will-change: translate, opacity; }
   :root:not(.calm) .hero-fade { animation: hd-fade linear both; animation-timeline: scroll(root); animation-range: 0 400px; }
-}
+} }
 .hero-title {
   font-family: var(--serif);
   font-weight: 400;
@@ -927,7 +929,7 @@ p { margin: 0; }
 .rm-av { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font: 600 12px var(--sans); color: #fff; background: var(--petrol); flex: none; }
 .rm-who b { font-weight: 600; }
 .rm-who .rm-role { color: var(--muted); }
-.rm-state { margin-left: auto; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+.rm-state { margin-left: auto; white-space: nowrap; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
 .st-rep { background: var(--petrol-soft); color: var(--petrol); }
 .st-res { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
 .st-reo { background: var(--brick-soft); color: var(--brick); }
@@ -991,6 +993,7 @@ p { margin: 0; }
 .pw-os { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ink); }
 .pw-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
 .pw-sep { width: 1px; height: 16px; background: var(--rule-2); }
+.pw-by { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .btn-ghost { background: transparent; color: var(--ink); border-color: transparent; }
 .btn-ghost:hover { border-color: var(--rule-2); background: var(--surface); }
 
@@ -1227,8 +1230,29 @@ p { margin: 0; }
   .nav-actions .btn { display: none; }
   .mx-side { padding: 56px 16px 32px; }
   .byo { grid-template-columns: 1fr; padding: 22px 18px; gap: 18px; }
-  .powered { flex-wrap: wrap; justify-content: center; row-gap: 4px; }
+  .powered { flex-wrap: wrap; justify-content: center; row-gap: 4px; border-radius: 18px; }
   .pw-sep { display: none; }
+  /* Phones: the graph has no margins to run in, so it sits behind the copy; a paper veil the copy's
+     size keeps the headline and subtitle clean and leaves the graph showing at the edges. */
+  .hero-fade { display: none; }
+  .hero-copy { position: relative; }
+  .hero-copy::before { content: ""; position: absolute; inset: -28px -16px -8px; z-index: -1; pointer-events: none;
+    background: radial-gradient(ellipse 58% 56% at 50% 52%, var(--paper) 62%, transparent 100%); }
+  .mx-legend { justify-content: flex-start; }
+  /* the results table becomes one card per system: no sideways scroll hiding columns */
+  .table-wrap { overflow: visible; }
+  .rt { min-width: 0; }
+  .rt thead { display: none; }
+  .rt tr { display: grid; grid-template-columns: 1fr auto; padding: 14px 14px 12px; border-bottom: 1px solid var(--rule); }
+  .rt tbody th, .rt td { border: 0; padding: 0; background: none !important; }
+  .rt tbody th { grid-column: 1 / -1; margin-bottom: 8px; }
+  .rt td { display: contents; }
+  .rt td::before { content: attr(data-l); color: var(--muted); font-size: 13.5px; font-weight: 400; font-style: normal; padding: 3px 0; font-variant-numeric: normal; }
+  .rm-who { display: grid; grid-template-columns: 30px 1fr; gap: 6px 10px; }
+  .rm-state { grid-column: 2; justify-self: start; margin-left: 0; }
+  .rt td:nth-child(2) { min-width: 0; }
+  .rt .cell-bar { display: none; }
+  .rt-yaan { background: color-mix(in srgb, var(--petrol-soft) 55%, transparent); }
   .hero-ctas .btn-ghost { width: auto; }
   .foot .foot-grid { grid-template-columns: 1fr; }
   .byo-ic { width: 52px; height: 52px; }
@@ -1262,7 +1286,7 @@ p { margin: 0; }
   .hero-ctas .btn { width: 100%; }
   .console { margin-top: 40px; border-radius: 14px; }
   .scope-hide-sm, .meter-hide-sm { display: none; }
-  .c-top { padding: 10px 12px; }
+  .c-top { padding: 10px 12px; align-items: flex-start; }
   .c-query { margin: 14px 12px 0; padding: 14px 14px 10px 44px; }
   .q-glyph { left: 14px; top: 17px; width: 19px; height: 19px; }
   .q-field { padding-right: 0; min-height: 56px; }

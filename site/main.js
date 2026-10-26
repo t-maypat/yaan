@@ -40,13 +40,13 @@
     addEventListener('scroll', darkCheck, { passive: true }); darkCheck();
   }
   // Hero depth (styles.css): CSS scroll-driven animations where supported; elsewhere the same motion
-  // from here, once a frame, written straight onto the moving layers.
+  // from here, once a frame, written straight onto the moving layers. Wide screens only, as in the CSS.
   if (!reduced && !(window.CSS && CSS.supports('animation-timeline: scroll()'))) {
-    const copy = $('.hero-copy'), fade = $('.hero-fade');
+    const copy = $('.hero-copy'), fade = $('.hero-fade'), wide = matchMedia('(min-width: 721px)');
     let queued = false, last = -1;
     const depth = () => {
       queued = false;
-      const p = Math.min(Math.max(scrollY, 0), 400);
+      const p = wide.matches ? Math.min(Math.max(scrollY, 0), 400) : 0;
       if (p === last) return;
       last = p;
       // queried each time: the shade canvas is added further down
@@ -55,6 +55,7 @@
       copy.style.opacity = 1 - p / 460;
     };
     addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(depth); } }, { passive: true });
+    wide.addEventListener('change', depth);
     depth();
   }
 
@@ -218,8 +219,9 @@
       const top = cTop + 14, bottom = Math.min(H - 30, cTop + c.height + 10);
       NODES.forEach((n) => {
         if (compact) {
-          // narrow screens: a quiet band of nodes above the console, no labels
-          n.tx = n.s === 'L' ? W * (.04 + n.u * .4) : W * (.56 + n.u * .4);
+          // narrow screens: no margins, so the nodes frame the copy at its two edges (the copy's paper
+          // veil in styles.css keeps the text clean), above the console, no labels
+          n.tx = n.s === 'L' ? W * (.03 + n.u * .2) : W * (.77 + n.u * .2);
           n.ty = 40 + n.v * Math.max(120, cTop - 120);
         } else {
           n.ty = top + n.v * (bottom - top);
@@ -234,7 +236,7 @@
       const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
       for (let i = 0; i < count; i++) {
         const side = rnd() < .5 ? 'L' : 'R';
-        const fw = compact ? W * .45 : (side === 'L' ? flankL : flankR) + 20;
+        const fw = compact ? W * .26 : (side === 'L' ? flankL : flankR) + 20;
         const x = side === 'L' ? rnd() * fw : W - rnd() * fw;
         const y = compact ? 20 + rnd() * Math.max(140, cTop - 60) : cTop - 10 + rnd() * (H - cTop - 40);
         const r = 1.2 + rnd() * 1.8, ph = rnd() * 6.28;

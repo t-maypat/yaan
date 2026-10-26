@@ -93,7 +93,7 @@
   <div class="hero-fade" aria-hidden="true"></div>
 
   <div class="hero-copy">
-    <p class="powered"><span class="pw-os"><span class="pw-dot" aria-hidden="true"></span>Open source, self-hosted</span><span class="pw-sep" aria-hidden="true"></span>Powered by <span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></p>
+    <p class="powered"><span class="pw-os"><span class="pw-dot" aria-hidden="true"></span>Open source, self-hosted</span><span class="pw-sep" aria-hidden="true"></span><span class="pw-by">Powered by <span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></span></p>
     <h1 class="hero-title">The company brain that knows what’s still true.</h1>
     <p class="hero-sub">Yaan turns your team’s Slack, meetings, pull requests, tickets and docs into a <span class="nowrap">time-aware</span> graph of people, work and decisions. Ask what’s true now, what was true then, why, and who knows, with a word-for-word source for every sentence.</p>
     <div class="hero-ctas">
@@ -159,7 +159,7 @@
 
 <!-- ============ LOGO STRIP ============ -->
 <section class="strip" aria-labelledby="stripCap">
-  <p class="strip-cap" id="stripCap">Slack, GitHub, Jira and Notion today, eight more in early testing, and any MCP client.</p>
+  <p class="strip-cap" id="stripCap">Slack, GitHub, Jira, Notion and eight more tools, and any MCP client.</p>
   <div class="marquee" id="marquee">
     <div class="mq-track">
       <ul class="mq-set">
@@ -483,10 +483,10 @@
           <tr><th scope="col">System</th><th scope="col">Avg score, held-out</th><th scope="col">Customer questions</th><th scope="col">Quotes verified</th><th scope="col">Avg on the 3 dev products we built on</th></tr>
         </thead>
         <tbody>
-          <tr class="rt-yaan"><th scope="row">Yaan</th><td><span class="cell-bar" style="--v:63.6"></span>63.6</td><td>54.2</td><td>100%</td><td class="dev">83.2</td></tr>
-          <tr class="rt-ref"><th scope="row">Salesforce AI Research agent (GPT-4o) <span>best agent in their HERB paper; different setup</span></th><td><span class="cell-bar" style="--v:43.4"></span>43.4</td><td>n/a</td><td>n/a</td><td class="dev">n/a</td></tr>
-          <tr><th scope="row">Yaan without the FalkorDB graph<sup>*</sup></th><td><span class="cell-bar" style="--v:24.2"></span>24.2</td><td>0.0</td><td>100%</td><td class="dev">25.0</td></tr>
-          <tr><th scope="row">Plain RAG</th><td><span class="cell-bar" style="--v:9.6"></span>9.6</td><td>0.0</td><td>98.5%</td><td class="dev">14.7</td></tr>
+          <tr class="rt-yaan"><th scope="row">Yaan</th><td data-l="Avg score, held-out"><span class="cell-bar" style="--v:63.6"></span>63.6</td><td data-l="Customer questions">54.2</td><td data-l="Quotes verified">100%</td><td class="dev" data-l="Avg on the 3 dev products">83.2</td></tr>
+          <tr class="rt-ref"><th scope="row">Salesforce AI Research agent (GPT-4o) <span>best agent in their HERB paper; different setup</span></th><td data-l="Avg score, held-out"><span class="cell-bar" style="--v:43.4"></span>43.4</td><td data-l="Customer questions">n/a</td><td data-l="Quotes verified">n/a</td><td class="dev" data-l="Avg on the 3 dev products">n/a</td></tr>
+          <tr><th scope="row">Yaan without the FalkorDB graph<sup>*</sup></th><td data-l="Avg score, held-out"><span class="cell-bar" style="--v:24.2"></span>24.2</td><td data-l="Customer questions">0.0</td><td data-l="Quotes verified">100%</td><td class="dev" data-l="Avg on the 3 dev products">25.0</td></tr>
+          <tr><th scope="row">Plain RAG</th><td data-l="Avg score, held-out"><span class="cell-bar" style="--v:9.6"></span>9.6</td><td data-l="Customer questions">0.0</td><td data-l="Quotes verified">98.5%</td><td class="dev" data-l="Avg on the 3 dev products">14.7</td></tr>
         </tbody>
       </table>
       <p class="table-note"><strong>Yaan scores lower on products it has never seen (63.6) than on the ones it was built on (83.2). We report both.</strong> Scores are judged answers out of 100, not accuracy. <sup>*</sup>The same agent with search and read only: it keeps the vector and full-text search, and loses every graph query. Stale answers, on 24 hand-labeled questions about status now and on a past date: plain RAG 6.7%, search only 8.7%, Yaan 0%. Method and footnotes in <a href="https://github.com/t-maypat/yaan/blob/main/eval/report.md" target="_blank" rel="noopener">eval/report.md</a>.</p>
@@ -705,7 +705,7 @@
       <div class="foot-brand">
         <a class="brand" href="#top"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="ym-arm" d="M7 6 L16 17 L25 6"/><path class="ym-stem" d="M16 17 V27"/><circle class="ym-node" cx="16" cy="17" r="3.3"/><rect class="ym-cite" x="3.4" y="2.4" width="7.2" height="7.2" rx="1.7"/><circle class="ym-src" cx="25" cy="6" r="3.3"/></svg><span>Yaan</span></a>
         <p>The company brain that knows what’s still true.</p>
-        <p class="foot-os">Open source under Apache-2.0. Runs on your own servers. Powered by <span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></p>
+        <p class="foot-os">Open source under Apache-2.0. Runs on your own servers. <span class="pw-by">Powered by <span class="fk"><img class="fk-d" src="assets/brand/falkordb-logo-dark.svg" alt="FalkorDB" width="106" height="28"><img class="fk-l" src="assets/brand/falkordb-logo-light.svg" alt="FalkorDB" width="106" height="28"></span></span></p>
       </div>
       <nav class="foot-col" aria-label="Product">
         <p class="foot-h">Product</p>
