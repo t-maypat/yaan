@@ -45,7 +45,14 @@ def test_prometheus_text_names_each_family_once_and_escapes_labels():
 
 @pytest.fixture
 def quiet(monkeypatch):
-    """The graph-side readings faked: FalkorDB at 1 of 2 GB, a worker that ran 3 rounds."""
+    """The graph-side readings faked: FalkorDB at 1 of 2 GB and answering PING, a worker that
+    ran 3 rounds."""
+
+    class Conn:
+        def ping(self):
+            return True
+
+    monkeypatch.setattr(db, "client", lambda readonly: type("C", (), {"connection": Conn()})())
     monkeypatch.setattr(db, "storage", lambda: {
         "used_bytes": 2**30, "cap_bytes": 2**31, "last_save_ts": 1_800_000_000, "aof": False,
         "last_save_ok": True, "used_mb": 1024, "cap_mb": 2048, "used_pct": 50.0,
